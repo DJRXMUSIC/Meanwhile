@@ -4,12 +4,88 @@
 
 :root {
   color-scheme: dark;
+
+  /* Default theme — Aurora (current): purple accent on near-black */
+  --c-bg: 10 10 12;
+  --c-surface: 21 21 26;
+  --c-surface2: 31 31 38;
+  --c-accent: 124 92 255;
+  --c-good: 61 220 151;
+  --c-warn: 255 184 77;
+  --c-bad: 255 92 124;
+  --c-muted: 138 138 153;
+  --c-ink: 245 245 247;
+}
+
+[data-theme="midnight"] {
+  /* Deep navy + electric cyan */
+  --c-bg: 6 12 28;
+  --c-surface: 13 24 50;
+  --c-surface2: 20 36 72;
+  --c-accent: 92 208 255;
+  --c-good: 76 220 175;
+  --c-warn: 255 198 102;
+  --c-bad: 255 100 130;
+  --c-muted: 134 156 188;
+  --c-ink: 234 240 252;
+}
+
+[data-theme="forest"] {
+  /* Pine green + lime accent */
+  --c-bg: 11 18 16;
+  --c-surface: 19 30 26;
+  --c-surface2: 27 44 38;
+  --c-accent: 132 220 116;
+  --c-good: 90 220 130;
+  --c-warn: 230 196 86;
+  --c-bad: 240 110 110;
+  --c-muted: 134 156 142;
+  --c-ink: 232 244 232;
+}
+
+[data-theme="sunset"] {
+  /* Warm dark mocha + amber accent */
+  --c-bg: 22 14 12;
+  --c-surface: 36 22 20;
+  --c-surface2: 52 32 28;
+  --c-accent: 255 168 84;
+  --c-good: 184 220 132;
+  --c-warn: 255 196 96;
+  --c-bad: 240 96 110;
+  --c-muted: 168 144 134;
+  --c-ink: 250 240 232;
+}
+
+[data-theme="mono"] {
+  /* Pure grayscale with white accent */
+  --c-bg: 12 12 12;
+  --c-surface: 24 24 24;
+  --c-surface2: 38 38 38;
+  --c-accent: 240 240 240;
+  --c-good: 200 200 200;
+  --c-warn: 220 220 220;
+  --c-bad: 240 100 100;
+  --c-muted: 140 140 140;
+  --c-ink: 245 245 245;
+}
+
+[data-theme="solar"] {
+  /* Solarized-dark style: warm teal base with yellow accent */
+  --c-bg: 7 30 36;
+  --c-surface: 14 42 50;
+  --c-surface2: 22 56 64;
+  --c-accent: 220 200 70;
+  --c-good: 130 196 130;
+  --c-warn: 230 174 90;
+  --c-bad: 230 110 110;
+  --c-muted: 132 158 158;
+  --c-ink: 240 232 200;
 }
 
 html, body {
   height: 100%;
-  background: #0a0a0c;
-  color: #f5f5f7;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-ink));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
@@ -23,16 +99,16 @@ html, body {
     font-feature-settings: "tnum" 1, "lnum" 1;
   }
   .glass {
-    background: linear-gradient(180deg, rgba(31,31,38,0.6) 0%, rgba(21,21,26,0.6) 100%);
+    background: linear-gradient(180deg, rgb(var(--c-surface2) / 0.6) 0%, rgb(var(--c-surface) / 0.6) 100%);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
-  .ring-accent { box-shadow: 0 0 0 2px #7c5cff inset; }
+  .ring-accent { box-shadow: 0 0 0 2px rgb(var(--c-accent)) inset; }
 }
 
 @keyframes pulseRing {
-  0% { box-shadow: 0 0 0 0 rgba(124,92,255,0.6); }
-  70% { box-shadow: 0 0 0 18px rgba(124,92,255,0); }
-  100% { box-shadow: 0 0 0 0 rgba(124,92,255,0); }
+  0% { box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0.6); }
+  70% { box-shadow: 0 0 0 18px rgb(var(--c-accent) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0); }
 }
 .mic-listening { animation: pulseRing 1.4s infinite; }

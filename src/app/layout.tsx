@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ThemeApplier } from "@/components/ThemeApplier";
 import { TopBar } from "@/components/TopBar";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-dvh bg-bg text-ink antialiased">
+        <ThemeApplier />
         <ServiceWorkerRegister />
         <div
           className="mx-auto flex min-h-dvh max-w-xl flex-col overflow-x-hidden"

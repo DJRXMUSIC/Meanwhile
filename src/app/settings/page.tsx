@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getProfile, saveProfile } from "@/lib/db";
-import type { Profile } from "@/lib/types";
+import { THEMES, type Profile, type ThemeName } from "@/lib/types";
 import { syncOnce, exportAll, importAll } from "@/lib/sync";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
 
@@ -30,6 +30,32 @@ export default function SettingsPage() {
   return (
     <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Settings</h1>
+
+      <Section title="Theme">
+        <div className="grid grid-cols-3 gap-2">
+          {THEMES.map((t) => {
+            const active = (profile.theme ?? "default") === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => update({ theme: t.id })}
+                className={`rounded-xl px-3 py-2 text-left transition flex items-center gap-2 ${
+                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
+                }`}
+              >
+                <span
+                  className="size-5 rounded-full ring-1 ring-white/10 shrink-0"
+                  style={{ backgroundColor: t.swatch }}
+                />
+                <span className={`text-sm ${active ? "text-ink" : "text-ink/80"}`}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          Themes change UI surfaces and accents. Chart colors stay consistent across themes for analytical clarity.
+        </p>
+      </Section>
 
       <Section title="App mode">
         <div className="grid grid-cols-2 gap-2">

@@ -95,6 +95,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      {mode === "learn" && <LearnPanel />}
       <ChartControls
         windowHours={windowHours}
         onWindowChange={(w: WindowHours) => { setWindowHours(w); setPanMs(0); }}
@@ -137,7 +138,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {mode === "decide" ? <InputBar onSubmit={ask} disabled={busy} /> : <LearnPanel />}
+      {mode === "decide" && <InputBar onSubmit={ask} disabled={busy} />}
     </div>
   );
 }

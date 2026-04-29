@@ -35,10 +35,10 @@ export function LearnPanel() {
   };
 
   return (
-    <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 sticky bottom-0 bg-gradient-to-t from-bg via-bg to-transparent">
-      <div className="rounded-3xl bg-surface ring-1 ring-white/10 p-3">
+    <div className="px-3">
+      <div className="rounded-2xl bg-surface ring-1 ring-white/10 p-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-xs uppercase tracking-wider text-muted">Quick basal</div>
+          <div className="text-xs uppercase tracking-wider text-muted">Quick bolus</div>
           <button
             onClick={() => setOpen(true)}
             className="text-xs rounded-full bg-accent/15 ring-1 ring-accent/40 text-accent px-3 py-1"

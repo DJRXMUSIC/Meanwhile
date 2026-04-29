@@ -70,6 +70,17 @@ export interface ContextEntry {
   value: string;
 }
 
+export type ThemeName = "default" | "midnight" | "forest" | "sunset" | "mono" | "solar";
+
+export const THEMES: { id: ThemeName; label: string; swatch: string }[] = [
+  { id: "default",  label: "Aurora",   swatch: "#7c5cff" },
+  { id: "midnight", label: "Midnight", swatch: "#5cd0ff" },
+  { id: "forest",   label: "Forest",   swatch: "#84dc74" },
+  { id: "sunset",   label: "Sunset",   swatch: "#ffa854" },
+  { id: "mono",     label: "Mono",     swatch: "#f0f0f0" },
+  { id: "solar",    label: "Solar",    swatch: "#dcc846" },
+];
+
 export interface Profile {
   id: "current";
   ic_ratio: number;       // grams of carb covered by 1U
@@ -90,6 +101,7 @@ export interface Profile {
   xdrip_url?: string;     // local xDrip+ web service URL
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
   mode?: "decide" | "learn"; // persistent operating mode
+  theme?: ThemeName;
   schema_version?: number;   // for one-shot migrations
   updated_ts: number;
 }
@@ -108,6 +120,7 @@ export const DEFAULT_PROFILE: Profile = {
   xdrip_url: "http://127.0.0.1:17580",
   ai_provider: "auto",
   mode: "decide",
+  theme: "default",
   schema_version: 2,
   updated_ts: Date.now(),
 };

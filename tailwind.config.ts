@@ -5,15 +5,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "#0a0a0c",
-        surface: "#15151a",
-        surface2: "#1f1f26",
-        accent: "#7c5cff",
-        good: "#3ddc97",
-        warn: "#ffb84d",
-        bad: "#ff5c7c",
-        muted: "#8a8a99",
-        ink: "#f5f5f7",
+        // Each color reads from a CSS variable so the active theme can swap them.
+        // The "<alpha-value>" placeholder lets utilities like bg-accent/15 still work.
+        bg: "rgb(var(--c-bg) / <alpha-value>)",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        surface2: "rgb(var(--c-surface2) / <alpha-value>)",
+        accent: "rgb(var(--c-accent) / <alpha-value>)",
+        good: "rgb(var(--c-good) / <alpha-value>)",
+        warn: "rgb(var(--c-warn) / <alpha-value>)",
+        bad: "rgb(var(--c-bad) / <alpha-value>)",
+        muted: "rgb(var(--c-muted) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],

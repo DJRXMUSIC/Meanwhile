@@ -137,8 +137,8 @@ export function Chart5h({
     const dx = e.clientX - dragRef.current.startX;
     const w = containerRef.current.clientWidth || 1;
     const windowMs = windowHours * 3600_000;
-    // Drag right = pan into the past = increase panMs.
-    const deltaPan = -(dx / w) * windowMs;
+    // Drag the content rightward → reveal older data on the left → increase panMs.
+    const deltaPan = (dx / w) * windowMs;
     const next = Math.max(0, dragRef.current.startPan + deltaPan);
     onPanChange(next);
   };
