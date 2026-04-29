@@ -13,7 +13,16 @@ export function LearnPanel() {
   const quickLog = async (units: number) => {
     setBusy(units);
     try {
-      await logInsulin({ ts: Date.now(), units, kind: "basal", note: `quick ${units}U basal` });
+      const now = Date.now();
+      await logInsulin({
+        ts: now,
+        units,
+        kind: "basal",
+        source: "quick",
+        entered_at: now,
+        backdated_min: 0,
+        note: `quick ${units}U basal`,
+      });
       flash(`Logged ${units}U basal`);
     } finally {
       setBusy(null);
@@ -89,7 +98,16 @@ function CustomDoseSheet({
     if (units <= 0) return;
     setSubmitting(true);
     try {
-      await logInsulin({ ts, units, kind: "bolus", note: offsetMin > 0 ? `backdated ${offsetMin}m` : undefined });
+      const enteredAt = Date.now();
+      await logInsulin({
+        ts,
+        units,
+        kind: "bolus",
+        source: "custom",
+        entered_at: enteredAt,
+        backdated_min: offsetMin,
+        note: offsetMin > 0 ? `backdated ${offsetMin}m` : undefined,
+      });
       onLogged(`Logged ${units}U bolus · ${labelFor(stepsBack)}`);
       onClose();
     } finally {

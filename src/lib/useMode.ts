@@ -1,25 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, saveProfile } from "./db";
 
-type Mode = "decide" | "learn";
+export type Mode = "decide" | "learn";
 
-const KEY = "meanwhile.mode";
+// Mode is stored on the Profile (IndexedDB), so it survives app restarts,
+// reboots, reinstalls (when sync is enabled), and is shared across devices.
+export function useMode(): [Mode, (m: Mode) => Promise<void>] {
+  const profile = useLiveQuery(() => db().profile.get("current"), []);
+  const mode: Mode = (profile?.mode as Mode) ?? "decide";
 
-export function useMode(): [Mode, (m: Mode) => void] {
-  const [mode, setMode] = useState<Mode>("decide");
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(KEY);
-      if (v === "learn" || v === "decide") setMode(v);
-    } catch {}
+  const set = useCallback(async (m: Mode) => {
+    await saveProfile({ mode: m });
   }, []);
-
-  const set = (m: Mode) => {
-    setMode(m);
-    try { localStorage.setItem(KEY, m); } catch {}
-  };
 
   return [mode, set];
 }

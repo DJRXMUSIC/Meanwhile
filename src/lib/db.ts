@@ -41,11 +41,33 @@ export function db(): MeanwhileDB {
   return _db;
 }
 
+// Schema version bumps trigger one-shot, non-destructive migrations.
+const CURRENT_SCHEMA = 2;
+
 export async function getProfile(): Promise<Profile> {
-  const p = await db().profile.get("current");
-  if (p) return p;
-  await db().profile.put(DEFAULT_PROFILE);
-  return DEFAULT_PROFILE;
+  const existing = await db().profile.get("current");
+  if (!existing) {
+    await db().profile.put(DEFAULT_PROFILE);
+    return DEFAULT_PROFILE;
+  }
+  if ((existing.schema_version ?? 1) < CURRENT_SCHEMA) {
+    const migrated: Profile = {
+      ...existing,
+      // Loop-style defaults; only touch fields we manage.
+      peak_min: existing.peak_min ?? 75,
+      // Old default was 4h (too short for rapid-acting). Bump only if the
+      // user is still on the old default, leaving any customization alone.
+      dia_hours: existing.dia_hours === 4 ? 6 : existing.dia_hours,
+      tir_low: existing.tir_low ?? 70,
+      tir_high: existing.tir_high ?? 160,
+      mode: existing.mode ?? "decide",
+      schema_version: CURRENT_SCHEMA,
+      updated_ts: Date.now(),
+    };
+    await db().profile.put(migrated);
+    return migrated;
+  }
+  return existing;
 }
 
 export async function saveProfile(patch: Partial<Profile>): Promise<Profile> {

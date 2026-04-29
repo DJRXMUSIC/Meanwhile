@@ -38,8 +38,12 @@ export function useLiveData() {
   ) ?? [];
 
   const bg = bgList[bgList.length - 1];
-  const dia = profile?.dia_hours ?? 4;
-  const iob = useMemo(() => totalIOB(insulinList, Date.now(), dia), [insulinList, dia]);
+  const dia = profile?.dia_hours ?? 6;
+  const peak = profile?.peak_min ?? 75;
+  const iob = useMemo(
+    () => totalIOB(insulinList, Date.now(), dia, peak),
+    [insulinList, dia, peak]
+  );
   const cob = useMemo(() => totalCOB(carbsList, Date.now()), [carbsList]);
 
   return { profile, bg, bgList, insulinList, carbsList, iob, cob };

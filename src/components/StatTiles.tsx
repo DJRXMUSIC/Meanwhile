@@ -4,7 +4,17 @@ import type { BgReading } from "@/lib/types";
 import { bgClass } from "@/lib/insulin";
 import { TrendArrow } from "./BGTrend";
 
-export function StatTiles({ bg, iob, cob }: { bg?: BgReading; iob: number; cob: number }) {
+export function StatTiles({
+  bg,
+  iob,
+  cob,
+  showCob = true,
+}: {
+  bg?: BgReading;
+  iob: number;
+  cob: number;
+  showCob?: boolean;
+}) {
   const cls = bg ? bgClass(bg.mgdl) : "in-range";
   const color =
     cls === "very-low" || cls === "low" ? "text-bad" :
@@ -15,10 +25,10 @@ export function StatTiles({ bg, iob, cob }: { bg?: BgReading; iob: number; cob: 
   const stale = ageMin != null && ageMin > 10;
 
   return (
-    <div className="grid grid-cols-3 gap-2 px-4">
+    <div className="grid grid-cols-3 gap-2 px-3">
       <div className="glass rounded-2xl p-4 col-span-2">
         <div className="text-xs uppercase tracking-wider text-muted">Blood Glucose</div>
-        <div className="mt-1 flex items-baseline gap-3">
+        <div className="mt-1 flex items-baseline gap-3 flex-wrap">
           <div className={`num text-5xl font-semibold ${color}`}>{bg ? bg.mgdl : "—"}</div>
           <div className="text-2xl text-muted"><TrendArrow trend={bg?.trend} /></div>
           {bg?.delta != null && (
@@ -32,8 +42,12 @@ export function StatTiles({ bg, iob, cob }: { bg?: BgReading; iob: number; cob: 
       <div className="glass rounded-2xl p-4">
         <div className="text-xs uppercase tracking-wider text-muted">IOB</div>
         <div className="num text-3xl font-semibold mt-1">{iob.toFixed(2)}<span className="text-base text-muted ml-1">U</span></div>
-        <div className="mt-2 text-xs uppercase tracking-wider text-muted">COB</div>
-        <div className="num text-2xl font-medium">{cob.toFixed(0)}<span className="text-sm text-muted ml-1">g</span></div>
+        {showCob && (
+          <>
+            <div className="mt-2 text-xs uppercase tracking-wider text-muted">COB</div>
+            <div className="num text-2xl font-medium">{cob.toFixed(0)}<span className="text-sm text-muted ml-1">g</span></div>
+          </>
+        )}
       </div>
     </div>
   );

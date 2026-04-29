@@ -6,7 +6,6 @@ import { Chart5h } from "@/components/Chart5h";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
-import { ModeToggle } from "@/components/ModeToggle";
 import { useLiveData, useXdripPolling } from "@/lib/useLiveData";
 import { useMode } from "@/lib/useMode";
 import { logDecision, recentDecisions } from "@/lib/db";
@@ -16,7 +15,7 @@ import type { Decision } from "@/lib/types";
 export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
   useXdripPolling(profile);
-  const [mode, setMode] = useMode();
+  const [mode] = useMode();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,12 +89,16 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-3 pb-2">
-      <StatTiles bg={bg} iob={iob} cob={cob} />
-      <ModeToggle mode={mode} onChange={setMode} />
-      <Chart5h readings={bgList} doses={insulinList} />
+      <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <Chart5h
+        readings={bgList}
+        doses={insulinList}
+        targetLow={profile?.tir_low ?? 70}
+        targetHigh={profile?.tir_high ?? 160}
+      />
 
       {mode === "decide" && error && (
-        <div className="mx-4 rounded-xl bg-bad/15 ring-1 ring-bad/40 text-bad p-3 text-sm">
+        <div className="mx-3 rounded-xl bg-bad/15 ring-1 ring-bad/40 text-bad p-3 text-sm">
           {error}
         </div>
       )}
@@ -105,7 +108,7 @@ export default function HomePage() {
       )}
 
       {mode === "decide" && !decision && history.length > 0 && (
-        <div className="mx-4 mt-2">
+        <div className="mx-3 mt-2">
           <div className="text-xs uppercase tracking-wider text-muted mb-2">Recent</div>
           <ul className="space-y-2">
             {history.slice(0, 3).map((h) => (
@@ -115,12 +118,6 @@ export default function HomePage() {
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {mode === "learn" && (
-        <div className="mx-4 mt-1 text-[11px] text-muted">
-          Learn mode: doses are logged locally and feed IOB. AI is paused.
         </div>
       )}
 

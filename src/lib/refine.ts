@@ -89,8 +89,9 @@ function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min
 function round(n: number, d: number) { const f = 10 ** d; return Math.round(n * f) / f; }
 function signed(n: number) { return (n >= 0 ? "+" : "") + n.toFixed(0); }
 
-// Auxiliary: time-in-range over last N days
-export function timeInRange(bg: BgReading[], lo = 70, hi = 180): { tir: number; below: number; above: number } {
+// Auxiliary: time-in-range over last N days. Defaults to the "tight" range
+// 70-160 mg/dL used in modern T1D management literature.
+export function timeInRange(bg: BgReading[], lo = 70, hi = 160): { tir: number; below: number; above: number } {
   if (!bg.length) return { tir: 0, below: 0, above: 0 };
   let inR = 0, below = 0, above = 0;
   for (const r of bg) {

@@ -28,8 +28,35 @@ export default function SettingsPage() {
   if (!profile) return <div className="p-6 text-muted">Loading…</div>;
 
   return (
-    <div className="px-4 py-3 space-y-4 pb-24">
+    <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Settings</h1>
+
+      <Section title="App mode">
+        <div className="grid grid-cols-2 gap-2">
+          {(["decide", "learn"] as const).map((m) => {
+            const active = (profile.mode ?? "decide") === m;
+            return (
+              <button
+                key={m}
+                onClick={() => update({ mode: m })}
+                className={`rounded-xl px-3 py-3 text-left transition ${
+                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
+                }`}
+              >
+                <div className={`text-sm font-medium ${active ? "text-ink" : "text-ink/80"}`}>
+                  {m === "decide" ? "Decide" : "Learn"}
+                </div>
+                <div className="text-[11px] text-muted">
+                  {m === "decide" ? "AI mic + text prompt" : "Quick log doses, no AI calls"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          Mode is stored in your profile and persists across app restarts, reboots, and reinstalls (when sync is enabled).
+        </p>
+      </Section>
 
       <Section title="xDrip+ local URL">
         <input
@@ -101,6 +128,62 @@ export default function SettingsPage() {
             Log
           </button>
         </div>
+      </Section>
+
+      <Section title="Insulin action">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-xs text-muted">DIA (hours)</span>
+            <input
+              type="number"
+              step={0.5}
+              min={2}
+              max={10}
+              value={profile.dia_hours}
+              onChange={(e) => update({ dia_hours: Math.max(2, Math.min(10, Number(e.target.value) || 6)) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted">Peak (min)</span>
+            <input
+              type="number"
+              step={5}
+              min={20}
+              max={180}
+              value={profile.peak_min ?? 75}
+              onChange={(e) => update({ peak_min: Math.max(20, Math.min(180, Number(e.target.value) || 75)) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          IOB uses the Loop / OpenAPS exponential model. Defaults: DIA <b>6h</b>, peak <b>75 min</b> (rapid-acting analog adult preset). Tune lower for kids or different insulins.
+        </p>
+      </Section>
+
+      <Section title="Time-in-range bounds">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-xs text-muted">Low (mg/dL)</span>
+            <input
+              type="number"
+              value={profile.tir_low ?? 70}
+              onChange={(e) => update({ tir_low: Math.max(40, Number(e.target.value) || 70) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted">High (mg/dL)</span>
+            <input
+              type="number"
+              value={profile.tir_high ?? 160}
+              onChange={(e) => update({ tir_high: Math.min(350, Number(e.target.value) || 160) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+        </div>
+        <p className="text-[11px] text-muted mt-2">Used in chart band shading and Profile statistics.</p>
       </Section>
 
       <Section title="AI provider">

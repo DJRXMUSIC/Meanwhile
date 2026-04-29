@@ -15,10 +15,14 @@ export function DecisionCard({
 
   const acceptDose = async () => {
     if (decision.suggested_units == null || decision.suggested_units === 0) return;
+    const now = Date.now();
     await logInsulin({
-      ts: Date.now(),
+      ts: now,
       units: decision.suggested_units,
       kind: "bolus",
+      source: "ai",
+      entered_at: now,
+      backdated_min: 0,
       note: decision.headline,
     });
     setLogged((s) => ({ ...s, insulin: true }));

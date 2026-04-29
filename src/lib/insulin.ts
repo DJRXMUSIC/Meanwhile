@@ -1,26 +1,44 @@
 import type { CarbEntry, InsulinDose, Profile } from "./types";
 
-// Bilinear IOB curve — simple, transparent, widely used in DIY loop projects.
-// Returns the fraction of a dose still active at `tMin` minutes after delivery.
-export function iobFraction(tMin: number, diaHours: number): number {
+// Loop / OpenAPS / oref0 exponential IOB curve.
+// Defaults match Loop's "rapid-acting adult" preset: peak 75 min, DIA 6h.
+// Reference: github.com/LoopKit/LoopKit (ExponentialInsulinModel) and
+// github.com/openaps/oref0 (lib/iob/calculate.js).
+//
+// Formula:
+//   tau = peak * (1 - peak/dia) / (1 - 2*peak/dia)
+//   a   = 2 * tau / dia
+//   S   = 1 / (1 - a + (1+a) * exp(-dia/tau))
+//   IOB(t) = 1 - S*(1-a) * ((t^2/(tau*dia*(1-a)) - t/dia - 1) * exp(-t/tau) + 1)
+export function iobFraction(tMin: number, diaHours: number, peakMin = 75): number {
   if (tMin <= 0) return 1;
   const dia = diaHours * 60;
   if (tMin >= dia) return 0;
-  const peak = dia * 0.30; // ~75 min for DIA=4h
-  if (tMin <= peak) {
-    return 1 - 0.5 * (tMin / peak);
-  }
-  // remaining 50% decays linearly from peak to dia
-  const remaining = (dia - tMin) / (dia - peak);
-  return 0.5 * remaining;
+  // Guard against degenerate parameters.
+  const peak = Math.max(20, Math.min(peakMin, dia * 0.45));
+  const tau = (peak * (1 - peak / dia)) / (1 - (2 * peak) / dia);
+  const a = (2 * tau) / dia;
+  const S = 1 / (1 - a + (1 + a) * Math.exp(-dia / tau));
+  const iob =
+    1 -
+    S * (1 - a) *
+      (((tMin * tMin) / (tau * dia * (1 - a)) - tMin / dia - 1) *
+        Math.exp(-tMin / tau) +
+        1);
+  return Math.max(0, Math.min(1, iob));
 }
 
-export function totalIOB(doses: InsulinDose[], at: number, diaHours: number): number {
+export function totalIOB(
+  doses: InsulinDose[],
+  at: number,
+  diaHours: number,
+  peakMin = 75
+): number {
   let iob = 0;
   for (const d of doses) {
     const tMin = (at - d.ts) / 60_000;
     if (tMin < 0 || tMin > diaHours * 60) continue;
-    iob += d.units * iobFraction(tMin, diaHours);
+    iob += d.units * iobFraction(tMin, diaHours, peakMin);
   }
   return round(iob, 2);
 }

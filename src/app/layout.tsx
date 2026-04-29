@@ -26,9 +26,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-dvh bg-bg text-ink antialiased">
         <ServiceWorkerRegister />
-        <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
+        <div
+          className="mx-auto flex min-h-dvh max-w-xl flex-col overflow-x-hidden"
+          style={{
+            paddingLeft: "env(safe-area-inset-left)",
+            paddingRight: "env(safe-area-inset-right)",
+          }}
+        >
           <TopBar />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1 min-w-0">{children}</main>
         </div>
       </body>
     </html>

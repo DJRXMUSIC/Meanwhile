@@ -16,10 +16,14 @@ export interface BgReading {
 
 export interface InsulinDose {
   id?: number;
-  ts: number;
+  ts: number;            // administration time (may be backdated)
   units: number;
   kind: "bolus" | "correction" | "basal";
   note?: string;
+  // analytics fields — non-breaking, optional on legacy rows.
+  entered_at?: number;   // wall-clock time the user actually tapped log
+  source?: "quick" | "custom" | "ai" | "manual" | "import";
+  backdated_min?: number; // entered_at - ts in minutes (0 if live)
 }
 
 export interface CarbEntry {
@@ -72,7 +76,10 @@ export interface Profile {
   isf: number;            // mg/dL drop per 1U
   basal_u_per_hr: number;
   dia_hours: number;      // duration of insulin action
+  peak_min?: number;      // time-to-peak in minutes (Loop default 75)
   target_bg: number;
+  tir_low?: number;       // time-in-range lower bound (default 70)
+  tir_high?: number;      // time-in-range upper bound (default 160)
   ai_overrides?: {
     ic_ratio?: number;
     isf?: number;
@@ -82,6 +89,8 @@ export interface Profile {
   units: "mgdl";
   xdrip_url?: string;     // local xDrip+ web service URL
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
+  mode?: "decide" | "learn"; // persistent operating mode
+  schema_version?: number;   // for one-shot migrations
   updated_ts: number;
 }
 
@@ -90,10 +99,15 @@ export const DEFAULT_PROFILE: Profile = {
   ic_ratio: 10,
   isf: 40,
   basal_u_per_hr: 0.7,
-  dia_hours: 4,
+  dia_hours: 6,            // Loop default for rapid-acting analogs
+  peak_min: 75,
   target_bg: 110,
+  tir_low: 70,
+  tir_high: 160,
   units: "mgdl",
   xdrip_url: "http://127.0.0.1:17580",
   ai_provider: "auto",
+  mode: "decide",
+  schema_version: 2,
   updated_ts: Date.now(),
 };

@@ -20,7 +20,9 @@ export default function ProfilePage() {
   const insulinList = useLiveQuery(() => db().insulin.where("ts").above(since).sortBy("ts"), [since], []) ?? [];
   const carbsList = useLiveQuery(() => db().carbs.where("ts").above(since).sortBy("ts"), [since], []) ?? [];
 
-  const tirSummary = useMemo(() => timeInRange(bgList), [bgList]);
+  const tirLow = profile?.tir_low ?? 70;
+  const tirHigh = profile?.tir_high ?? 160;
+  const tirSummary = useMemo(() => timeInRange(bgList, tirLow, tirHigh), [bgList, tirLow, tirHigh]);
   const dailyTDD = useMemo(() => tdd(insulinList), [insulinList]);
   const dailyCarbs = useMemo(() => avgCarbsPerDay(carbsList), [carbsList]);
 
@@ -68,7 +70,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="px-4 py-3 space-y-4 pb-24">
+    <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Profile</h1>
 
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5">
@@ -83,12 +85,12 @@ export default function ProfilePage() {
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5">
         <div className="text-xs uppercase tracking-wider text-muted mb-2">Last 14 days</div>
         <div className="grid grid-cols-3 gap-2">
-          <Tile label="TIR" value={`${(tirSummary.tir * 100).toFixed(0)}%`} hint={`70–180`} />
+          <Tile label="TIR" value={`${(tirSummary.tir * 100).toFixed(0)}%`} hint={`${tirLow}–${tirHigh}`} />
           <Tile label="TDD (24h)" value={`${dailyTDD.toFixed(1)}U`} hint="all insulin" />
           <Tile label="Carbs/day" value={`${dailyCarbs.toFixed(0)}g`} hint="7d avg" />
         </div>
         <div className="mt-3 text-[11px] text-muted">
-          Below 70: {(tirSummary.below * 100).toFixed(0)}% · Above 180: {(tirSummary.above * 100).toFixed(0)}%
+          Below {tirLow}: {(tirSummary.below * 100).toFixed(0)}% · Above {tirHigh}: {(tirSummary.above * 100).toFixed(0)}%
         </div>
       </section>
 
