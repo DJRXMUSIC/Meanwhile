@@ -109,6 +109,14 @@ export async function logInsulin(d: Omit<InsulinDose, "id">): Promise<number> {
   return db().insulin.add(d as InsulinDose);
 }
 
+export async function updateInsulin(id: number, patch: Partial<InsulinDose>): Promise<void> {
+  await db().insulin.update(id, patch);
+}
+
+export async function deleteInsulin(id: number): Promise<void> {
+  await db().insulin.delete(id);
+}
+
 export async function logCarbs(c: Omit<CarbEntry, "id">): Promise<number> {
   return db().carbs.add(c as CarbEntry);
 }

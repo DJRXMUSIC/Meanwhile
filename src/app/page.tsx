@@ -5,6 +5,7 @@ import { StatTiles } from "@/components/StatTiles";
 import { Chart5h, type WindowHours } from "@/components/Chart5h";
 import { ChartControls } from "@/components/ChartControls";
 import { StatsPanel } from "@/components/StatsPanel";
+import { DoseList } from "@/components/DoseList";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
@@ -110,6 +111,7 @@ export default function HomePage() {
         targetHigh={profile?.tir_high ?? 160}
       />
       <StatsPanel bgList={bgList} insulinList={insulinList} />
+      <DoseList doses={insulinList} />
 
       {mode === "decide" && error && (
         <div className="mx-3 rounded-xl bg-bad/15 ring-1 ring-bad/40 text-bad p-3 text-sm">
