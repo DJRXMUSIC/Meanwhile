@@ -19,7 +19,7 @@ const RequestSchema = z.object({
     recent_doses: z.array(z.object({ ts: z.number(), units: z.number(), kind: z.string() })),
     recent_carbs: z.array(z.object({ ts: z.number(), g: z.number(), desc: z.string().optional() })),
   }),
-  preferred_provider: z.enum(["anthropic", "openai", "auto"]).optional(),
+  preferred_provider: z.enum(["anthropic", "openai", "google", "auto"]).optional(),
 });
 
 export async function POST(req: Request) {

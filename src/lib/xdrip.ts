@@ -16,10 +16,27 @@ export interface XdripEntry {
 
 export async function fetchXdrip(base: string, count = 24): Promise<XdripEntry[]> {
   if (!base) return [];
-  const url = `${base.replace(/\/$/, "")}/sgv.json?count=${count}`;
-  const res = await fetch(url, { cache: "no-store", mode: "cors" });
-  if (!res.ok) throw new Error(`xDrip fetch failed: ${res.status}`);
-  const json = (await res.json()) as XdripEntry[];
+  const direct = `${base.replace(/\/$/, "")}/sgv.json?count=${count}`;
+
+  // 1) Try direct fetch from the browser. Works when the page is on the
+  //    same device as xDrip+ AND the page is HTTP (or xDrip+ exposes HTTPS).
+  try {
+    const res = await fetch(direct, { cache: "no-store", mode: "cors" });
+    if (res.ok) {
+      const json = (await res.json()) as XdripEntry[];
+      return Array.isArray(json) ? json : [];
+    }
+  } catch {
+    // Mixed-content block or CORS denial — fall through to proxy.
+  }
+
+  // 2) Fall back to the server-side proxy at /api/bg/proxy. The Next.js
+  //    server fetches xDrip+ on our behalf — works as long as the deploy
+  //    can reach `base` on the network.
+  const proxied = `/api/bg/proxy?base=${encodeURIComponent(base)}&count=${count}`;
+  const res2 = await fetch(proxied, { cache: "no-store" });
+  if (!res2.ok) throw new Error(`xDrip fetch failed: ${res2.status}`);
+  const json = (await res2.json()) as XdripEntry[];
   return Array.isArray(json) ? json : [];
 }
 

@@ -81,7 +81,7 @@ export interface Profile {
   };
   units: "mgdl";
   xdrip_url?: string;     // local xDrip+ web service URL
-  ai_provider?: "anthropic" | "openai" | "auto";
+  ai_provider?: "anthropic" | "openai" | "google" | "auto";
   updated_ts: number;
 }
 

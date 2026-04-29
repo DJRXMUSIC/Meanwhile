@@ -34,22 +34,49 @@ export default function SettingsPage() {
       <Section title="xDrip+ local URL">
         <input
           type="url"
-          placeholder="http://127.0.0.1:17580"
+          placeholder="http://192.168.x.x:17580"
           value={profile.xdrip_url ?? ""}
           onChange={(e) => update({ xdrip_url: e.target.value })}
           className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
         />
-        <button
-          onClick={async () => {
-            try {
-              const n = await syncXdripOnce(profile.xdrip_url || "");
-              setStatus(`xDrip: pulled ${n} new readings`);
-            } catch (e) { setStatus(`xDrip error: ${(e as Error).message}`); }
-          }}
-          className="mt-2 rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
-        >
-          Test connection
-        </button>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={async () => {
+              const url = (profile.xdrip_url || "").trim();
+              if (!url) { setStatus("xDrip: enter a URL first"); return; }
+              setStatus("xDrip: testing…");
+              try {
+                const n = await syncXdripOnce(url);
+                const msg = n > 0
+                  ? `xDrip: pulled ${n} new readings ✓`
+                  : `xDrip: connected ✓ (no new readings since last sync)`;
+                setStatus(msg);
+              } catch (e) {
+                setStatus(`xDrip error: ${(e as Error).message}. Tip: when this app is on a different device than xDrip+, use the phone's LAN IP (not 127.0.0.1) and make sure both are on the same WiFi.`);
+              }
+            }}
+            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
+          >
+            Test connection
+          </button>
+          <button
+            onClick={async () => {
+              const url = (profile.xdrip_url || "").trim();
+              if (!url) return;
+              try {
+                const r = await fetch(`/api/bg/proxy?base=${encodeURIComponent(url)}&count=1`, { cache: "no-store" });
+                const t = await r.text();
+                setStatus(`Proxy ${r.status}: ${t.slice(0, 200)}`);
+              } catch (e) { setStatus(`Proxy error: ${(e as Error).message}`); }
+            }}
+            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
+          >
+            Test via server proxy
+          </button>
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          xDrip+ → Settings → Inter-app settings → enable <b>Local web service</b>. Direct browser fetches work only if this page is HTTP and on the same device. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
+        </p>
       </Section>
 
       <Section title="Manual BG entry">
@@ -85,8 +112,11 @@ export default function SettingsPage() {
           <option value="auto">Auto (try primary, fall back)</option>
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI</option>
+          <option value="google">Google (Gemini)</option>
         </select>
-        <p className="text-[11px] text-muted mt-2">Configure API keys via environment variables on the server (.env.local).</p>
+        <p className="text-[11px] text-muted mt-2">
+          Configure API keys via environment variables on the server: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or <code>GEMINI_API_KEY</code>. For Gemini, set <code>GEMINI_MODEL</code> (default <code>gemini-2.5-flash-lite</code>) and <code>GEMINI_THINKING_BUDGET=-1</code> for max reasoning.
+        </p>
       </Section>
 
       <Section title="Multi-device sync">
