@@ -261,6 +261,39 @@ export default function SettingsPage() {
         </div>
       </Section>
 
+      <Section title="App version">
+        <p className="text-[11px] text-muted">
+          Meanwhile is a PWA — old code can stick around in the service-worker cache. Hard refresh unregisters the worker, clears all caches, and reloads from the network. Your data (logs, profile, decisions) is untouched.
+        </p>
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={async () => {
+              setStatus("Refreshing…");
+              try {
+                if ("serviceWorker" in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map((r) => r.unregister()));
+                }
+                if ("caches" in window) {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                }
+              } catch (e) {
+                setStatus(`Refresh prep error: ${(e as Error).message}`);
+              }
+              // Cache-busting reload: query string forces network round-trip
+              // even on browsers that ignore location.reload(true).
+              const url = new URL(window.location.href);
+              url.searchParams.set("_r", Date.now().toString());
+              window.location.replace(url.toString());
+            }}
+            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
+          >
+            Hard refresh
+          </button>
+        </div>
+      </Section>
+
       <Section title="About">
         <div className="text-xs text-muted leading-relaxed">
           Meanwhile is a personal decision-support tool for adults managing T1D. It does not have hard safety caps; you must verify every dose. Your data lives in IndexedDB on this device and (optionally) syncs through your own endpoint.
