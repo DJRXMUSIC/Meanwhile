@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { StatTiles } from "@/components/StatTiles";
-import { Sparkline } from "@/components/Sparkline";
+import { Chart5h } from "@/components/Chart5h";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
+import { LearnPanel } from "@/components/LearnPanel";
+import { ModeToggle } from "@/components/ModeToggle";
 import { useLiveData, useXdripPolling } from "@/lib/useLiveData";
+import { useMode } from "@/lib/useMode";
 import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
@@ -13,6 +16,7 @@ import type { Decision } from "@/lib/types";
 export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
   useXdripPolling(profile);
+  const [mode, setMode] = useMode();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +57,6 @@ export default function HomePage() {
       }
       const { decision: d, provider, model } = await res.json();
 
-      // Sanity-check math: if AI gave carbs but no units, compute one ourselves for transparency.
       const extractedCarbs = d.suggested_carbs_g ?? d.extracted?.carbs_g ?? 0;
       let math: Record<string, number | string> = {};
       if (bg?.mgdl != null && (d.suggested_units == null) && extractedCarbs > 0) {
@@ -88,17 +91,20 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles bg={bg} iob={iob} cob={cob} />
-      <Sparkline readings={bgList} />
+      <ModeToggle mode={mode} onChange={setMode} />
+      <Chart5h readings={bgList} doses={insulinList} />
 
-      {error && (
+      {mode === "decide" && error && (
         <div className="mx-4 rounded-xl bg-bad/15 ring-1 ring-bad/40 text-bad p-3 text-sm">
           {error}
         </div>
       )}
 
-      {decision && <DecisionCard decision={decision} onLogged={() => recentDecisions(5).then(setHistory)} />}
+      {mode === "decide" && decision && (
+        <DecisionCard decision={decision} onLogged={() => recentDecisions(5).then(setHistory)} />
+      )}
 
-      {!decision && history.length > 0 && (
+      {mode === "decide" && !decision && history.length > 0 && (
         <div className="mx-4 mt-2">
           <div className="text-xs uppercase tracking-wider text-muted mb-2">Recent</div>
           <ul className="space-y-2">
@@ -112,7 +118,13 @@ export default function HomePage() {
         </div>
       )}
 
-      <InputBar onSubmit={ask} disabled={busy} />
+      {mode === "learn" && (
+        <div className="mx-4 mt-1 text-[11px] text-muted">
+          Learn mode: doses are logged locally and feed IOB. AI is paused.
+        </div>
+      )}
+
+      {mode === "decide" ? <InputBar onSubmit={ask} disabled={busy} /> : <LearnPanel />}
     </div>
   );
 }
