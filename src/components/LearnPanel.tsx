@@ -17,13 +17,13 @@ export function LearnPanel() {
       await logInsulin({
         ts: now,
         units,
-        kind: "basal",
+        kind: "bolus",
         source: "quick",
         entered_at: now,
         backdated_min: 0,
-        note: `quick ${units}U basal`,
+        note: `quick ${units}U`,
       });
-      flash(`Logged ${units}U basal`);
+      flash(`Logged ${units}U`);
     } finally {
       setBusy(null);
     }

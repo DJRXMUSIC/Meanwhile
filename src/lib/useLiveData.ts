@@ -19,7 +19,9 @@ export function useProfile(): Profile | null {
 
 export function useLiveData() {
   const profile = useProfile();
-  const since = Date.now() - 6 * 3600_000;
+  // Fetch enough history to feed both the 24h chart window and the
+  // 3-day statistics panel without re-querying. 4 days is a safe margin.
+  const since = Date.now() - 4 * 24 * 3600_000;
 
   const bgList = useLiveQuery(
     () => db().bg.where("ts").above(since).sortBy("ts"),

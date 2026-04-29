@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { StatTiles } from "@/components/StatTiles";
-import { Chart5h } from "@/components/Chart5h";
+import { Chart5h, type WindowHours } from "@/components/Chart5h";
+import { ChartControls } from "@/components/ChartControls";
+import { StatsPanel } from "@/components/StatsPanel";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
 import { useLiveData, useXdripPolling } from "@/lib/useLiveData";
 import { useMode } from "@/lib/useMode";
+import { useChartView } from "@/lib/useChartView";
 import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
@@ -16,6 +19,7 @@ export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
   useXdripPolling(profile);
   const [mode] = useMode();
+  const { windowHours, setWindowHours, panMs, setPanMs } = useChartView();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,12 +94,22 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <ChartControls
+        windowHours={windowHours}
+        onWindowChange={(w: WindowHours) => { setWindowHours(w); setPanMs(0); }}
+        panMs={panMs}
+        onResetPan={() => setPanMs(0)}
+      />
       <Chart5h
         readings={bgList}
         doses={insulinList}
+        windowHours={windowHours}
+        panMs={panMs}
+        onPanChange={setPanMs}
         targetLow={profile?.tir_low ?? 70}
         targetHigh={profile?.tir_high ?? 160}
       />
+      <StatsPanel bgList={bgList} insulinList={insulinList} />
 
       {mode === "decide" && error && (
         <div className="mx-3 rounded-xl bg-bad/15 ring-1 ring-bad/40 text-bad p-3 text-sm">

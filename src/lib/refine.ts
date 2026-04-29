@@ -109,6 +109,66 @@ export function tdd(insulin: InsulinDose[], windowMs = 24 * 3600_000): number {
   return insulin.filter((d) => d.ts >= cutoff).reduce((a, d) => a + d.units, 0);
 }
 
+// ---- Statistics helpers ------------------------------------------------
+
+// TIR over a sliding window.
+export function tirWindow(
+  bg: BgReading[],
+  windowMs: number,
+  lo = 70,
+  hi = 160
+): { tir: number; below: number; above: number; n: number } {
+  const cutoff = Date.now() - windowMs;
+  const subset = bg.filter((r) => r.ts >= cutoff);
+  if (!subset.length) return { tir: 0, below: 0, above: 0, n: 0 };
+  let inR = 0, below = 0, above = 0;
+  for (const r of subset) {
+    if (r.mgdl < lo) below++;
+    else if (r.mgdl > hi) above++;
+    else inR++;
+  }
+  const n = subset.length;
+  return { tir: inR / n, below: below / n, above: above / n, n };
+}
+
+export function median(values: number[]): number {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+export function medianBgWindow(bg: BgReading[], windowMs: number): number | null {
+  const cutoff = Date.now() - windowMs;
+  const vals = bg.filter((r) => r.ts >= cutoff).map((r) => r.mgdl);
+  return vals.length ? median(vals) : null;
+}
+
+// Average per-bolus dose (mean of bolus units, not "per day").
+export function avgBolusWindow(insulin: InsulinDose[], windowMs: number): number | null {
+  const cutoff = Date.now() - windowMs;
+  const vals = insulin
+    .filter((d) => d.ts >= cutoff)
+    .filter((d) => d.kind === "bolus" || d.kind === "correction")
+    .map((d) => d.units);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+// Total bolus units logged today (since local midnight).
+export function totalBolusToday(insulin: InsulinDose[]): { units: number; n: number } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const cutoff = start.getTime();
+  const subset = insulin
+    .filter((d) => d.ts >= cutoff)
+    .filter((d) => d.kind === "bolus" || d.kind === "correction");
+  return {
+    units: subset.reduce((a, d) => a + d.units, 0),
+    n: subset.length,
+  };
+}
+
 // Average carbs/day
 export function avgCarbsPerDay(carbs: CarbEntry[], days = 7): number {
   const cutoff = Date.now() - days * 24 * 3600_000;
