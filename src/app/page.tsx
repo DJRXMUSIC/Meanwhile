@@ -6,6 +6,7 @@ import { Chart5h, type WindowHours } from "@/components/Chart5h";
 import { ChartControls } from "@/components/ChartControls";
 import { StatsPanel } from "@/components/StatsPanel";
 import { DoseList } from "@/components/DoseList";
+import { PreBolusTimer } from "@/components/PreBolusTimer";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
@@ -95,6 +96,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}
       <ChartControls
         windowHours={windowHours}
