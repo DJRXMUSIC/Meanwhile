@@ -168,7 +168,7 @@ export function Chart5h({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        className={`select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`relative select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
       >
         <svg
           viewBox={`0 0 ${view.w} ${view.h}`}
@@ -253,40 +253,21 @@ export function Chart5h({
             />
           )}
 
-          {/* Bolus markers overlaid on the BG line at their administration time */}
+          {/* Bolus markers (dot only — labels are HTML overlay below for crisp text) */}
           {dosesInWin.map((d) => {
             const interpolated = bgAt(d.ts, bgInWin);
             const cx = xOf(d.ts);
             const cy = interpolated != null ? yOf(interpolated) : pad.t + plotH * 0.25;
-            const labelY = Math.max(pad.t + 18, cy - 18);
-            const text = `${d.units}U`;
-            // Approximate label width for the backdrop
-            const w = text.length * 11 + 14;
             return (
-              <g key={`d-${d.id ?? d.ts}-${d.units}`}>
-                <circle cx={cx} cy={cy} r={6.5} fill="#ff9d4d" stroke="#0a0a0c" strokeWidth={2} />
-                <line x1={cx} x2={cx} y1={cy} y2={labelY + 14} stroke="#ff9d4d" strokeWidth={1.5} strokeDasharray="3 3" />
-                <rect
-                  x={cx - w / 2}
-                  y={labelY}
-                  width={w}
-                  height={20}
-                  rx={6}
-                  fill="rgba(0,0,0,0.78)"
-                  stroke="#ff9d4d"
-                  strokeWidth={1.2}
-                />
-                <text
-                  x={cx}
-                  y={labelY + 15}
-                  fontSize="14"
-                  fontWeight="700"
-                  textAnchor="middle"
-                  fill="#ffd6a8"
-                >
-                  {text}
-                </text>
-              </g>
+              <circle
+                key={`dm-${d.id ?? d.ts}-${d.units}`}
+                cx={cx}
+                cy={cy}
+                r={7}
+                fill="#ff9d4d"
+                stroke="#0a0a0c"
+                strokeWidth={2.5}
+              />
             );
           })}
 
@@ -316,6 +297,44 @@ export function Chart5h({
             <text x={88} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">bolus</text>
           </g>
         </svg>
+
+        {/* HTML overlay for bolus unit labels — rendered outside the SVG so
+            text isn't squished by preserveAspectRatio="none", and so labels
+            near the right/left edges can flip their anchor to stay visible. */}
+        <div className="absolute inset-0 pointer-events-none">
+          {dosesInWin.map((d) => {
+            const interpolated = bgAt(d.ts, bgInWin);
+            const cx = xOf(d.ts);
+            const cy = interpolated != null ? yOf(interpolated) : pad.t + plotH * 0.25;
+            const pctX = (cx / view.w) * 100;
+            const pctY = (cy / view.h) * 100;
+            // Anchor label to keep it on screen:
+            //   marker in left 12% → align label's left edge to marker
+            //   marker in right 12% → align label's right edge to marker
+            //   otherwise            → center the label above the marker
+            const align: "start" | "end" | "center" =
+              pctX < 12 ? "start" : pctX > 88 ? "end" : "center";
+            const transform =
+              align === "start" ? "translate(0, -100%)" :
+              align === "end"   ? "translate(-100%, -100%)" :
+                                  "translate(-50%, -100%)";
+            return (
+              <div
+                key={`dl-${d.id ?? d.ts}-${d.units}`}
+                className="absolute pb-2"
+                style={{
+                  left: `${pctX}%`,
+                  top: `${pctY}%`,
+                  transform,
+                }}
+              >
+                <div className="num leading-none px-2 py-1 rounded-md bg-black/85 ring-1 ring-[#ff9d4d] text-[#ffd6a8] text-base font-bold whitespace-nowrap shadow-lg shadow-black/40">
+                  {d.units}U
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
       {bgInWin.length === 0 && dosesInWin.length === 0 && (
         <div className="text-center text-xs text-muted -mt-44 mb-32">no data in this window</div>
