@@ -53,8 +53,12 @@ export function Chart5h({
 
   const yOf = (mgdl: number): number => {
     const v = Math.max(40, Math.min(350, mgdl));
-    if (v >= 250) return pad.t + highH * (1 - (350 - v) / 100);
+    // Top zone (250..350) — compressed band sitting at the top of the plot.
+    // v=350 → top of plot; v=250 → top of mid zone (boundary).
+    if (v >= 250) return pad.t + highH * ((350 - v) / 100);
+    // Mid zone (70..250) — focus band.
     if (v >= 70)  return pad.t + highH + midH * ((250 - v) / 180);
+    // Bottom zone (40..70) — compressed band at the bottom.
     return pad.t + highH + midH + lowH * ((70 - v) / 30);
   };
 
