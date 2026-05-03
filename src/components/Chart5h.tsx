@@ -201,14 +201,32 @@ export function Chart5h({
   return (
     <div className="px-3">
       {isHistorical && (
-        <div className="mb-2 rounded-xl bg-warn/15 ring-1 ring-warn/50 px-3 py-2 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-warn font-semibold">Historical view</div>
+        <div className="mb-2 rounded-xl bg-warn/15 ring-1 ring-warn/50 px-2 py-2 flex items-center gap-2">
+          <button
+            onClick={() => onPanChange(panMs + (windowHours / 2) * 3600_000)}
+            className="size-9 shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn text-xl font-bold leading-none grid place-items-center active:scale-95 transition"
+            aria-label="Scroll earlier"
+          >
+            ‹
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <div className="text-[10px] uppercase tracking-wider text-warn font-semibold">
+              Historical view · {ageLabel}
+            </div>
             <div className="text-sm truncate">
               {fmtDate(maxT)} · {fmtClock(minT)}–{fmtClock(maxT)}
             </div>
           </div>
-          <div className="text-[11px] text-warn shrink-0">{ageLabel}</div>
+          <button
+            onClick={() => {
+              const step = (windowHours / 2) * 3600_000;
+              onPanChange(Math.max(0, panMs - step));
+            }}
+            className="size-9 shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn text-xl font-bold leading-none grid place-items-center active:scale-95 transition"
+            aria-label="Scroll later"
+          >
+            ›
+          </button>
         </div>
       )}
       <div
