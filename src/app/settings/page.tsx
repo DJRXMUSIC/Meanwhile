@@ -157,9 +157,9 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="Insulin action">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <label className="block">
-            <span className="text-xs text-muted">DIA (hours)</span>
+            <span className="text-xs text-muted">DIA (h)</span>
             <input
               type="number"
               step={0.5}
@@ -182,9 +182,78 @@ export default function SettingsPage() {
               className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
             />
           </label>
+          <label className="block">
+            <span className="text-xs text-muted">Delay (min)</span>
+            <input
+              type="number"
+              step={5}
+              min={0}
+              max={60}
+              value={profile.delay_min ?? 15}
+              onChange={(e) => update({ delay_min: Math.max(0, Math.min(60, Number(e.target.value) || 15)) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
         </div>
         <p className="text-[11px] text-muted mt-2">
-          IOB uses the Loop / OpenAPS exponential model. Defaults: DIA <b>6h</b>, peak <b>75 min</b> (rapid-acting analog adult preset). Tune lower for kids or different insulins.
+          IOB uses the Loop / OpenAPS exponential model with an oref0-style absorption delay. Defaults: DIA <b>6h</b>, peak <b>75 min</b>, delay <b>15 min</b> (insulin stays at 100% IOB during the lag, then decays). Long-acting basal is excluded from this calculation.
+        </p>
+      </Section>
+
+      <Section title="Daily basal reminder">
+        <label className="flex items-center justify-between gap-2 cursor-pointer">
+          <span className="text-sm">Show daily reminder</span>
+          <input
+            type="checkbox"
+            checked={profile.daily_basal_enabled ?? true}
+            onChange={(e) => update({ daily_basal_enabled: e.target.checked })}
+            className="size-5 accent-accent"
+          />
+        </label>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <label className="block">
+            <span className="text-xs text-muted">Units</span>
+            <input
+              type="number"
+              step={0.5}
+              min={0}
+              max={200}
+              value={profile.daily_basal_units ?? 20}
+              onChange={(e) => update({ daily_basal_units: Math.max(0, Math.min(200, Number(e.target.value) || 0)) })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted">Time</span>
+            <input
+              type="time"
+              value={profile.daily_basal_time ?? "18:30"}
+              onChange={(e) => update({ daily_basal_time: e.target.value || "18:30" })}
+              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted">Timezone</span>
+            <select
+              value={profile.daily_basal_tz ?? "America/New_York"}
+              onChange={(e) => update({ daily_basal_tz: e.target.value })}
+              className="mt-1 w-full rounded-xl bg-surface2 px-2 py-2 ring-1 ring-white/5 text-sm"
+            >
+              <option value="America/New_York">Eastern (NY)</option>
+              <option value="America/Chicago">Central (Chi)</option>
+              <option value="America/Denver">Mountain (Den)</option>
+              <option value="America/Los_Angeles">Pacific (LA)</option>
+              <option value="America/Anchorage">Alaska</option>
+              <option value="Pacific/Honolulu">Hawaii</option>
+              <option value="Europe/London">London</option>
+              <option value="Europe/Paris">Paris</option>
+              <option value="Asia/Tokyo">Tokyo</option>
+              <option value="Australia/Sydney">Sydney</option>
+            </select>
+          </label>
+        </div>
+        <p className="text-[11px] text-muted mt-2">
+          A circular button appears on the home screen at the configured time each day until you tap it. Time is interpreted in the chosen IANA zone (DST handled automatically), so it fires at the same wall clock no matter where the device is.
         </p>
       </Section>
 

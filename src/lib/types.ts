@@ -88,6 +88,7 @@ export interface Profile {
   basal_u_per_hr: number;
   dia_hours: number;      // duration of insulin action
   peak_min?: number;      // time-to-peak in minutes (Loop default 75)
+  delay_min?: number;     // pre-action lag where IOB stays at 100% (default 15)
   target_bg: number;
   tir_low?: number;       // time-in-range lower bound (default 70)
   tir_high?: number;      // time-in-range upper bound (default 160)
@@ -102,6 +103,11 @@ export interface Profile {
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
   mode?: "decide" | "learn"; // persistent operating mode
   theme?: ThemeName;
+  // Once-daily long-acting basal reminder
+  daily_basal_enabled?: boolean;
+  daily_basal_units?: number;     // default 20
+  daily_basal_time?: string;      // "HH:MM" — interpreted in `daily_basal_tz`
+  daily_basal_tz?: string;        // IANA name; default "America/New_York"
   schema_version?: number;   // for one-shot migrations
   updated_ts: number;
 }
@@ -113,6 +119,7 @@ export const DEFAULT_PROFILE: Profile = {
   basal_u_per_hr: 0.7,
   dia_hours: 6,            // Loop default for rapid-acting analogs
   peak_min: 75,
+  delay_min: 15,
   target_bg: 110,
   tir_low: 70,
   tir_high: 160,
@@ -121,6 +128,10 @@ export const DEFAULT_PROFILE: Profile = {
   ai_provider: "auto",
   mode: "decide",
   theme: "default",
-  schema_version: 2,
+  daily_basal_enabled: true,
+  daily_basal_units: 20,
+  daily_basal_time: "18:30",
+  daily_basal_tz: "America/New_York",
+  schema_version: 3,
   updated_ts: Date.now(),
 };

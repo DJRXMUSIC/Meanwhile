@@ -42,9 +42,10 @@ export function useLiveData() {
   const bg = bgList[bgList.length - 1];
   const dia = profile?.dia_hours ?? 6;
   const peak = profile?.peak_min ?? 75;
+  const delay = profile?.delay_min ?? 15;
   const iob = useMemo(
-    () => totalIOB(insulinList, Date.now(), dia, peak),
-    [insulinList, dia, peak]
+    () => totalIOB(insulinList, Date.now(), dia, peak, delay),
+    [insulinList, dia, peak, delay]
   );
   const cob = useMemo(() => totalCOB(carbsList, Date.now()), [carbsList]);
 

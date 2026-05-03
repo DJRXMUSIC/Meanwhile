@@ -67,7 +67,7 @@ export function Chart5h({
   const dosesInWin = useMemo(
     () =>
       doses
-        .filter((d) => d.kind === "bolus" || d.kind === "correction")
+        .filter((d) => d.kind === "bolus" || d.kind === "correction" || d.kind === "basal")
         .filter((d) => d.ts >= minT && d.ts <= maxT)
         .sort((a, b) => a.ts - b.ts),
     [doses, minT, maxT]
@@ -253,18 +253,33 @@ export function Chart5h({
             />
           )}
 
-          {/* Bolus markers (dot only — labels are HTML overlay below for crisp text) */}
+          {/* Dose markers (dot only — labels are HTML overlay below for crisp text).
+              Bolus = orange circle; basal = green diamond. */}
           {dosesInWin.map((d) => {
             const interpolated = bgAt(d.ts, bgInWin);
             const cx = xOf(d.ts);
             const cy = interpolated != null ? yOf(interpolated) : pad.t + plotH * 0.25;
+            const isBasal = d.kind === "basal";
+            const fill = isBasal ? "#3ddc97" : "#ff9d4d";
+            if (isBasal) {
+              const s = 7;
+              return (
+                <polygon
+                  key={`dm-${d.id ?? d.ts}-${d.units}`}
+                  points={`${cx},${cy - s} ${cx + s},${cy} ${cx},${cy + s} ${cx - s},${cy}`}
+                  fill={fill}
+                  stroke="#0a0a0c"
+                  strokeWidth={2.5}
+                />
+              );
+            }
             return (
               <circle
                 key={`dm-${d.id ?? d.ts}-${d.units}`}
                 cx={cx}
                 cy={cy}
                 r={7}
-                fill="#ff9d4d"
+                fill={fill}
                 stroke="#0a0a0c"
                 strokeWidth={2.5}
               />
@@ -289,12 +304,14 @@ export function Chart5h({
           })}
 
           {/* Compact legend (top-right) */}
-          <g transform={`translate(${pad.l + plotW - 188}, ${pad.t + 4})`}>
-            <rect width={184} height={26} rx={8} fill="rgba(0,0,0,0.40)" />
+          <g transform={`translate(${pad.l + plotW - 256}, ${pad.t + 4})`}>
+            <rect width={252} height={26} rx={8} fill="rgba(0,0,0,0.40)" />
             <line x1={10} y1={13} x2={32} y2={13} stroke="#5cd0ff" strokeWidth={3} strokeLinecap="round" />
             <text x={38} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">BG</text>
             <circle cx={78} cy={13} r={5} fill="#ff9d4d" stroke="#0a0a0c" strokeWidth={1.5} />
             <text x={88} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">bolus</text>
+            <polygon points="158,8 164,13 158,18 152,13" fill="#3ddc97" stroke="#0a0a0c" strokeWidth={1.5} />
+            <text x={170} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">basal</text>
           </g>
         </svg>
 
@@ -308,16 +325,16 @@ export function Chart5h({
             const cy = interpolated != null ? yOf(interpolated) : pad.t + plotH * 0.25;
             const pctX = (cx / view.w) * 100;
             const pctY = (cy / view.h) * 100;
-            // Anchor label to keep it on screen:
-            //   marker in left 12% → align label's left edge to marker
-            //   marker in right 12% → align label's right edge to marker
-            //   otherwise            → center the label above the marker
             const align: "start" | "end" | "center" =
               pctX < 12 ? "start" : pctX > 88 ? "end" : "center";
             const transform =
               align === "start" ? "translate(0, -100%)" :
               align === "end"   ? "translate(-100%, -100%)" :
                                   "translate(-50%, -100%)";
+            const isBasal = d.kind === "basal";
+            const ringColor = isBasal ? "#3ddc97" : "#ff9d4d";
+            const textColor = isBasal ? "#bff5d2" : "#ffd6a8";
+            const tag = isBasal ? "basal" : null;
             return (
               <div
                 key={`dl-${d.id ?? d.ts}-${d.units}`}
@@ -328,8 +345,16 @@ export function Chart5h({
                   transform,
                 }}
               >
-                <div className="num leading-none px-2 py-1 rounded-md bg-black/85 ring-1 ring-[#ff9d4d] text-[#ffd6a8] text-base font-bold whitespace-nowrap shadow-lg shadow-black/40">
-                  {d.units}U
+                <div
+                  className="num leading-none px-2 py-1 rounded-md bg-black/85 ring-1 text-base font-bold whitespace-nowrap shadow-lg shadow-black/40 flex items-center gap-1.5"
+                  style={{ borderColor: ringColor, color: textColor, boxShadow: `0 0 0 1px ${ringColor} inset` }}
+                >
+                  {tag && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
+                      {tag}
+                    </span>
+                  )}
+                  <span>{d.units}U</span>
                 </div>
               </div>
             );

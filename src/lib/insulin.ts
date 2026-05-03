@@ -1,19 +1,31 @@
 import type { CarbEntry, InsulinDose, Profile } from "./types";
 
 // Loop / OpenAPS / oref0 exponential IOB curve.
-// Defaults match Loop's "rapid-acting adult" preset: peak 75 min, DIA 6h.
-// Reference: github.com/LoopKit/LoopKit (ExponentialInsulinModel) and
-// github.com/openaps/oref0 (lib/iob/calculate.js).
+// Defaults match Loop's "rapid-acting adult" preset: peak 75 min, DIA 6h,
+// with an oref0-style absorption delay so IOB stays at 100% during the
+// first `delayMin` minutes (insulin in subcutaneous tissue, not yet
+// metabolically active). After the delay the exponential takes over with
+// the clock effectively shifted by `delayMin`.
 //
-// Formula:
+// Reference: github.com/LoopKit/LoopKit (ExponentialInsulinModel) and
+// github.com/openaps/oref0 (lib/iob/calculate.js, `delay` parameter).
+//
+// Formula (after the delay):
 //   tau = peak * (1 - peak/dia) / (1 - 2*peak/dia)
 //   a   = 2 * tau / dia
 //   S   = 1 / (1 - a + (1+a) * exp(-dia/tau))
 //   IOB(t) = 1 - S*(1-a) * ((t^2/(tau*dia*(1-a)) - t/dia - 1) * exp(-t/tau) + 1)
-export function iobFraction(tMin: number, diaHours: number, peakMin = 75): number {
+export function iobFraction(
+  tMin: number,
+  diaHours: number,
+  peakMin = 75,
+  delayMin = 15
+): number {
   if (tMin <= 0) return 1;
+  if (tMin <= delayMin) return 1;
+  const t = tMin - delayMin; // shift past the absorption lag
   const dia = diaHours * 60;
-  if (tMin >= dia) return 0;
+  if (t >= dia) return 0;
   // Guard against degenerate parameters.
   const peak = Math.max(20, Math.min(peakMin, dia * 0.45));
   const tau = (peak * (1 - peak / dia)) / (1 - (2 * peak) / dia);
@@ -22,23 +34,27 @@ export function iobFraction(tMin: number, diaHours: number, peakMin = 75): numbe
   const iob =
     1 -
     S * (1 - a) *
-      (((tMin * tMin) / (tau * dia * (1 - a)) - tMin / dia - 1) *
-        Math.exp(-tMin / tau) +
-        1);
+      (((t * t) / (tau * dia * (1 - a)) - t / dia - 1) * Math.exp(-t / tau) + 1);
   return Math.max(0, Math.min(1, iob));
 }
 
+// Sum bolus/correction IOB only. Long-acting basal is intentionally
+// excluded because its kinetics are entirely different (24h+ depot,
+// near-steady-state once equilibrated) and lumping it through the same
+// rapid-acting curve would double-count and mislead the IOB tile.
 export function totalIOB(
   doses: InsulinDose[],
   at: number,
   diaHours: number,
-  peakMin = 75
+  peakMin = 75,
+  delayMin = 15
 ): number {
   let iob = 0;
   for (const d of doses) {
+    if (d.kind !== "bolus" && d.kind !== "correction") continue;
     const tMin = (at - d.ts) / 60_000;
-    if (tMin < 0 || tMin > diaHours * 60) continue;
-    iob += d.units * iobFraction(tMin, diaHours, peakMin);
+    if (tMin < 0 || tMin > delayMin + diaHours * 60) continue;
+    iob += d.units * iobFraction(tMin, diaHours, peakMin, delayMin);
   }
   return round(iob, 2);
 }

@@ -7,6 +7,7 @@ import { ChartControls } from "@/components/ChartControls";
 import { StatsPanel } from "@/components/StatsPanel";
 import { DoseList } from "@/components/DoseList";
 import { PreBolusTimer } from "@/components/PreBolusTimer";
+import { DailyBasalCard } from "@/components/DailyBasalCard";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
@@ -96,6 +97,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <DailyBasalCard profile={profile} doses={insulinList} />
       <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}
       <ChartControls

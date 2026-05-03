@@ -7,11 +7,10 @@ import { EditDoseSheet } from "./EditDoseSheet";
 export function DoseList({ doses }: { doses: InsulinDose[] }) {
   const [editing, setEditing] = useState<InsulinDose | null>(null);
 
-  // Show the last 24h of bolus/correction entries, newest first.
+  // Show the last 24h of any insulin entry, newest first.
   const recent = useMemo(() => {
     const cutoff = Date.now() - 24 * 3600_000;
     return doses
-      .filter((d) => d.kind === "bolus" || d.kind === "correction")
       .filter((d) => d.ts >= cutoff)
       .sort((a, b) => b.ts - a.ts);
   }, [doses]);
@@ -19,30 +18,40 @@ export function DoseList({ doses }: { doses: InsulinDose[] }) {
   return (
     <section className="mx-3 rounded-2xl bg-surface p-3 ring-1 ring-white/5">
       <div className="flex items-baseline justify-between mb-2 px-1">
-        <div className="text-xs uppercase tracking-wider text-muted">Recent doses · 24h</div>
+        <div className="text-xs uppercase tracking-wider text-muted">Insulin history · 24h</div>
         <div className="text-[10px] text-muted">tap to edit</div>
       </div>
       {recent.length === 0 ? (
         <div className="text-sm text-muted px-1 py-2">No doses logged in the last 24 hours.</div>
       ) : (
         <ul className="divide-y divide-white/5">
-          {recent.map((d) => (
-            <li key={d.id ?? d.ts}>
-              <button
-                onClick={() => setEditing(d)}
-                className="w-full text-left flex items-center gap-3 py-2.5 px-1 active:bg-white/5 rounded-md"
-              >
-                <span className="num text-2xl font-semibold leading-none w-14">
-                  {d.units}<span className="text-xs text-muted ml-0.5">U</span>
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm">{formatWhen(d.ts)}</span>
-                  <span className="block text-[11px] text-muted truncate">{describe(d)}</span>
-                </span>
-                <span className="text-muted text-lg">›</span>
-              </button>
-            </li>
-          ))}
+          {recent.map((d) => {
+            const isBasal = d.kind === "basal";
+            return (
+              <li key={d.id ?? d.ts}>
+                <button
+                  onClick={() => setEditing(d)}
+                  className="w-full text-left flex items-center gap-3 py-2.5 px-1 active:bg-white/5 rounded-md"
+                >
+                  <span className={`num text-2xl font-semibold leading-none w-14 ${isBasal ? "text-good" : ""}`}>
+                    {d.units}<span className="text-xs text-muted ml-0.5">U</span>
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex items-center gap-2 text-sm">
+                      {formatWhen(d.ts)}
+                      {isBasal && (
+                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-good/15 text-good ring-1 ring-good/40">
+                          basal
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-[11px] text-muted truncate">{describe(d)}</span>
+                  </span>
+                  <span className="text-muted text-lg">›</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 

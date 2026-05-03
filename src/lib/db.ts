@@ -42,7 +42,7 @@ export function db(): MeanwhileDB {
 }
 
 // Schema version bumps trigger one-shot, non-destructive migrations.
-const CURRENT_SCHEMA = 2;
+const CURRENT_SCHEMA = 3;
 
 export async function getProfile(): Promise<Profile> {
   const existing = await db().profile.get("current");
@@ -53,14 +53,18 @@ export async function getProfile(): Promise<Profile> {
   if ((existing.schema_version ?? 1) < CURRENT_SCHEMA) {
     const migrated: Profile = {
       ...existing,
-      // Loop-style defaults; only touch fields we manage.
+      // v2 fields (Loop-style insulin action)
       peak_min: existing.peak_min ?? 75,
-      // Old default was 4h (too short for rapid-acting). Bump only if the
-      // user is still on the old default, leaving any customization alone.
       dia_hours: existing.dia_hours === 4 ? 6 : existing.dia_hours,
       tir_low: existing.tir_low ?? 70,
       tir_high: existing.tir_high ?? 160,
       mode: existing.mode ?? "decide",
+      // v3 fields
+      delay_min: existing.delay_min ?? 15,
+      daily_basal_enabled: existing.daily_basal_enabled ?? true,
+      daily_basal_units: existing.daily_basal_units ?? 20,
+      daily_basal_time: existing.daily_basal_time ?? "18:30",
+      daily_basal_tz: existing.daily_basal_tz ?? "America/New_York",
       schema_version: CURRENT_SCHEMA,
       updated_ts: Date.now(),
     };
