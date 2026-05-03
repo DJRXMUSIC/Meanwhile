@@ -41,7 +41,9 @@ export function Chart5h({
   overlay48 = false,
 }: Props) {
   const view = { w: 1000, h: 460 };
-  const pad = { l: 44, r: 14, t: 18, b: 36 };
+  // pad.l is wide enough that HTML axis labels render at native size
+  // without overlapping the plot area. pad.b leaves room for x-axis time labels.
+  const pad = { l: 80, r: 16, t: 18, b: 48 };
   const plotH = view.h - pad.t - pad.b;
   const plotW = view.w - pad.l - pad.r;
 
@@ -239,7 +241,7 @@ export function Chart5h({
       >
         <svg
           viewBox={`0 0 ${view.w} ${view.h}`}
-          className="w-full h-[340px]"
+          className="w-full h-[400px]"
           preserveAspectRatio="none"
         >
           {/* Compressed-zone tints */}
@@ -255,25 +257,23 @@ export function Chart5h({
             fill="rgba(92,208,255,0.07)"
           />
 
-          {/* Y reference lines + labels */}
+          {/* Y reference lines (labels rendered as HTML overlay below) */}
           {yValues.map((v) => {
             const isBoundary = v === 70 || v === 250;
             const isTarget = v === targetLow || v === targetHigh;
             return (
-              <g key={`yl-${v}`}>
-                <line
-                  x1={pad.l} x2={pad.l + plotW}
-                  y1={yOf(v)} y2={yOf(v)}
-                  stroke={
-                    isBoundary ? "rgba(255,255,255,0.22)" :
-                    isTarget ? "rgba(255,184,77,0.40)" :
-                    "rgba(255,255,255,0.08)"
-                  }
-                  strokeDasharray={isTarget ? "6 5" : isBoundary ? "0" : "2 6"}
-                  strokeWidth={isBoundary ? 1.6 : 1.4}
-                />
-                <text x={6} y={yOf(v) + 6} fontSize="18" fill="rgba(255,255,255,0.62)">{v}</text>
-              </g>
+              <line
+                key={`yl-${v}`}
+                x1={pad.l} x2={pad.l + plotW}
+                y1={yOf(v)} y2={yOf(v)}
+                stroke={
+                  isBoundary ? "rgba(255,255,255,0.22)" :
+                  isTarget ? "rgba(255,184,77,0.40)" :
+                  "rgba(255,255,255,0.08)"
+                }
+                strokeDasharray={isTarget ? "6 5" : isBoundary ? "0" : "2 6"}
+                strokeWidth={isBoundary ? 1.6 : 1.4}
+              />
             );
           })}
 
@@ -379,67 +379,85 @@ export function Chart5h({
             );
           })}
 
-          {/* X-axis labels */}
-          {labels.map((t, i) => {
-            const d = new Date(t);
-            if (i === 0 && t === minT) return null;
+          {/* X-axis labels and legend are rendered as HTML overlay below */}
+        </svg>
+
+        {/* HTML overlay layer — all text (axis labels, legend, dose labels)
+            lives here so it isn't squished by preserveAspectRatio="none". */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Y-axis labels (left gutter) */}
+          {yValues.map((v) => {
+            const pctY = (yOf(v) / view.h) * 100;
             return (
-              <text
-                key={`hl-${t}`}
-                x={xOf(t)} y={view.h - 10}
-                fontSize="16"
-                textAnchor="middle"
-                fill="rgba(255,255,255,0.6)"
+              <div
+                key={`ylabel-${v}`}
+                className="num absolute text-[13px] text-white/65 font-medium"
+                style={{
+                  top: `${pctY}%`,
+                  left: 0,
+                  width: `${(pad.l / view.w) * 100}%`,
+                  paddingRight: 8,
+                  textAlign: "right",
+                  transform: "translateY(-50%)",
+                }}
               >
-                {d.getHours().toString().padStart(2, "0")}:{d.getMinutes().toString().padStart(2, "0")}
-              </text>
+                {v}
+              </div>
             );
           })}
 
-          {/* Compact legend (top-right) */}
-          {(() => {
-            const items: { x: number; el: React.ReactNode; label: string; labelX: number }[] = [];
-            let cursor = 8;
-            const push = (label: string, glyph: React.ReactNode, glyphW: number) => {
-              items.push({ x: cursor, el: glyph, label, labelX: cursor + glyphW + 4 });
-              cursor += glyphW + 4 + label.length * 8 + 12;
-            };
-            push("BG",
-              <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeWidth={3} strokeLinecap="round" />,
-              22);
-            push("bolus",
-              <circle cx={cursor + 5} cy={13} r={5} fill="#ff9d4d" stroke="#0a0a0c" strokeWidth={1.5} />,
-              10);
-            push("basal",
-              <polygon points={`${cursor + 6},8 ${cursor + 12},13 ${cursor + 6},18 ${cursor},13`} fill="#3ddc97" stroke="#0a0a0c" strokeWidth={1.5} />,
-              12);
-            if (overlay24)
-              push("-24h",
-                <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeOpacity="0.55" strokeWidth={2.4} strokeDasharray="6 4" strokeLinecap="round" />,
-                22);
-            if (overlay48)
-              push("-48h",
-                <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeOpacity="0.30" strokeWidth={2} strokeDasharray="2 6" strokeLinecap="round" />,
-                22);
-            const totalW = cursor + 4;
+          {/* X-axis labels (bottom gutter) */}
+          {labels.map((t, i) => {
+            if (i === 0 && t === minT) return null;
+            const d = new Date(t);
+            const pctX = (xOf(t) / view.w) * 100;
             return (
-              <g transform={`translate(${pad.l + plotW - totalW}, ${pad.t + 4})`}>
-                <rect width={totalW} height={26} rx={8} fill="rgba(0,0,0,0.40)" />
-                {items.map((it, i) => (
-                  <g key={i}>
-                    {it.el}
-                    <text x={it.labelX} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">{it.label}</text>
-                  </g>
-                ))}
-              </g>
+              <div
+                key={`xlabel-${t}`}
+                className="num absolute text-[13px] text-white/65"
+                style={{
+                  left: `${pctX}%`,
+                  bottom: 4,
+                  transform: "translateX(-50%)",
+                }}
+              >
+                {d.getHours().toString().padStart(2, "0")}:{d.getMinutes().toString().padStart(2, "0")}
+              </div>
             );
-          })()}
-        </svg>
+          })}
 
-        {/* HTML overlay for bolus unit labels — rendered outside the SVG so
-            text isn't squished by preserveAspectRatio="none", and so labels
-            near the right/left edges can flip their anchor to stay visible. */}
-        <div className="absolute inset-0 pointer-events-none">
+          {/* Legend (top-right) */}
+          <div
+            className="absolute right-2 flex items-center gap-2.5 px-2.5 py-1 rounded-lg bg-black/55 ring-1 ring-white/10 text-[12px] text-white/85"
+            style={{ top: 6 }}
+          >
+            <span className="flex items-center gap-1">
+              <span className="block w-4 h-[3px] rounded-full" style={{ background: "#5cd0ff" }} />
+              BG
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="block w-2 h-2 rounded-full ring-1 ring-black" style={{ background: "#ff9d4d" }} />
+              bolus
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="block w-2.5 h-2.5 ring-1 ring-black rotate-45" style={{ background: "#3ddc97" }} />
+              basal
+            </span>
+            {overlay24 && (
+              <span className="flex items-center gap-1 opacity-90">
+                <span className="block w-4 h-[2px]" style={{ background: "repeating-linear-gradient(90deg, #5cd0ff 0 6px, transparent 6px 10px)" }} />
+                −24h
+              </span>
+            )}
+            {overlay48 && (
+              <span className="flex items-center gap-1 opacity-70">
+                <span className="block w-4 h-[2px]" style={{ background: "repeating-linear-gradient(90deg, #5cd0ff 0 2px, transparent 2px 8px)" }} />
+                −48h
+              </span>
+            )}
+          </div>
+
+          {/* Bolus / basal unit labels above their markers */}
           {dosesInWin.map((d) => {
             const interpolated = bgAt(d.ts, bgInWin);
             const cx = xOf(d.ts);
