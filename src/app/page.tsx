@@ -22,7 +22,12 @@ export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
   useXdripPolling(profile);
   const [mode] = useMode();
-  const { windowHours, setWindowHours, panMs, setPanMs } = useChartView();
+  const {
+    windowHours, setWindowHours,
+    panMs, setPanMs,
+    overlay24, setOverlay24,
+    overlay48, setOverlay48,
+  } = useChartView();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,9 +107,13 @@ export default function HomePage() {
       {mode === "learn" && <LearnPanel />}
       <ChartControls
         windowHours={windowHours}
-        onWindowChange={(w: WindowHours) => { setWindowHours(w); setPanMs(0); }}
+        onWindowChange={(w: WindowHours) => { setWindowHours(w); }}
         panMs={panMs}
-        onResetPan={() => setPanMs(0)}
+        onSetPan={setPanMs}
+        overlay24={overlay24}
+        overlay48={overlay48}
+        onToggleOverlay24={() => setOverlay24(!overlay24)}
+        onToggleOverlay48={() => setOverlay48(!overlay48)}
       />
       <Chart5h
         readings={bgList}
@@ -114,6 +123,8 @@ export default function HomePage() {
         onPanChange={setPanMs}
         targetLow={profile?.tir_low ?? 70}
         targetHigh={profile?.tir_high ?? 160}
+        overlay24={overlay24}
+        overlay48={overlay48}
       />
       <StatsPanel bgList={bgList} insulinList={insulinList} />
       <DoseList doses={insulinList} />

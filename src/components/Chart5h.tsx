@@ -25,6 +25,8 @@ interface Props {
   onPanChange: (next: number) => void;
   targetLow?: number;            // band shading
   targetHigh?: number;
+  overlay24?: boolean;           // ghost trace from 24h prior
+  overlay48?: boolean;           // ghost trace from 48h prior
 }
 
 export function Chart5h({
@@ -35,6 +37,8 @@ export function Chart5h({
   onPanChange,
   targetLow = 70,
   targetHigh = 160,
+  overlay24 = false,
+  overlay48 = false,
 }: Props) {
   const view = { w: 1000, h: 460 };
   const pad = { l: 44, r: 14, t: 18, b: 36 };
@@ -72,6 +76,34 @@ export function Chart5h({
         .sort((a, b) => a.ts - b.ts),
     [doses, minT, maxT]
   );
+
+  // Overlay traces: BG from 24h / 48h prior, shifted forward by the
+  // offset so they overlay the current window at the same wall-clock
+  // time. Useful for pattern matching ("what did this morning look
+  // like yesterday?").
+  const buildOverlay = (offsetMs: number) =>
+    readings
+      .filter((r) => r.ts >= minT - offsetMs && r.ts <= maxT - offsetMs)
+      .map((r) => ({ ts: r.ts + offsetMs, mgdl: r.mgdl }))
+      .sort((a, b) => a.ts - b.ts);
+
+  const overlay24Pts = useMemo(
+    () => (overlay24 ? buildOverlay(24 * 3600_000) : []),
+    [overlay24, readings, minT, maxT]
+  ); // eslint-disable-line react-hooks/exhaustive-deps
+  const overlay48Pts = useMemo(
+    () => (overlay48 ? buildOverlay(48 * 3600_000) : []),
+    [overlay48, readings, minT, maxT]
+  ); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ovPath = (pts: { ts: number; mgdl: number }[]) =>
+    pts.length
+      ? pts
+          .map((r, i) => `${i === 0 ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`)
+          .join(" ")
+      : "";
+  const overlay24Path = ovPath(overlay24Pts);
+  const overlay48Path = ovPath(overlay48Pts);
 
   // BG path
   const bgPath = bgInWin.length
@@ -152,15 +184,28 @@ export function Chart5h({
 
   // ---- Render ------------------------------------------------------------
   const showNowLine = panMs < 60_000;
+  const isHistorical = panMs >= 60_000;
   const ageLabel =
-    panMs < 60_000 ? null :
+    !isHistorical ? null :
     panMs < 3600_000 ? `${Math.round(panMs / 60_000)}m back` :
     `${(panMs / 3600_000).toFixed(panMs >= 36 * 3600_000 ? 0 : 1)}h back`;
+  const fmtClock = (t: number) =>
+    new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const fmtDate = (t: number) =>
+    new Date(t).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
   return (
     <div className="px-3">
-      {ageLabel && (
-        <div className="text-[11px] text-muted text-center mb-1">viewing {ageLabel}</div>
+      {isHistorical && (
+        <div className="mb-2 rounded-xl bg-warn/15 ring-1 ring-warn/50 px-3 py-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-warn font-semibold">Historical view</div>
+            <div className="text-sm truncate">
+              {fmtDate(maxT)} · {fmtClock(minT)}–{fmtClock(maxT)}
+            </div>
+          </div>
+          <div className="text-[11px] text-warn shrink-0">{ageLabel}</div>
+        </div>
       )}
       <div
         ref={containerRef}
@@ -168,7 +213,7 @@ export function Chart5h({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        className={`relative select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+        className={`relative select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"} ${isHistorical ? "ring-2 ring-warn/30 rounded-2xl" : ""}`}
       >
         <svg
           viewBox={`0 0 ${view.w} ${view.h}`}
@@ -220,6 +265,32 @@ export function Chart5h({
               strokeWidth={1.2}
             />
           ))}
+
+          {/* Overlay traces (drawn before BG so the live trace stays on top) */}
+          {overlay48Path && (
+            <path
+              d={overlay48Path}
+              fill="none"
+              stroke="#5cd0ff"
+              strokeOpacity="0.30"
+              strokeWidth="2"
+              strokeDasharray="2 6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+          {overlay24Path && (
+            <path
+              d={overlay24Path}
+              fill="none"
+              stroke="#5cd0ff"
+              strokeOpacity="0.55"
+              strokeWidth="2.4"
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
 
           {/* BG line + dots */}
           {bgPath && (
@@ -304,15 +375,43 @@ export function Chart5h({
           })}
 
           {/* Compact legend (top-right) */}
-          <g transform={`translate(${pad.l + plotW - 256}, ${pad.t + 4})`}>
-            <rect width={252} height={26} rx={8} fill="rgba(0,0,0,0.40)" />
-            <line x1={10} y1={13} x2={32} y2={13} stroke="#5cd0ff" strokeWidth={3} strokeLinecap="round" />
-            <text x={38} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">BG</text>
-            <circle cx={78} cy={13} r={5} fill="#ff9d4d" stroke="#0a0a0c" strokeWidth={1.5} />
-            <text x={88} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">bolus</text>
-            <polygon points="158,8 164,13 158,18 152,13" fill="#3ddc97" stroke="#0a0a0c" strokeWidth={1.5} />
-            <text x={170} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">basal</text>
-          </g>
+          {(() => {
+            const items: { x: number; el: React.ReactNode; label: string; labelX: number }[] = [];
+            let cursor = 8;
+            const push = (label: string, glyph: React.ReactNode, glyphW: number) => {
+              items.push({ x: cursor, el: glyph, label, labelX: cursor + glyphW + 4 });
+              cursor += glyphW + 4 + label.length * 8 + 12;
+            };
+            push("BG",
+              <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeWidth={3} strokeLinecap="round" />,
+              22);
+            push("bolus",
+              <circle cx={cursor + 5} cy={13} r={5} fill="#ff9d4d" stroke="#0a0a0c" strokeWidth={1.5} />,
+              10);
+            push("basal",
+              <polygon points={`${cursor + 6},8 ${cursor + 12},13 ${cursor + 6},18 ${cursor},13`} fill="#3ddc97" stroke="#0a0a0c" strokeWidth={1.5} />,
+              12);
+            if (overlay24)
+              push("-24h",
+                <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeOpacity="0.55" strokeWidth={2.4} strokeDasharray="6 4" strokeLinecap="round" />,
+                22);
+            if (overlay48)
+              push("-48h",
+                <line x1={cursor + 0} y1={13} x2={cursor + 22} y2={13} stroke="#5cd0ff" strokeOpacity="0.30" strokeWidth={2} strokeDasharray="2 6" strokeLinecap="round" />,
+                22);
+            const totalW = cursor + 4;
+            return (
+              <g transform={`translate(${pad.l + plotW - totalW}, ${pad.t + 4})`}>
+                <rect width={totalW} height={26} rx={8} fill="rgba(0,0,0,0.40)" />
+                {items.map((it, i) => (
+                  <g key={i}>
+                    {it.el}
+                    <text x={it.labelX} y={18} fontSize="14" fill="rgba(255,255,255,0.85)">{it.label}</text>
+                  </g>
+                ))}
+              </g>
+            );
+          })()}
         </svg>
 
         {/* HTML overlay for bolus unit labels — rendered outside the SVG so
