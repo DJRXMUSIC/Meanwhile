@@ -34,13 +34,11 @@ export function StatsPanel({
           label="TIR · 24h"
           value={tir24.n ? `${(tir24.tir * 100).toFixed(0)}%` : "—"}
           hint={tir24.n ? `${tir24.n} pts` : "no data"}
-          tone={tirTone(tir24.tir, tir24.n)}
         />
         <Tile
           label="TIR · 3d"
           value={tir72.n ? `${(tir72.tir * 100).toFixed(0)}%` : "—"}
           hint={tir72.n ? `${tir72.n} pts` : "no data"}
-          tone={tirTone(tir72.tir, tir72.n)}
         />
         <Tile
           label="Median BG · 3d"
@@ -63,40 +61,21 @@ export function StatsPanel({
   );
 }
 
-function tirTone(tir: number, n: number): "good" | "warn" | "bad" | undefined {
-  if (!n) return undefined;
-  if (tir >= 0.7) return "good";
-  if (tir >= 0.5) return "warn";
-  return "bad";
-}
-
 function Tile({
   label,
   value,
   hint,
-  tone,
   wide,
 }: {
   label: string;
   value: string;
   hint?: string;
-  tone?: "good" | "warn" | "bad";
   wide?: boolean;
 }) {
-  const tint =
-    tone === "good" ? "ring-good/40" :
-    tone === "warn" ? "ring-warn/40" :
-    tone === "bad"  ? "ring-bad/40"  :
-    "ring-white/5";
-  const valueClr =
-    tone === "good" ? "text-good" :
-    tone === "warn" ? "text-warn" :
-    tone === "bad"  ? "text-bad"  :
-    "text-ink";
   return (
-    <div className={`rounded-xl bg-surface2/60 p-3 ring-1 ${tint} ${wide ? "col-span-2" : ""}`}>
+    <div className={`rounded-xl bg-surface2/60 p-3 ring-1 ring-white/5 ${wide ? "col-span-2" : ""}`}>
       <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
-      <div className={`num text-2xl font-semibold mt-0.5 ${valueClr}`}>{value}</div>
+      <div className="num text-2xl font-semibold mt-0.5 text-ink">{value}</div>
       {hint && <div className="text-[11px] text-muted">{hint}</div>}
     </div>
   );

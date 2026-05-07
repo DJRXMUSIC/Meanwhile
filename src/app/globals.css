@@ -82,6 +82,78 @@
   --c-ink: 240 232 200;
 }
 
+/* ---- Light themes ----------------------------------------------------- */
+
+[data-theme="daylight"] {
+  color-scheme: light;
+  /* Clean cool light theme */
+  --c-bg: 244 247 251;
+  --c-surface: 255 255 255;
+  --c-surface2: 232 238 247;
+  --c-accent: 37 99 235;
+  --c-good: 22 163 74;
+  --c-warn: 202 138 4;
+  --c-bad: 220 38 38;
+  --c-muted: 100 116 139;
+  --c-ink: 15 23 42;
+}
+
+[data-theme="paper"] {
+  color-scheme: light;
+  /* Warm cream / paper aesthetic */
+  --c-bg: 250 246 240;
+  --c-surface: 255 253 248;
+  --c-surface2: 240 232 218;
+  --c-accent: 161 98 7;
+  --c-good: 101 163 13;
+  --c-warn: 202 138 4;
+  --c-bad: 190 18 60;
+  --c-muted: 120 113 108;
+  --c-ink: 28 25 23;
+}
+
+[data-theme="lavender"] {
+  color-scheme: light;
+  /* Soft lavender light theme */
+  --c-bg: 245 243 255;
+  --c-surface: 255 255 255;
+  --c-surface2: 233 226 252;
+  --c-accent: 124 58 237;
+  --c-good: 5 150 105;
+  --c-warn: 217 119 6;
+  --c-bad: 219 39 119;
+  --c-muted: 113 113 122;
+  --c-ink: 30 27 75;
+}
+
+/* ---- Additional dark themes ------------------------------------------ */
+
+[data-theme="carbon"] {
+  /* Pure-black OLED with cool gray accent */
+  --c-bg: 0 0 0;
+  --c-surface: 14 14 16;
+  --c-surface2: 26 26 30;
+  --c-accent: 203 213 225;
+  --c-good: 134 239 172;
+  --c-warn: 253 224 71;
+  --c-bad: 248 113 113;
+  --c-muted: 113 113 122;
+  --c-ink: 244 244 245;
+}
+
+[data-theme="coral"] {
+  /* Warm dark plum with coral accent */
+  --c-bg: 26 15 16;
+  --c-surface: 42 26 28;
+  --c-surface2: 58 38 42;
+  --c-accent: 251 113 133;
+  --c-good: 167 220 138;
+  --c-warn: 255 196 96;
+  --c-bad: 244 63 94;
+  --c-muted: 168 144 134;
+  --c-ink: 254 242 242;
+}
+
 html, body {
   height: 100%;
   background: rgb(var(--c-bg));

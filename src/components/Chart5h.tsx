@@ -160,19 +160,57 @@ export function Chart5h({
   const yValues = [40, 55, 70, 100, 130, 160, 200, 250, 300, 350].filter((v) => v >= 40 && v <= 350);
 
   // ---- Pan via pointer drag ---------------------------------------------
+  // Defers pointer capture until the gesture is unambiguously horizontal,
+  // so a vertical scroll over the chart still scrolls the page.
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; startPan: number; pid: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startPan: number;
+    pid: number;
+    captured: boolean;
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const DIRECTION_THRESHOLD_PX = 8;
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startPan: panMs, pid: e.pointerId };
-    setDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPan: panMs,
+      pid: e.pointerId,
+      captured: false,
+    };
+    // Mouse: capture immediately (no native page-scroll competition).
+    if (e.pointerType === "mouse") {
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+      dragRef.current.captured = true;
+      setDragging(true);
+    }
+    // Touch/pen: wait until we know the gesture is horizontal — see below.
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current || !containerRef.current) return;
     const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+
+    if (!dragRef.current.captured) {
+      const ax = Math.abs(dx);
+      const ay = Math.abs(dy);
+      if (ax < DIRECTION_THRESHOLD_PX && ay < DIRECTION_THRESHOLD_PX) return;
+      if (ay >= ax) {
+        // Vertical intent — release to the page scroller.
+        dragRef.current = null;
+        setDragging(false);
+        return;
+      }
+      // Horizontal intent — claim the pointer for the chart.
+      try { e.currentTarget.setPointerCapture(dragRef.current.pid); } catch {}
+      dragRef.current.captured = true;
+      setDragging(true);
+    }
+
     const w = containerRef.current.clientWidth || 1;
     const windowMs = windowHours * 3600_000;
     // Drag the content rightward → reveal older data on the left → increase panMs.
@@ -237,7 +275,12 @@ export function Chart5h({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        className={`relative select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"} ${isHistorical ? "ring-2 ring-warn/30 rounded-2xl" : ""}`}
+        // touch-action: pan-y lets the page scroll vertically; we only
+        // capture horizontal swipes for chart panning. Combined with the
+        // directional-intent check in onPointerMove, vertical scrolls
+        // never get hijacked by the chart.
+        className={`relative select-none rounded-2xl overflow-hidden ${dragging ? "cursor-grabbing" : "cursor-grab"} ${isHistorical ? "ring-2 ring-warn/40" : "ring-1 ring-white/5"}`}
+        style={{ touchAction: "pan-y", backgroundColor: "#0a0a0c" }}
       >
         <svg
           viewBox={`0 0 ${view.w} ${view.h}`}

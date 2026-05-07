@@ -70,15 +70,31 @@ export interface ContextEntry {
   value: string;
 }
 
-export type ThemeName = "default" | "midnight" | "forest" | "sunset" | "mono" | "solar";
+export type ThemeName =
+  | "default"
+  | "midnight"
+  | "forest"
+  | "sunset"
+  | "mono"
+  | "solar"
+  | "daylight"
+  | "paper"
+  | "lavender"
+  | "carbon"
+  | "coral";
 
-export const THEMES: { id: ThemeName; label: string; swatch: string }[] = [
+export const THEMES: { id: ThemeName; label: string; swatch: string; light?: boolean }[] = [
   { id: "default",  label: "Aurora",   swatch: "#7c5cff" },
   { id: "midnight", label: "Midnight", swatch: "#5cd0ff" },
   { id: "forest",   label: "Forest",   swatch: "#84dc74" },
   { id: "sunset",   label: "Sunset",   swatch: "#ffa854" },
   { id: "mono",     label: "Mono",     swatch: "#f0f0f0" },
   { id: "solar",    label: "Solar",    swatch: "#dcc846" },
+  { id: "carbon",   label: "Carbon",   swatch: "#cbd5e1" },
+  { id: "coral",    label: "Coral",    swatch: "#fb7185" },
+  { id: "daylight", label: "Daylight", swatch: "#2563eb", light: true },
+  { id: "paper",    label: "Paper",    swatch: "#a16207", light: true },
+  { id: "lavender", label: "Lavender", swatch: "#7c3aed", light: true },
 ];
 
 export interface Profile {
