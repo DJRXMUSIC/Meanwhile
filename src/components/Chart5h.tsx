@@ -243,11 +243,11 @@ export function Chart5h({
       {isHistorical && (
         <div className="mb-2 rounded-xl bg-warn/15 ring-1 ring-warn/50 px-2 py-2 flex items-center gap-2">
           <button
-            onClick={() => onPanChange(panMs + (windowHours / 2) * 3600_000)}
-            className="size-9 shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn text-xl font-bold leading-none grid place-items-center active:scale-95 transition"
-            aria-label="Scroll earlier"
+            onClick={() => onPanChange(panMs + 3 * 3600_000)}
+            className="shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn px-3 h-9 text-sm font-semibold leading-none flex items-center gap-1 active:scale-95 transition"
+            aria-label="Scroll 3 hours earlier"
           >
-            ‹
+            ‹ 3h
           </button>
           <div className="min-w-0 flex-1 text-center">
             <div className="text-[10px] uppercase tracking-wider text-warn font-semibold">
@@ -258,14 +258,11 @@ export function Chart5h({
             </div>
           </div>
           <button
-            onClick={() => {
-              const step = (windowHours / 2) * 3600_000;
-              onPanChange(Math.max(0, panMs - step));
-            }}
-            className="size-9 shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn text-xl font-bold leading-none grid place-items-center active:scale-95 transition"
-            aria-label="Scroll later"
+            onClick={() => onPanChange(Math.max(0, panMs - 3 * 3600_000))}
+            className="shrink-0 rounded-lg bg-warn/20 ring-1 ring-warn/40 text-warn px-3 h-9 text-sm font-semibold leading-none flex items-center gap-1 active:scale-95 transition"
+            aria-label="Scroll 3 hours later"
           >
-            ›
+            3h ›
           </button>
         </div>
       )}

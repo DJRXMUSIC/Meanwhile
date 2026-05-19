@@ -5,6 +5,7 @@ import {
   tirWindow,
   medianBgWindow,
   avgBolusWindow,
+  avgDailyBolus,
   totalBolusToday,
 } from "@/lib/refine";
 
@@ -21,6 +22,7 @@ export function StatsPanel({
   const tir72 = tirWindow(bgList, 3 * DAY, 70, 160);
   const median3d = medianBgWindow(bgList, 3 * DAY);
   const avgBolus3d = avgBolusWindow(insulinList, 3 * DAY);
+  const dailyBolus3d = avgDailyBolus(insulinList, 3);
   const today = totalBolusToday(insulinList);
 
   return (
@@ -49,6 +51,11 @@ export function StatsPanel({
           label="Avg bolus · 3d"
           value={avgBolus3d != null ? `${avgBolus3d.toFixed(1)}` : "—"}
           hint="U / dose"
+        />
+        <Tile
+          label="Avg daily bolus · 3d"
+          value={dailyBolus3d != null ? `${dailyBolus3d.units.toFixed(1)}` : "—"}
+          hint={dailyBolus3d != null ? `U / day · ${dailyBolus3d.n} dose${dailyBolus3d.n === 1 ? "" : "s"}` : "no data"}
         />
         <Tile
           label="Total bolus · today"

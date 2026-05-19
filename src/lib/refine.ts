@@ -155,6 +155,19 @@ export function avgBolusWindow(insulin: InsulinDose[], windowMs: number): number
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+// Average total daily bolus over the last N days. Sums bolus + correction
+// units in the window and divides by the number of days, giving "average
+// daily insulin from meal/correction boluses".
+export function avgDailyBolus(insulin: InsulinDose[], days = 3): { units: number; n: number } | null {
+  const cutoff = Date.now() - days * 24 * 3600_000;
+  const subset = insulin
+    .filter((d) => d.ts >= cutoff)
+    .filter((d) => d.kind === "bolus" || d.kind === "correction");
+  if (!subset.length) return null;
+  const total = subset.reduce((a, d) => a + d.units, 0);
+  return { units: total / days, n: subset.length };
+}
+
 // Total bolus units logged today (since local midnight).
 export function totalBolusToday(insulin: InsulinDose[]): { units: number; n: number } {
   const start = new Date();
