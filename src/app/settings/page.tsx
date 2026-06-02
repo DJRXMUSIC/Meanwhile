@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getProfile, saveProfile } from "@/lib/db";
-import { THEMES, type Profile, type ThemeName } from "@/lib/types";
+import { ACCENTS, type AccentName, type Profile, type ThemeMode } from "@/lib/types";
 import { syncOnce, exportAll, importAll } from "@/lib/sync";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
 
@@ -32,28 +32,53 @@ export default function SettingsPage() {
       <h1 className="text-xl font-semibold">Settings</h1>
 
       <Section title="Theme">
-        <div className="grid grid-cols-3 gap-2">
-          {THEMES.map((t) => {
-            const active = (profile.theme ?? "default") === t.id;
+        <div className="text-xs text-muted mb-1">Base</div>
+        <div className="grid grid-cols-2 gap-2">
+          {(["dark", "light"] as const).map((m) => {
+            const active = (profile.theme_mode ?? "dark") === m;
             return (
               <button
-                key={t.id}
-                onClick={() => update({ theme: t.id })}
-                className={`rounded-xl px-3 py-2 text-left transition flex items-center gap-2 ${
+                key={m}
+                onClick={() => update({ theme_mode: m as ThemeMode })}
+                className={`rounded-xl px-3 py-2.5 text-left transition ${
                   active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
                 }`}
               >
+                <div className={`text-sm font-medium ${active ? "text-ink" : "text-ink/80"}`}>
+                  {m === "dark" ? "Dark" : "Light"}
+                </div>
+                <div className="text-[11px] text-muted">
+                  {m === "dark" ? "Near-black surfaces" : "White / cream surfaces"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-xs text-muted mt-3 mb-1">Accent color</div>
+        <div className="grid grid-cols-4 gap-2">
+          {ACCENTS.map((a) => {
+            const active = (profile.theme_accent ?? "aurora") === a.id;
+            return (
+              <button
+                key={a.id}
+                onClick={() => update({ theme_accent: a.id as AccentName })}
+                className={`rounded-xl p-2 transition flex flex-col items-center gap-1 ${
+                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
+                }`}
+                title={a.label}
+              >
                 <span
-                  className="size-5 rounded-full ring-1 ring-white/10 shrink-0"
-                  style={{ backgroundColor: t.swatch }}
+                  className="size-7 rounded-full ring-1 ring-white/10 shrink-0"
+                  style={{ backgroundColor: a.swatch }}
                 />
-                <span className={`text-sm ${active ? "text-ink" : "text-ink/80"}`}>{t.label}</span>
+                <span className={`text-[11px] leading-tight ${active ? "text-ink" : "text-ink/80"}`}>{a.label}</span>
               </button>
             );
           })}
         </div>
         <p className="text-[11px] text-muted mt-2">
-          Themes change UI surfaces and accents. Chart colors stay consistent across themes for analytical clarity.
+          Base mode chooses light or dark surfaces; the accent only colors highlights and primary buttons. Chart colors stay consistent across themes for analytical clarity.
         </p>
       </Section>
 

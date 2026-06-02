@@ -83,6 +83,53 @@ export type ThemeName =
   | "carbon"
   | "coral";
 
+export type ThemeMode = "dark" | "light";
+
+export type AccentName =
+  | "aurora"      // purple (default)
+  | "midnight"    // cyan
+  | "forest"      // lime
+  | "sunset"      // orange
+  | "solar"       // yellow
+  | "carbon"      // gray
+  | "coral"       // pink
+  | "lavender"    // light purple
+  | "daylight"    // blue
+  | "paper"       // warm brown
+  | "mono";       // white
+
+export const ACCENTS: { id: AccentName; label: string; swatch: string }[] = [
+  { id: "aurora",   label: "Aurora",   swatch: "#7c5cff" },
+  { id: "midnight", label: "Cyan",     swatch: "#5cd0ff" },
+  { id: "forest",   label: "Lime",     swatch: "#84dc74" },
+  { id: "sunset",   label: "Orange",   swatch: "#ffa854" },
+  { id: "solar",    label: "Yellow",   swatch: "#dcc846" },
+  { id: "carbon",   label: "Steel",    swatch: "#cbd5e1" },
+  { id: "coral",    label: "Coral",    swatch: "#fb7185" },
+  { id: "lavender", label: "Lavender", swatch: "#a78bfa" },
+  { id: "daylight", label: "Blue",     swatch: "#2563eb" },
+  { id: "paper",    label: "Bronze",   swatch: "#a16207" },
+  { id: "mono",     label: "White",    swatch: "#f0f0f0" },
+];
+
+// Maps a legacy `theme` value to the new (mode, accent) split so existing
+// profiles migrate cleanly.
+export const LEGACY_THEME_MAP: Record<ThemeName, { mode: ThemeMode; accent: AccentName }> = {
+  default:  { mode: "dark",  accent: "aurora" },
+  midnight: { mode: "dark",  accent: "midnight" },
+  forest:   { mode: "dark",  accent: "forest" },
+  sunset:   { mode: "dark",  accent: "sunset" },
+  mono:     { mode: "dark",  accent: "mono" },
+  solar:    { mode: "dark",  accent: "solar" },
+  carbon:   { mode: "dark",  accent: "carbon" },
+  coral:    { mode: "dark",  accent: "coral" },
+  daylight: { mode: "light", accent: "daylight" },
+  paper:    { mode: "light", accent: "paper" },
+  lavender: { mode: "light", accent: "lavender" },
+};
+
+// Kept for backwards compatibility with older callers; new code should
+// branch on theme_mode + theme_accent directly.
 export const THEMES: { id: ThemeName; label: string; swatch: string; light?: boolean }[] = [
   { id: "default",  label: "Aurora",   swatch: "#7c5cff" },
   { id: "midnight", label: "Midnight", swatch: "#5cd0ff" },
@@ -118,7 +165,9 @@ export interface Profile {
   xdrip_url?: string;     // local xDrip+ web service URL
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
   mode?: "decide" | "learn"; // persistent operating mode
-  theme?: ThemeName;
+  theme?: ThemeName;         // legacy preset (light + accent combined)
+  theme_mode?: ThemeMode;    // new split: base mode
+  theme_accent?: AccentName; // new split: accent color
   // Once-daily long-acting basal reminder
   daily_basal_enabled?: boolean;
   daily_basal_units?: number;     // default 20
@@ -144,6 +193,8 @@ export const DEFAULT_PROFILE: Profile = {
   ai_provider: "auto",
   mode: "decide",
   theme: "default",
+  theme_mode: "dark",
+  theme_accent: "aurora",
   daily_basal_enabled: true,
   daily_basal_units: 20,
   daily_basal_time: "18:30",

@@ -2,157 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
+/* ---- Base palettes (mode) -----------------------------------------------
+   Mode controls bg / surface / ink / muted / good / warn / bad.
+   Accent (--c-accent) is layered on top via data-accent, so picking a
+   different accent only changes the highlight color — the rest of the UI
+   stays a consistent light or dark base. */
 
-  /* Default theme — Aurora (current): purple accent on near-black */
+:root,
+[data-mode="dark"] {
+  color-scheme: dark;
   --c-bg: 10 10 12;
   --c-surface: 21 21 26;
   --c-surface2: 31 31 38;
-  --c-accent: 124 92 255;
   --c-good: 61 220 151;
   --c-warn: 255 184 77;
   --c-bad: 255 92 124;
   --c-muted: 138 138 153;
   --c-ink: 245 245 247;
+  /* Default accent if data-accent isn't set */
+  --c-accent: 124 92 255;
 }
 
-[data-theme="midnight"] {
-  /* Deep navy + electric cyan */
-  --c-bg: 6 12 28;
-  --c-surface: 13 24 50;
-  --c-surface2: 20 36 72;
-  --c-accent: 92 208 255;
-  --c-good: 76 220 175;
-  --c-warn: 255 198 102;
-  --c-bad: 255 100 130;
-  --c-muted: 134 156 188;
-  --c-ink: 234 240 252;
-}
-
-[data-theme="forest"] {
-  /* Pine green + lime accent */
-  --c-bg: 11 18 16;
-  --c-surface: 19 30 26;
-  --c-surface2: 27 44 38;
-  --c-accent: 132 220 116;
-  --c-good: 90 220 130;
-  --c-warn: 230 196 86;
-  --c-bad: 240 110 110;
-  --c-muted: 134 156 142;
-  --c-ink: 232 244 232;
-}
-
-[data-theme="sunset"] {
-  /* Warm dark mocha + amber accent */
-  --c-bg: 22 14 12;
-  --c-surface: 36 22 20;
-  --c-surface2: 52 32 28;
-  --c-accent: 255 168 84;
-  --c-good: 184 220 132;
-  --c-warn: 255 196 96;
-  --c-bad: 240 96 110;
-  --c-muted: 168 144 134;
-  --c-ink: 250 240 232;
-}
-
-[data-theme="mono"] {
-  /* Pure grayscale with white accent */
-  --c-bg: 12 12 12;
-  --c-surface: 24 24 24;
-  --c-surface2: 38 38 38;
-  --c-accent: 240 240 240;
-  --c-good: 200 200 200;
-  --c-warn: 220 220 220;
-  --c-bad: 240 100 100;
-  --c-muted: 140 140 140;
-  --c-ink: 245 245 245;
-}
-
-[data-theme="solar"] {
-  /* Solarized-dark style: warm teal base with yellow accent */
-  --c-bg: 7 30 36;
-  --c-surface: 14 42 50;
-  --c-surface2: 22 56 64;
-  --c-accent: 220 200 70;
-  --c-good: 130 196 130;
-  --c-warn: 230 174 90;
-  --c-bad: 230 110 110;
-  --c-muted: 132 158 158;
-  --c-ink: 240 232 200;
-}
-
-/* ---- Light themes ----------------------------------------------------- */
-
-[data-theme="daylight"] {
+[data-mode="light"] {
   color-scheme: light;
-  /* Clean cool light theme */
   --c-bg: 244 247 251;
   --c-surface: 255 255 255;
   --c-surface2: 232 238 247;
-  --c-accent: 37 99 235;
   --c-good: 22 163 74;
   --c-warn: 202 138 4;
   --c-bad: 220 38 38;
   --c-muted: 100 116 139;
   --c-ink: 15 23 42;
+  --c-accent: 37 99 235;
 }
 
-[data-theme="paper"] {
-  color-scheme: light;
-  /* Warm cream / paper aesthetic */
-  --c-bg: 250 246 240;
-  --c-surface: 255 253 248;
-  --c-surface2: 240 232 218;
-  --c-accent: 161 98 7;
-  --c-good: 101 163 13;
-  --c-warn: 202 138 4;
-  --c-bad: 190 18 60;
-  --c-muted: 120 113 108;
-  --c-ink: 28 25 23;
-}
+/* ---- Accents (just the --c-accent variable) ---------------------------- */
 
-[data-theme="lavender"] {
-  color-scheme: light;
-  /* Soft lavender light theme */
-  --c-bg: 245 243 255;
-  --c-surface: 255 255 255;
-  --c-surface2: 233 226 252;
-  --c-accent: 124 58 237;
-  --c-good: 5 150 105;
-  --c-warn: 217 119 6;
-  --c-bad: 219 39 119;
-  --c-muted: 113 113 122;
-  --c-ink: 30 27 75;
-}
-
-/* ---- Additional dark themes ------------------------------------------ */
-
-[data-theme="carbon"] {
-  /* Pure-black OLED with cool gray accent */
-  --c-bg: 0 0 0;
-  --c-surface: 14 14 16;
-  --c-surface2: 26 26 30;
-  --c-accent: 203 213 225;
-  --c-good: 134 239 172;
-  --c-warn: 253 224 71;
-  --c-bad: 248 113 113;
-  --c-muted: 113 113 122;
-  --c-ink: 244 244 245;
-}
-
-[data-theme="coral"] {
-  /* Warm dark plum with coral accent */
-  --c-bg: 26 15 16;
-  --c-surface: 42 26 28;
-  --c-surface2: 58 38 42;
-  --c-accent: 251 113 133;
-  --c-good: 167 220 138;
-  --c-warn: 255 196 96;
-  --c-bad: 244 63 94;
-  --c-muted: 168 144 134;
-  --c-ink: 254 242 242;
-}
+[data-accent="aurora"]   { --c-accent: 124  92 255; }
+[data-accent="midnight"] { --c-accent:  92 208 255; }
+[data-accent="forest"]   { --c-accent: 132 220 116; }
+[data-accent="sunset"]   { --c-accent: 255 168  84; }
+[data-accent="solar"]    { --c-accent: 220 200  70; }
+[data-accent="carbon"]   { --c-accent: 203 213 225; }
+[data-accent="coral"]    { --c-accent: 251 113 133; }
+[data-accent="lavender"] { --c-accent: 167 139 250; }
+[data-accent="daylight"] { --c-accent:  37  99 235; }
+[data-accent="paper"]    { --c-accent: 161  98   7; }
+[data-accent="mono"]     { --c-accent: 240 240 240; }
 
 html, body {
   height: 100%;

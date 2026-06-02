@@ -9,6 +9,7 @@ import {
   type InsulinDose,
   type Profile,
   DEFAULT_PROFILE,
+  LEGACY_THEME_MAP,
 } from "./types";
 
 class MeanwhileDB extends Dexie {
@@ -50,7 +51,18 @@ export async function getProfile(): Promise<Profile> {
     await db().profile.put(DEFAULT_PROFILE);
     return DEFAULT_PROFILE;
   }
-  if ((existing.schema_version ?? 1) < CURRENT_SCHEMA) {
+  // Backfill theme_mode / theme_accent for profiles saved before the split.
+  let needsThemeMigration = false;
+  let migratedMode = existing.theme_mode;
+  let migratedAccent = existing.theme_accent;
+  if (!existing.theme_mode || !existing.theme_accent) {
+    const legacy = LEGACY_THEME_MAP[existing.theme ?? "default"] ?? { mode: "dark" as const, accent: "aurora" as const };
+    migratedMode = existing.theme_mode ?? legacy.mode;
+    migratedAccent = existing.theme_accent ?? legacy.accent;
+    needsThemeMigration = true;
+  }
+
+  if ((existing.schema_version ?? 1) < CURRENT_SCHEMA || needsThemeMigration) {
     const migrated: Profile = {
       ...existing,
       // v2 fields (Loop-style insulin action)
@@ -65,6 +77,9 @@ export async function getProfile(): Promise<Profile> {
       daily_basal_units: existing.daily_basal_units ?? 20,
       daily_basal_time: existing.daily_basal_time ?? "18:30",
       daily_basal_tz: existing.daily_basal_tz ?? "America/New_York",
+      // theme split
+      theme_mode: migratedMode,
+      theme_accent: migratedAccent,
       schema_version: CURRENT_SCHEMA,
       updated_ts: Date.now(),
     };
