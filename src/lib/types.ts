@@ -86,29 +86,68 @@ export type ThemeName =
 export type ThemeMode = "dark" | "light";
 
 export type AccentName =
-  | "aurora"      // purple (default)
-  | "midnight"    // cyan
-  | "forest"      // lime
-  | "sunset"      // orange
-  | "solar"       // yellow
-  | "carbon"      // gray
-  | "coral"       // pink
-  | "lavender"    // light purple
-  | "daylight"    // blue
-  | "paper"       // warm brown
-  | "mono";       // white
+  // Originals (kept for backward compatibility with stored profiles)
+  | "aurora" | "midnight" | "forest" | "sunset" | "solar"
+  | "carbon" | "coral" | "lavender" | "daylight" | "paper" | "mono"
+  // Reds / pinks
+  | "crimson" | "rose" | "pink" | "magenta" | "fuchsia"
+  // Oranges
+  | "tangerine" | "amber"
+  // Yellows
+  | "lemon"
+  // Greens
+  | "mint" | "emerald"
+  // Teals / aquas
+  | "teal" | "aqua" | "sky"
+  // Blues
+  | "azure" | "indigo" | "cobalt"
+  // Purples
+  | "violet" | "plum"
+  // Neutrals
+  | "slate";
 
+// Sorted by shade — reds → oranges → yellows → greens → teals → blues
+// → purples → magentas → neutrals. The Settings grid renders in this
+// order so the spectrum reads continuously.
 export const ACCENTS: { id: AccentName; label: string; swatch: string }[] = [
-  { id: "aurora",   label: "Aurora",   swatch: "#7c5cff" },
-  { id: "midnight", label: "Cyan",     swatch: "#5cd0ff" },
-  { id: "forest",   label: "Lime",     swatch: "#84dc74" },
-  { id: "sunset",   label: "Orange",   swatch: "#ffa854" },
-  { id: "solar",    label: "Yellow",   swatch: "#dcc846" },
-  { id: "carbon",   label: "Steel",    swatch: "#cbd5e1" },
+  // Reds / pinks
+  { id: "crimson",  label: "Crimson",  swatch: "#dc2626" },
+  { id: "rose",     label: "Rose",     swatch: "#f43f5e" },
   { id: "coral",    label: "Coral",    swatch: "#fb7185" },
-  { id: "lavender", label: "Lavender", swatch: "#a78bfa" },
-  { id: "daylight", label: "Blue",     swatch: "#2563eb" },
+  { id: "pink",     label: "Pink",     swatch: "#ec4899" },
+  // Oranges
+  { id: "sunset",   label: "Sunset",   swatch: "#ffa854" },
+  { id: "tangerine",label: "Tangerine",swatch: "#f97316" },
+  { id: "amber",    label: "Amber",    swatch: "#f59e0b" },
+  // Yellows / golds
   { id: "paper",    label: "Bronze",   swatch: "#a16207" },
+  { id: "solar",    label: "Solar",    swatch: "#dcc846" },
+  { id: "lemon",    label: "Lemon",    swatch: "#facc15" },
+  // Greens
+  { id: "forest",   label: "Lime",     swatch: "#84dc74" },
+  { id: "mint",     label: "Mint",     swatch: "#34d399" },
+  { id: "emerald",  label: "Emerald",  swatch: "#10b981" },
+  // Teals / aquas
+  { id: "teal",     label: "Teal",     swatch: "#14b8a6" },
+  { id: "aqua",     label: "Aqua",     swatch: "#06b6d4" },
+  { id: "midnight", label: "Cyan",     swatch: "#5cd0ff" },
+  { id: "sky",      label: "Sky",      swatch: "#38bdf8" },
+  // Blues
+  { id: "azure",    label: "Azure",    swatch: "#3b82f6" },
+  { id: "daylight", label: "Blue",     swatch: "#2563eb" },
+  { id: "indigo",   label: "Indigo",   swatch: "#4f46e5" },
+  { id: "cobalt",   label: "Cobalt",   swatch: "#1e40af" },
+  // Purples
+  { id: "violet",   label: "Violet",   swatch: "#8b5cf6" },
+  { id: "aurora",   label: "Aurora",   swatch: "#7c5cff" },
+  { id: "lavender", label: "Lavender", swatch: "#a78bfa" },
+  { id: "plum",     label: "Plum",     swatch: "#9333ea" },
+  // Magentas
+  { id: "magenta",  label: "Magenta",  swatch: "#c026d3" },
+  { id: "fuchsia",  label: "Fuchsia",  swatch: "#d946ef" },
+  // Neutrals
+  { id: "slate",    label: "Slate",    swatch: "#64748b" },
+  { id: "carbon",   label: "Steel",    swatch: "#cbd5e1" },
   { id: "mono",     label: "White",    swatch: "#f0f0f0" },
 ];
 

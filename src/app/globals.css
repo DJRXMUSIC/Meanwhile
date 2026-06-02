@@ -36,19 +36,49 @@
   --c-accent: 37 99 235;
 }
 
-/* ---- Accents (just the --c-accent variable) ---------------------------- */
+/* ---- Accents (just the --c-accent variable) ----------------------------
+   Sorted by hue. Each entry sets only --c-accent so a different accent
+   never changes surface / ink / muted — base mode (dark/light) owns those. */
 
-[data-accent="aurora"]   { --c-accent: 124  92 255; }
-[data-accent="midnight"] { --c-accent:  92 208 255; }
-[data-accent="forest"]   { --c-accent: 132 220 116; }
-[data-accent="sunset"]   { --c-accent: 255 168  84; }
-[data-accent="solar"]    { --c-accent: 220 200  70; }
-[data-accent="carbon"]   { --c-accent: 203 213 225; }
-[data-accent="coral"]    { --c-accent: 251 113 133; }
-[data-accent="lavender"] { --c-accent: 167 139 250; }
-[data-accent="daylight"] { --c-accent:  37  99 235; }
-[data-accent="paper"]    { --c-accent: 161  98   7; }
-[data-accent="mono"]     { --c-accent: 240 240 240; }
+/* Reds / pinks */
+[data-accent="crimson"]   { --c-accent: 220  38  38; }
+[data-accent="rose"]      { --c-accent: 244  63  94; }
+[data-accent="coral"]     { --c-accent: 251 113 133; }
+[data-accent="pink"]      { --c-accent: 236  72 153; }
+/* Oranges */
+[data-accent="sunset"]    { --c-accent: 255 168  84; }
+[data-accent="tangerine"] { --c-accent: 249 115  22; }
+[data-accent="amber"]     { --c-accent: 245 158  11; }
+/* Yellows / golds */
+[data-accent="paper"]     { --c-accent: 161  98   7; }
+[data-accent="solar"]     { --c-accent: 220 200  70; }
+[data-accent="lemon"]     { --c-accent: 250 204  21; }
+/* Greens */
+[data-accent="forest"]    { --c-accent: 132 220 116; }
+[data-accent="mint"]      { --c-accent:  52 211 153; }
+[data-accent="emerald"]   { --c-accent:  16 185 129; }
+/* Teals / aquas */
+[data-accent="teal"]      { --c-accent:  20 184 166; }
+[data-accent="aqua"]      { --c-accent:   6 182 212; }
+[data-accent="midnight"]  { --c-accent:  92 208 255; }
+[data-accent="sky"]       { --c-accent:  56 189 248; }
+/* Blues */
+[data-accent="azure"]     { --c-accent:  59 130 246; }
+[data-accent="daylight"]  { --c-accent:  37  99 235; }
+[data-accent="indigo"]    { --c-accent:  79  70 229; }
+[data-accent="cobalt"]    { --c-accent:  30  64 175; }
+/* Purples */
+[data-accent="violet"]    { --c-accent: 139  92 246; }
+[data-accent="aurora"]    { --c-accent: 124  92 255; }
+[data-accent="lavender"]  { --c-accent: 167 139 250; }
+[data-accent="plum"]      { --c-accent: 147  51 234; }
+/* Magentas */
+[data-accent="magenta"]   { --c-accent: 192  38 211; }
+[data-accent="fuchsia"]   { --c-accent: 217  70 239; }
+/* Neutrals */
+[data-accent="slate"]     { --c-accent: 100 116 139; }
+[data-accent="carbon"]    { --c-accent: 203 213 225; }
+[data-accent="mono"]      { --c-accent: 240 240 240; }
 
 html, body {
   height: 100%;

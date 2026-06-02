@@ -55,24 +55,28 @@ export default function SettingsPage() {
           })}
         </div>
 
-        <div className="text-xs text-muted mt-3 mb-1">Accent color</div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="flex items-baseline justify-between mt-3 mb-1">
+          <span className="text-xs text-muted">Accent color</span>
+          <span className="text-[10px] text-muted">{ACCENTS.length} options, hue sorted</span>
+        </div>
+        <div className="grid grid-cols-5 gap-1.5">
           {ACCENTS.map((a) => {
             const active = (profile.theme_accent ?? "aurora") === a.id;
             return (
               <button
                 key={a.id}
                 onClick={() => update({ theme_accent: a.id as AccentName })}
-                className={`rounded-xl p-2 transition flex flex-col items-center gap-1 ${
+                className={`rounded-xl p-1.5 transition flex flex-col items-center gap-1 ${
                   active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
                 }`}
                 title={a.label}
+                aria-label={a.label}
               >
                 <span
                   className="size-7 rounded-full ring-1 ring-white/10 shrink-0"
                   style={{ backgroundColor: a.swatch }}
                 />
-                <span className={`text-[11px] leading-tight ${active ? "text-ink" : "text-ink/80"}`}>{a.label}</span>
+                <span className={`text-[10px] leading-tight truncate w-full text-center ${active ? "text-ink" : "text-ink/80"}`}>{a.label}</span>
               </button>
             );
           })}
