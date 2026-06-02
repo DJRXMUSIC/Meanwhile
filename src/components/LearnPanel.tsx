@@ -52,11 +52,11 @@ export function LearnPanel() {
               key={u}
               disabled={busy === u}
               onClick={() => quickLog(u)}
-              className={`num h-12 rounded-xl bg-surface2 active:scale-[0.97] transition font-semibold ${
+              className={`num h-9 rounded-lg bg-surface2 active:scale-[0.97] transition text-sm font-semibold ${
                 busy === u ? "opacity-50" : "hover:bg-surface2/80"
               }`}
             >
-              {u}<span className="text-xs text-muted ml-0.5">U</span>
+              {u}<span className="text-[10px] text-muted ml-0.5">U</span>
             </button>
           ))}
         </div>
@@ -133,7 +133,13 @@ function CustomDoseSheet({
       onClick={onClose}
     >
       <div
-        className="rounded-t-3xl bg-surface ring-1 ring-white/10 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] mx-auto w-full max-w-xl"
+        className="rounded-t-3xl bg-surface ring-1 ring-white/10 mx-auto w-full max-w-xl max-h-[88svh] overflow-y-auto overflow-x-hidden"
+        style={{
+          paddingLeft: "max(env(safe-area-inset-left), 16px)",
+          paddingRight: "max(env(safe-area-inset-right), 16px)",
+          paddingTop: 16,
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto h-1 w-12 rounded-full bg-white/15 mb-4" />
@@ -188,7 +194,7 @@ function CustomDoseSheet({
                 type="time"
                 value={customTimeStr}
                 onChange={(e) => setCustomTimeStr(e.target.value)}
-                className="num w-full h-12 text-center rounded-xl bg-surface2 text-base outline-none ring-1 ring-white/5 focus:ring-accent/60"
+                className="num block w-full max-w-full h-12 text-center rounded-xl bg-surface2 text-base outline-none ring-1 ring-white/5 focus:ring-accent/60 box-border"
               />
               <p className="text-[11px] text-muted mt-1">
                 Time today; if it's in the future we'll use yesterday's time.
