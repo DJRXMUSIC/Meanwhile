@@ -43,13 +43,31 @@ export function db(): MeanwhileDB {
 }
 
 // Schema version bumps trigger one-shot, non-destructive migrations.
-const CURRENT_SCHEMA = 3;
+const CURRENT_SCHEMA = 4;
+
+function newSyncKey(): string {
+  // 32-char hex from a UUID — enough entropy to be unguessable, short
+  // enough to copy to another device by hand if needed.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  // Fallback (older WebViews / SSR): build from getRandomValues
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  // Last resort: Math.random — not cryptographically secure, but the
+  // user can rotate any time from Settings.
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+}
 
 export async function getProfile(): Promise<Profile> {
   const existing = await db().profile.get("current");
   if (!existing) {
-    await db().profile.put(DEFAULT_PROFILE);
-    return DEFAULT_PROFILE;
+    const seeded: Profile = { ...DEFAULT_PROFILE, sync_key: newSyncKey() };
+    await db().profile.put(seeded);
+    return seeded;
   }
   // Backfill theme_mode / theme_accent for profiles saved before the split.
   let needsThemeMigration = false;
@@ -77,6 +95,9 @@ export async function getProfile(): Promise<Profile> {
       daily_basal_units: existing.daily_basal_units ?? 20,
       daily_basal_time: existing.daily_basal_time ?? "18:30",
       daily_basal_tz: existing.daily_basal_tz ?? "America/New_York",
+      // v4 fields — sync
+      sync_key: existing.sync_key ?? newSyncKey(),
+      sync_auto: existing.sync_auto ?? true,
       // theme split
       theme_mode: migratedMode,
       theme_accent: migratedAccent,
@@ -87,6 +108,12 @@ export async function getProfile(): Promise<Profile> {
     return migrated;
   }
   return existing;
+}
+
+export async function regenerateSyncKey(): Promise<string> {
+  const key = newSyncKey();
+  await saveProfile({ sync_key: key });
+  return key;
 }
 
 export async function saveProfile(patch: Partial<Profile>): Promise<Profile> {

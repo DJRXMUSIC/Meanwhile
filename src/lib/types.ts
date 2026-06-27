@@ -212,6 +212,10 @@ export interface Profile {
   daily_basal_units?: number;     // default 20
   daily_basal_time?: string;      // "HH:MM" — interpreted in `daily_basal_tz`
   daily_basal_tz?: string;        // IANA name; default "America/New_York"
+  // Multi-device sync (Layer 3). sync_key is shared across devices to
+  // join the same sync namespace; sync_auto toggles background sync.
+  sync_key?: string;
+  sync_auto?: boolean;
   schema_version?: number;   // for one-shot migrations
   updated_ts: number;
 }
@@ -238,6 +242,7 @@ export const DEFAULT_PROFILE: Profile = {
   daily_basal_units: 20,
   daily_basal_time: "18:30",
   daily_basal_tz: "America/New_York",
-  schema_version: 3,
+  sync_auto: true,
+  schema_version: 4,
   updated_ts: Date.now(),
 };

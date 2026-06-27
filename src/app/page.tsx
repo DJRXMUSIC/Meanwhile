@@ -14,6 +14,7 @@ import { LearnPanel } from "@/components/LearnPanel";
 import { useLiveData, useXdripPolling } from "@/lib/useLiveData";
 import { useMode } from "@/lib/useMode";
 import { useChartView } from "@/lib/useChartView";
+import { useAutoSync } from "@/lib/useAutoSync";
 import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
@@ -21,6 +22,7 @@ import type { Decision } from "@/lib/types";
 export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
   useXdripPolling(profile);
+  useAutoSync(profile);
   const [mode] = useMode();
   const {
     windowHours, setWindowHours,

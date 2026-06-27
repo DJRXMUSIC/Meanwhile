@@ -2,11 +2,21 @@
 
 import { db } from "./db";
 
-// Generic sync: pushes recent rows from each table to a user-configured endpoint
-// and pulls newer rows since lastSync. The server is responsible for
-// authentication and conflict resolution; this is a thin client.
+// Multi-device sync via the built-in /api/sync route (Netlify Blobs in
+// production, in-memory fallback during local dev). The server never
+// sees credentials beyond the user-supplied sync_key, which acts as a
+// shared namespace identifier.
+//
+// Bundle structure: each table is sent as an array of rows. The server
+// merges by row.id (or row.ts for new pushes) using last-writer-wins on
+// updated_ts. On pull, the server returns every row newer than `since`.
 
-const META_KEY = "meanwhile.lastSync";
+const META_LAST_SYNC = "meanwhile.lastSync";
+const META_LAST_EXPORT = "meanwhile.lastExport";
+const META_LAST_STATUS = "meanwhile.lastSyncStatus";
+
+const TABLE_NAMES = ["bg", "insulin", "carbs", "decisions", "context", "profile"] as const;
+type TableName = (typeof TABLE_NAMES)[number];
 
 export interface SyncBundle {
   bg: unknown[];
@@ -15,11 +25,44 @@ export interface SyncBundle {
   decisions: unknown[];
   context: unknown[];
   profile: unknown[];
-  client_ts: number;
-  since: number;
 }
 
-export async function buildBundle(since: number): Promise<SyncBundle> {
+export interface SyncResult {
+  pushed: number;
+  pulled: number;
+  backend: "blobs" | "memory" | "unknown";
+  server_ts: number;
+}
+
+// ---- Local meta --------------------------------------------------------
+
+export function lastSync(): number {
+  try { return Number(localStorage.getItem(META_LAST_SYNC)) || 0; }
+  catch { return 0; }
+}
+function setLastSync(ts: number) {
+  try { localStorage.setItem(META_LAST_SYNC, String(ts)); } catch {}
+}
+
+export function lastExport(): number {
+  try { return Number(localStorage.getItem(META_LAST_EXPORT)) || 0; }
+  catch { return 0; }
+}
+function setLastExport(ts: number) {
+  try { localStorage.setItem(META_LAST_EXPORT, String(ts)); } catch {}
+}
+
+export function lastSyncStatus(): string {
+  try { return localStorage.getItem(META_LAST_STATUS) || ""; }
+  catch { return ""; }
+}
+function setLastSyncStatus(s: string) {
+  try { localStorage.setItem(META_LAST_STATUS, s); } catch {}
+}
+
+// ---- Bundle build / apply ---------------------------------------------
+
+export async function buildPush(since: number): Promise<Record<TableName, unknown[]>> {
   const d = db();
   const [bg, insulin, carbs, decisions, context, profile] = await Promise.all([
     d.bg.where("ts").above(since).toArray(),
@@ -29,55 +72,71 @@ export async function buildBundle(since: number): Promise<SyncBundle> {
     d.context.where("ts").above(since).toArray(),
     d.profile.toArray(),
   ]);
-  return { bg, insulin, carbs, decisions, context, profile, client_ts: Date.now(), since };
+  return { bg, insulin, carbs, decisions, context, profile };
 }
 
-export async function applyRemote(bundle: Partial<SyncBundle>): Promise<void> {
+export async function applyPull(pull: Partial<Record<TableName, unknown[]>>): Promise<number> {
   const d = db();
+  let applied = 0;
   await d.transaction("rw", [d.bg, d.insulin, d.carbs, d.decisions, d.context, d.profile], async () => {
-    if (bundle.bg) for (const r of bundle.bg as { ts: number; mgdl: number }[]) await d.bg.put(r as Parameters<typeof d.bg.put>[0]);
-    if (bundle.insulin) for (const r of bundle.insulin as Parameters<typeof d.insulin.put>[0][]) await d.insulin.put(r);
-    if (bundle.carbs) for (const r of bundle.carbs as Parameters<typeof d.carbs.put>[0][]) await d.carbs.put(r);
-    if (bundle.decisions) for (const r of bundle.decisions as Parameters<typeof d.decisions.put>[0][]) await d.decisions.put(r);
-    if (bundle.context) for (const r of bundle.context as Parameters<typeof d.context.put>[0][]) await d.context.put(r);
-    if (bundle.profile) for (const r of bundle.profile as Parameters<typeof d.profile.put>[0][]) await d.profile.put(r);
+    for (const t of TABLE_NAMES) {
+      const rows = pull[t];
+      if (!rows) continue;
+      for (const r of rows) {
+        await d.table(t).put(r as Parameters<ReturnType<typeof d.table>["put"]>[0]);
+        applied++;
+      }
+    }
   });
+  return applied;
 }
 
-export function lastSync(): number {
-  const v = localStorage.getItem(META_KEY);
-  return v ? Number(v) : 0;
-}
-export function setLastSync(ts: number) { localStorage.setItem(META_KEY, String(ts)); }
+// ---- Sync API call -----------------------------------------------------
 
-export async function syncOnce(endpoint: string, apiKey: string): Promise<{ pushed: number; pulled: number } | null> {
-  if (!endpoint) return null;
+export async function syncOnce(syncKey: string): Promise<SyncResult> {
+  if (!syncKey) throw new Error("Missing sync key");
   const since = lastSync();
-  const bundle = await buildBundle(since);
-  const res = await fetch(endpoint.replace(/\/$/, "") + "/sync", {
+  const push = await buildPush(since);
+  const res = await fetch("/api/sync", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
-    body: JSON.stringify(bundle),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sync_key: syncKey, since, push }),
   });
-  if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
-  const remote = await res.json() as Partial<SyncBundle>;
-  await applyRemote(remote);
-  setLastSync(Date.now());
-  const pushed = bundle.bg.length + bundle.insulin.length + bundle.carbs.length + bundle.decisions.length + bundle.context.length + bundle.profile.length;
-  const pulled = (remote.bg?.length ?? 0) + (remote.insulin?.length ?? 0) + (remote.carbs?.length ?? 0) + (remote.decisions?.length ?? 0) + (remote.context?.length ?? 0) + (remote.profile?.length ?? 0);
-  return { pushed, pulled };
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`Sync failed (${res.status}): ${t.slice(0, 200)}`);
+  }
+  const body = await res.json() as {
+    pushed: number;
+    pulled: number;
+    backend: "blobs" | "memory";
+    server_ts: number;
+    pull: Partial<Record<TableName, unknown[]>>;
+  };
+  await applyPull(body.pull);
+  setLastSync(body.server_ts);
+  const status = `pushed ${body.pushed}, pulled ${body.pulled}`;
+  setLastSyncStatus(status);
+  return {
+    pushed: body.pushed,
+    pulled: body.pulled,
+    backend: body.backend,
+    server_ts: body.server_ts,
+  };
 }
+
+// ---- Export / import (manual backups) ----------------------------------
 
 export async function exportAll(): Promise<Blob> {
-  const bundle = await buildBundle(0);
-  return new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const all = await buildPush(0);
+  setLastExport(Date.now());
+  return new Blob([JSON.stringify({ ...all, exported_at: Date.now() }, null, 2)], {
+    type: "application/json",
+  });
 }
 
-export async function importAll(file: File): Promise<void> {
+export async function importAll(file: File): Promise<number> {
   const txt = await file.text();
-  const json = JSON.parse(txt) as Partial<SyncBundle>;
-  await applyRemote(json);
+  const json = JSON.parse(txt) as Partial<Record<TableName, unknown[]>>;
+  return applyPull(json);
 }

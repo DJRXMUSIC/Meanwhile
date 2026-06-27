@@ -1,24 +1,74 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getProfile, saveProfile } from "@/lib/db";
+import { getProfile, regenerateSyncKey, saveProfile } from "@/lib/db";
 import { ACCENTS, type AccentName, type Profile, type ThemeMode } from "@/lib/types";
-import { syncOnce, exportAll, importAll } from "@/lib/sync";
+import {
+  exportAll,
+  importAll,
+  lastSync as readLastSync,
+  lastExport as readLastExport,
+  lastSyncStatus as readLastSyncStatus,
+  syncOnce,
+} from "@/lib/sync";
+import { formatBytes, requestPersistentStorage, type PersistState } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [endpoint, setEndpoint] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [bg, setBg] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [persist, setPersist] = useState<PersistState | null>(null);
+  const [lastSyncTs, setLastSyncTs] = useState(0);
+  const [lastExportTs, setLastExportTs] = useState(0);
+  const [lastSyncSummary, setLastSyncSummary] = useState("");
+  const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getProfile().then(setProfile);
-    setEndpoint(localStorage.getItem("meanwhile.syncEndpoint") || "");
-    setApiKey(localStorage.getItem("meanwhile.syncApiKey") || "");
+    requestPersistentStorage().then(setPersist);
+    refreshSyncMeta();
   }, []);
+
+  const refreshSyncMeta = () => {
+    setLastSyncTs(readLastSync());
+    setLastExportTs(readLastExport());
+    setLastSyncSummary(readLastSyncStatus());
+  };
+
+  const runSyncNow = async () => {
+    if (!profile?.sync_key) { setStatus("Sync key not set"); return; }
+    setSyncing(true);
+    setStatus("Syncing…");
+    try {
+      const r = await syncOnce(profile.sync_key);
+      setStatus(`Sync ${r.backend}: pushed ${r.pushed}, pulled ${r.pulled}`);
+      refreshSyncMeta();
+    } catch (e) {
+      setStatus(`Sync error: ${(e as Error).message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const refreshPersist = async () => {
+    const p = await requestPersistentStorage();
+    setPersist(p);
+    setStatus(p.persisted ? "Persistent storage granted ✓" : "Persistent storage not granted (yet)");
+  };
+
+  const downloadBackup = async () => {
+    const blob = await exportAll();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    refreshSyncMeta();
+    setStatus("Backup downloaded ✓");
+  };
 
   const update = async (patch: Partial<Profile>) => {
     const next = await saveProfile(patch);
@@ -326,68 +376,156 @@ export default function SettingsPage() {
         </p>
       </Section>
 
-      <Section title="Multi-device sync">
-        <input
-          placeholder="https://your-sync-endpoint"
-          value={endpoint}
-          onChange={(e) => { setEndpoint(e.target.value); localStorage.setItem("meanwhile.syncEndpoint", e.target.value); }}
-          className="w-full rounded-xl bg-surface2 px-3 py-2 ring-1 ring-white/5 text-sm"
-        />
-        <input
-          placeholder="API key (optional)"
-          value={apiKey}
-          onChange={(e) => { setApiKey(e.target.value); localStorage.setItem("meanwhile.syncApiKey", e.target.value); }}
-          className="w-full mt-2 rounded-xl bg-surface2 px-3 py-2 ring-1 ring-white/5 text-sm"
-        />
-        <div className="flex gap-2 mt-2">
+      <Section title="Data safety">
+        <div className="rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3 text-sm">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-medium">Persistent storage</span>
+            <span className={persist?.persisted ? "text-good text-xs" : "text-warn text-xs"}>
+              {persist?.persisted ? "Granted ✓" : persist == null ? "checking…" : "Not granted"}
+            </span>
+          </div>
+          {!persist?.persisted && (
+            <p className="text-[11px] text-muted mt-1">
+              Without persistent storage the browser can evict your data
+              (BG, doses, decisions) when it clears the cache. Installed
+              PWAs and engaged sites get it automatically; tap below to
+              re-request.
+            </p>
+          )}
+          {persist?.persisted && (
+            <p className="text-[11px] text-muted mt-1">
+              Your data is protected from cache clears and storage-pressure
+              eviction.
+            </p>
+          )}
+          <div className="text-[11px] text-muted mt-2">
+            Using {formatBytes(persist?.usage)} of {formatBytes(persist?.quota)}
+          </div>
           <button
-            onClick={async () => {
-              try {
-                const r = await syncOnce(endpoint, apiKey);
-                setStatus(r ? `Sync: pushed ${r.pushed}, pulled ${r.pulled}` : "Sync skipped");
-              } catch (e) { setStatus(`Sync error: ${(e as Error).message}`); }
-            }}
-            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
+            onClick={refreshPersist}
+            className="mt-2 rounded-xl bg-surface2 px-3 py-1.5 text-xs"
           >
-            Sync now
+            Re-request
           </button>
-          <button
-            onClick={async () => {
-              const blob = await exportAll();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url; a.download = `meanwhile-${new Date().toISOString().slice(0,10)}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-          >
-            Export
-          </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-          >
-            Import
-          </button>
+        </div>
+
+        <div className="rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3 text-sm">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-medium">Local backup</span>
+            <span className="text-[11px] text-muted">
+              {lastExportTs ? `Last ${fmtAgo(lastExportTs)} ago` : "Never"}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted mt-1">
+            Download a full JSON snapshot. Keep one off-device every so
+            often — especially if you haven't enabled cloud sync below.
+          </p>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={downloadBackup}
+              className="rounded-xl bg-accent text-white px-3 py-1.5 text-xs font-medium"
+            >
+              Download backup
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
+            >
+              Restore from file
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  const applied = await importAll(f);
+                  setStatus(`Restored ${applied} rows from ${f.name} ✓`);
+                } catch (err) {
+                  setStatus(`Restore error: ${(err as Error).message}`);
+                }
+              }}
+            />
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Cloud sync">
+        <div className="text-xs text-muted">
+          Sync your full history to all devices through a Netlify-hosted
+          key/value store. The sync key is the shared password — paste
+          it into Meanwhile on another device to join the same data set.
+        </div>
+
+        <label className="flex items-center justify-between mt-2 gap-2 cursor-pointer">
+          <span className="text-sm">Auto-sync (on open, on focus, after every change)</span>
           <input
-            ref={fileRef}
-            type="file"
-            accept="application/json"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              try { await importAll(f); setStatus(`Imported ${f.name}`); }
-              catch (err) { setStatus(`Import error: ${(err as Error).message}`); }
-            }}
+            type="checkbox"
+            checked={profile.sync_auto ?? true}
+            onChange={(e) => update({ sync_auto: e.target.checked })}
+            className="size-5 accent-accent"
           />
+        </label>
+
+        <div className="mt-2 rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted">Sync key</div>
+          <input
+            type="text"
+            value={profile.sync_key ?? ""}
+            onChange={(e) => update({ sync_key: e.target.value.trim() })}
+            placeholder="paste a key here to join another device's data"
+            className="num mt-1 w-full rounded-lg bg-surface px-3 py-2 ring-1 ring-white/5 text-xs font-mono break-all"
+          />
+          <div className="flex gap-2 mt-2 flex-wrap">
+            <button
+              onClick={async () => {
+                if (!profile.sync_key) return;
+                try { await navigator.clipboard.writeText(profile.sync_key); setStatus("Sync key copied ✓"); }
+                catch { setStatus("Copy failed"); }
+              }}
+              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
+            >
+              Copy
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirm("Generate a new sync key? Other devices using the current key will stop syncing until you give them the new one.")) return;
+                const k = await regenerateSyncKey();
+                setProfile((p) => p ? { ...p, sync_key: k } : p);
+                setStatus("New sync key generated");
+              }}
+              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
+            >
+              Regenerate
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <div className="text-[11px] text-muted min-w-0 truncate">
+            {lastSyncTs
+              ? `Last synced ${fmtAgo(lastSyncTs)} ago${lastSyncSummary ? ` · ${lastSyncSummary}` : ""}`
+              : "Never synced"}
+          </div>
+          <button
+            onClick={runSyncNow}
+            disabled={syncing}
+            className="rounded-xl bg-accent text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+          >
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
         </div>
       </Section>
 
       <Section title="App version">
         <p className="text-[11px] text-muted">
-          Meanwhile is a PWA — old code can stick around in the service-worker cache. Hard refresh unregisters the worker, clears all caches, and reloads from the network. Your data (logs, profile, decisions) is untouched.
+          Meanwhile is a PWA — old code can stick around in the service-worker cache. <b>Hard refresh</b> unregisters the worker, clears the SW caches, and reloads from the network. <b>This button does not touch your data.</b>
+        </p>
+        <p className="text-[11px] text-muted">
+          ⚠ Clearing browser data from <i>Chrome / Safari settings</i> is a different operation and <b>will</b> wipe Meanwhile's IndexedDB unless persistent storage is granted above. Always have either Cloud sync enabled or a recent local backup before clearing browser data.
         </p>
         <div className="flex gap-2 mt-2">
           <button
@@ -405,8 +543,6 @@ export default function SettingsPage() {
               } catch (e) {
                 setStatus(`Refresh prep error: ${(e as Error).message}`);
               }
-              // Cache-busting reload: query string forces network round-trip
-              // even on browsers that ignore location.reload(true).
               const url = new URL(window.location.href);
               url.searchParams.set("_r", Date.now().toString());
               window.location.replace(url.toString());
@@ -415,12 +551,18 @@ export default function SettingsPage() {
           >
             Hard refresh
           </button>
+          <button
+            onClick={downloadBackup}
+            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
+          >
+            Download backup first
+          </button>
         </div>
       </Section>
 
       <Section title="About">
         <div className="text-xs text-muted leading-relaxed">
-          Meanwhile is a personal decision-support tool for adults managing T1D. It does not have hard safety caps; you must verify every dose. Your data lives in IndexedDB on this device and (optionally) syncs through your own endpoint.
+          Meanwhile is a personal decision-support tool for adults managing T1D. It does not have hard safety caps; you must verify every dose. Your data lives in IndexedDB on this device and syncs to a Netlify-hosted key/value store keyed by your sync key.
         </div>
       </Section>
 
@@ -436,4 +578,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </section>
   );
+}
+
+function fmtAgo(ts: number): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
 }
