@@ -1,30 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { InsulinDose } from "@/lib/types";
+import { useNow } from "@/lib/useNow";
 
 const WINDOW_MIN = 45;
-const TICK_MS = 20_000;
 
 // Pre-bolus timer. After a bolus is logged, the home screen shows how
 // many minutes have elapsed since the most recent dose for 45 minutes,
 // then disappears. Reliability notes:
 //
-// - We always read Date.now() at render time (no cached "now" in state)
-//   so the elapsed value is correct even if the page was backgrounded
-//   and the interval throttled.
-// - A tick counter forces re-renders every 20s while the card is
-//   visible so the minute number updates in the foreground.
-// - visibilitychange / focus / pageshow listeners force an immediate
-//   recompute when the PWA comes back to the foreground.
+// - Time comes from the shared clock (useNow), which ticks in the
+//   foreground and force-syncs on visibilitychange / focus / pageshow, so
+//   the elapsed value is correct even after the page was backgrounded and
+//   its intervals throttled.
 // - All insulin kinds are considered when locating "the last dose" —
 //   any legacy rows logged as "basal" before the basal→bolus rename
 //   still trigger the timer.
 // - Uses dose.ts (administration time) so backdated entries reflect
 //   real elapsed time.
 export function PreBolusTimer({ doses }: { doses: InsulinDose[] }) {
-  const [, setTick] = useState(0);
-  const bump = () => setTick((t) => (t + 1) | 0);
+  const now = useNow(15_000);
 
   // Only meal/correction bolus triggers a pre-bolus timer — once-daily
   // long-acting basal isn't relevant to meal timing.
@@ -38,31 +34,8 @@ export function PreBolusTimer({ doses }: { doses: InsulinDose[] }) {
     return best;
   }, [doses]);
 
-  // Recomputed every render — no stale state.
-  const now = Date.now();
   const elapsedMin = lastDose ? Math.floor((now - lastDose.ts) / 60_000) : -1;
   const visible = !!lastDose && elapsedMin >= 0 && elapsedMin < WINDOW_MIN;
-
-  // Foreground tick.
-  useEffect(() => {
-    if (!visible) return;
-    const id = setInterval(bump, TICK_MS);
-    return () => clearInterval(id);
-  }, [visible]);
-
-  // Wake / focus / BFCache restore — recompute immediately.
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const onWake = () => bump();
-    document.addEventListener("visibilitychange", onWake);
-    window.addEventListener("focus", onWake);
-    window.addEventListener("pageshow", onWake);
-    return () => {
-      document.removeEventListener("visibilitychange", onWake);
-      window.removeEventListener("focus", onWake);
-      window.removeEventListener("pageshow", onWake);
-    };
-  }, []);
 
   if (!lastDose || !visible) return null;
 

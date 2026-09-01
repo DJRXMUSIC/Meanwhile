@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { logInsulin } from "@/lib/db";
 import type { InsulinDose, Profile } from "@/lib/types";
+import { useNow } from "@/lib/useNow";
 
 // Once-daily long-acting basal reminder. The trigger time AND the
 // "today" calendar boundary are both evaluated in the configured
@@ -16,22 +17,11 @@ export function DailyBasalCard({
   profile: Profile | null;
   doses: InsulinDose[];
 }) {
-  const [, setTick] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [logging, setLogging] = useState(false);
 
-  // Re-evaluate every minute and on wake.
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => (t + 1) | 0), 60_000);
-    const wake = () => setTick((t) => (t + 1) | 0);
-    document.addEventListener("visibilitychange", wake);
-    window.addEventListener("focus", wake);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("focus", wake);
-    };
-  }, []);
+  // Re-evaluate on the shared clock, which also force-syncs on wake.
+  const now = useNow(60_000);
 
   const enabled = profile?.daily_basal_enabled ?? true;
   const units = profile?.daily_basal_units ?? 20;
@@ -40,9 +30,8 @@ export function DailyBasalCard({
 
   const due = useMemo(() => {
     if (!enabled) return false;
-    const nowMs = Date.now();
-    const todayInTz = ymdInTz(nowMs, tz);
-    const nowMin = minutesInTz(nowMs, tz);
+    const todayInTz = ymdInTz(now, tz);
+    const nowMin = minutesInTz(now, tz);
     const [hh = 18, mm = 30] = timeStr.split(":").map((s) => Number(s));
     const triggerMin = hh * 60 + mm;
 
@@ -52,7 +41,7 @@ export function DailyBasalCard({
     );
     if (loggedToday) return false;
     return nowMin >= triggerMin;
-  }, [enabled, units, timeStr, tz, doses]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, timeStr, tz, doses, now]);
 
   if (!due) return null;
 

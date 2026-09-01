@@ -20,7 +20,7 @@ import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 
 export default function HomePage() {
-  const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
+  const { profile, bg, bgList, iob, cob, insulinList, carbsList, now } = useLiveData();
   useXdripPolling(profile);
   useAutoSync(profile);
   const [mode] = useMode();
@@ -121,6 +121,7 @@ export default function HomePage() {
         readings={bgList}
         doses={insulinList}
         windowHours={windowHours}
+        now={now}
         panMs={panMs}
         onPanChange={setPanMs}
         targetLow={profile?.tir_low ?? 70}

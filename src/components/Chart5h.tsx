@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BgReading, InsulinDose } from "@/lib/types";
 
 // Five-zone bolus chart with a piecewise-linear y-axis:
@@ -17,10 +17,56 @@ import type { BgReading, InsulinDose } from "@/lib/types";
 
 export type WindowHours = 3 | 5 | 8 | 24;
 
+// Geometry is fixed, so it lives at module scope: `yOf` and the plot
+// dimensions are then stable references that memo dependencies don't have
+// to account for.
+const view = { w: 1000, h: 460 };
+// pad.l is wide enough that HTML axis labels render at native size
+// without overlapping the plot area. pad.b leaves room for x-axis time labels.
+const pad = { l: 80, r: 16, t: 18, b: 48 };
+const plotH = view.h - pad.t - pad.b;
+const plotW = view.w - pad.l - pad.r;
+
+// Y-axis: piecewise linear over [40, 350] with breakpoints at 70 and 250.
+const lowH = plotH * 0.10;
+const midH = plotH * 0.75;
+const highH = plotH * 0.15;
+
+function yOf(mgdl: number): number {
+  const v = Math.max(40, Math.min(350, mgdl));
+  // Top zone (250..350) — compressed band sitting at the top of the plot.
+  // v=350 → top of plot; v=250 → top of mid zone (boundary).
+  if (v >= 250) return pad.t + highH * ((350 - v) / 100);
+  // Mid zone (70..250) — focus band.
+  if (v >= 70)  return pad.t + highH + midH * ((250 - v) / 180);
+  // Bottom zone (40..70) — compressed band at the bottom.
+  return pad.t + highH + midH + lowH * ((70 - v) / 30);
+}
+
+// Roughly how many BG dots we are willing to put in the DOM. The line
+// itself is always drawn at full fidelity; only the per-point circles are
+// thinned, and only on the wide windows where they'd overlap anyway.
+const MAX_BG_DOTS = 150;
+
+// Ghost trace from `offsetMs` in the past, shifted forward so it overlays
+// the current window at the same wall-clock time.
+function buildOverlay(
+  readings: BgReading[],
+  minT: number,
+  maxT: number,
+  offsetMs: number
+): { ts: number; mgdl: number }[] {
+  return readings
+    .filter((r) => r.ts >= minT - offsetMs && r.ts <= maxT - offsetMs)
+    .map((r) => ({ ts: r.ts + offsetMs, mgdl: r.mgdl }))
+    .sort((a, b) => a.ts - b.ts);
+}
+
 interface Props {
   readings: BgReading[];
   doses: InsulinDose[];
   windowHours: WindowHours;
+  now: number;                   // shared clock — see lib/useNow
   panMs: number;                 // how far back from "now" the right edge sits
   onPanChange: (next: number) => void;
   targetLow?: number;            // band shading
@@ -29,10 +75,11 @@ interface Props {
   overlay48?: boolean;           // ghost trace from 48h prior
 }
 
-export function Chart5h({
+function Chart5hImpl({
   readings,
   doses,
   windowHours,
+  now,
   panMs,
   onPanChange,
   targetLow = 70,
@@ -40,35 +87,19 @@ export function Chart5h({
   overlay24 = false,
   overlay48 = false,
 }: Props) {
-  const view = { w: 1000, h: 460 };
-  // pad.l is wide enough that HTML axis labels render at native size
-  // without overlapping the plot area. pad.b leaves room for x-axis time labels.
-  const pad = { l: 80, r: 16, t: 18, b: 48 };
-  const plotH = view.h - pad.t - pad.b;
-  const plotW = view.w - pad.l - pad.r;
-
-  // Y-axis: piecewise linear over [40, 350] with breakpoints at 70 and 250.
-  const lowFrac = 0.10, midFrac = 0.75, highFrac = 0.15;
-  const lowH = plotH * lowFrac;
-  const midH = plotH * midFrac;
-  const highH = plotH * highFrac;
-
-  const yOf = (mgdl: number): number => {
-    const v = Math.max(40, Math.min(350, mgdl));
-    // Top zone (250..350) — compressed band sitting at the top of the plot.
-    // v=350 → top of plot; v=250 → top of mid zone (boundary).
-    if (v >= 250) return pad.t + highH * ((350 - v) / 100);
-    // Mid zone (70..250) — focus band.
-    if (v >= 70)  return pad.t + highH + midH * ((250 - v) / 180);
-    // Bottom zone (40..70) — compressed band at the bottom.
-    return pad.t + highH + midH + lowH * ((70 - v) / 30);
-  };
-
-  // X window (rightmost edge = now − panMs).
-  const now = Date.now();
+  // X window (rightmost edge = now − panMs). `now` comes from the shared
+  // clock rather than Date.now() at render time, so it is stable within a
+  // tick and the memos below can actually cache.
   const maxT = now - panMs;
   const minT = maxT - windowHours * 3600_000;
-  const xOf = (t: number) => pad.l + ((t - minT) / (maxT - minT)) * plotW;
+  const xOf = useCallback(
+    (t: number) => pad.l + ((t - minT) / (maxT - minT)) * plotW,
+    [minT, maxT]
+  );
+
+  // Declared up here because the overlay memos below skip their work while
+  // a pan gesture is in flight.
+  const [dragging, setDragging] = useState(false);
 
   const bgInWin = useMemo(
     () => readings.filter((r) => r.ts >= minT && r.ts <= maxT).sort((a, b) => a.ts - b.ts),
@@ -83,40 +114,43 @@ export function Chart5h({
     [doses, minT, maxT]
   );
 
+  // BG dots. The line is always drawn from every reading; the circles are
+  // thinned on wide windows, where at 5-minute CGM cadence they would
+  // otherwise put ~288 nodes in the DOM to draw a solid smear.
+  const bgDots = useMemo(() => {
+    const step = Math.max(1, Math.ceil(bgInWin.length / MAX_BG_DOTS));
+    return step === 1 ? bgInWin : bgInWin.filter((_, i) => i % step === 0);
+  }, [bgInWin]);
+
   // Overlay traces: BG from 24h / 48h prior, shifted forward by the
   // offset so they overlay the current window at the same wall-clock
   // time. Useful for pattern matching ("what did this morning look
   // like yesterday?").
-  const buildOverlay = (offsetMs: number) =>
-    readings
-      .filter((r) => r.ts >= minT - offsetMs && r.ts <= maxT - offsetMs)
-      .map((r) => ({ ts: r.ts + offsetMs, mgdl: r.mgdl }))
-      .sort((a, b) => a.ts - b.ts);
-
+  //
+  // Suppressed mid-drag: they double or triple the path work on every
+  // frame of a pan, for a comparison nobody is reading during the gesture.
   const overlay24Pts = useMemo(
-    () => (overlay24 ? buildOverlay(24 * 3600_000) : []),
-    [overlay24, readings, minT, maxT]
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+    () => (overlay24 && !dragging ? buildOverlay(readings, minT, maxT, 24 * 3600_000) : []),
+    [overlay24, dragging, readings, minT, maxT]
+  );
   const overlay48Pts = useMemo(
-    () => (overlay48 ? buildOverlay(48 * 3600_000) : []),
-    [overlay48, readings, minT, maxT]
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+    () => (overlay48 && !dragging ? buildOverlay(readings, minT, maxT, 48 * 3600_000) : []),
+    [overlay48, dragging, readings, minT, maxT]
+  );
 
-  const ovPath = (pts: { ts: number; mgdl: number }[]) =>
-    pts.length
-      ? pts
-          .map((r, i) => `${i === 0 ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`)
-          .join(" ")
-      : "";
-  const overlay24Path = ovPath(overlay24Pts);
-  const overlay48Path = ovPath(overlay48Pts);
+  const toPath = useCallback(
+    (pts: { ts: number; mgdl: number }[]) =>
+      pts.length
+        ? pts
+            .map((r, i) => `${i === 0 ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`)
+            .join(" ")
+        : "",
+    [xOf]
+  );
 
-  // BG path
-  const bgPath = bgInWin.length
-    ? bgInWin
-        .map((r, i) => `${i === 0 ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`)
-        .join(" ")
-    : "";
+  const overlay24Path = useMemo(() => toPath(overlay24Pts), [toPath, overlay24Pts]);
+  const overlay48Path = useMemo(() => toPath(overlay48Pts), [toPath, overlay48Pts]);
+  const bgPath = useMemo(() => toPath(bgInWin), [toPath, bgInWin]);
 
   // Linear interpolation of BG at a given timestamp, for placing dose
   // markers on the BG line itself.
@@ -170,8 +204,36 @@ export function Chart5h({
     pid: number;
     captured: boolean;
   } | null>(null);
-  const [dragging, setDragging] = useState(false);
   const DIRECTION_THRESHOLD_PX = 8;
+
+  // Pointer-move fires far more often than the screen refreshes. Coalesce
+  // to one state update per frame so a pan costs one re-render per frame
+  // instead of one per event.
+  const rafRef = useRef<number | null>(null);
+  const pendingPanRef = useRef<number | null>(null);
+
+  const flushPan = useCallback(() => {
+    rafRef.current = null;
+    const next = pendingPanRef.current;
+    pendingPanRef.current = null;
+    if (next != null) onPanChange(next);
+  }, [onPanChange]);
+
+  const schedulePan = useCallback(
+    (next: number) => {
+      pendingPanRef.current = next;
+      if (rafRef.current == null) {
+        rafRef.current = requestAnimationFrame(flushPan);
+      }
+    },
+    [flushPan]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -216,12 +278,18 @@ export function Chart5h({
     // Drag the content rightward → reveal older data on the left → increase panMs.
     const deltaPan = (dx / w) * windowMs;
     const next = Math.max(0, dragRef.current.startPan + deltaPan);
-    onPanChange(next);
+    schedulePan(next);
   };
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current) {
       try { e.currentTarget.releasePointerCapture(dragRef.current.pid); } catch {}
     }
+    // Land on the final position even if the gesture ended between frames.
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    flushPan();
     dragRef.current = null;
     setDragging(false);
   };
@@ -365,7 +433,7 @@ export function Chart5h({
               strokeLinejoin="round"
             />
           )}
-          {bgInWin.map((r) => (
+          {bgDots.map((r) => (
             <circle
               key={`bg-${r.ts}`}
               cx={xOf(r.ts)}
@@ -546,3 +614,8 @@ export function Chart5h({
     </div>
   );
 }
+
+// Memoized: the home screen re-renders on its own state (busy, error,
+// decision history) and on every clock tick, and none of that should cost
+// a full chart rebuild.
+export const Chart5h = memo(Chart5hImpl);
