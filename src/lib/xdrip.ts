@@ -88,8 +88,8 @@ export class XdripPoller {
 
   start() {
     if (this.timer) return;
-    this.tick();
-    this.timer = setInterval(() => this.tick(), this.intervalMs);
+    this.poll();
+    this.timer = setInterval(() => this.poll(), this.intervalMs);
   }
   stop() {
     if (this.timer) clearInterval(this.timer);
@@ -100,19 +100,39 @@ export class XdripPoller {
     // If the URL changed, do another aggressive catch-up next tick.
     this.firstRun = true;
   }
-  private async tick() {
-    if (this.inFlight || !this.base) return;
+
+  // Background poll. Soft-fails: xDrip+ is routinely unreachable (phone off
+  // the network, app closed) and that is not worth interrupting anyone over.
+  // Also called on foreground wake, where the interval may have been
+  // throttled or suspended while the PWA was backgrounded.
+  async poll(): Promise<void> {
+    try {
+      await this.run();
+    } catch {
+      // ignored by design — see refreshNow() for the reporting path
+    }
+  }
+
+  // Explicit user-initiated refresh. Always pulls the wide catch-up window,
+  // and lets failures through so the UI can say what went wrong: someone who
+  // just tapped refresh is owed an answer either way.
+  async refreshNow(): Promise<number> {
+    if (!this.base) throw new Error("No xDrip+ URL configured");
+    return this.run(CATCHUP_COUNT);
+  }
+
+  private async run(forceCount?: number): Promise<number> {
+    if (this.inFlight || !this.base) return 0;
     this.inFlight = true;
     try {
       // First fetch after start (or after URL change) pulls ~30h to
       // backfill anything missed while the app was closed; subsequent
       // ticks fall back to the 12-hour rolling window.
-      const count = this.firstRun ? CATCHUP_COUNT : DEFAULT_COUNT;
+      const count = forceCount ?? (this.firstRun ? CATCHUP_COUNT : DEFAULT_COUNT);
       const added = await syncXdripOnce(this.base, count);
       this.firstRun = false;
       if (added > 0) this.onUpdate?.(added);
-    } catch {
-      // soft-fail; xDrip+ may be unreachable when phone is off-network
+      return added;
     } finally {
       this.inFlight = false;
     }

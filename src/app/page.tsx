@@ -21,7 +21,7 @@ import type { Decision } from "@/lib/types";
 
 export default function HomePage() {
   const { profile, bg, bgList, iob, cob, insulinList, carbsList, now } = useLiveData();
-  useXdripPolling(profile);
+  const xdrip = useXdripPolling(profile);
   useAutoSync(profile);
   const [mode] = useMode();
   const {
@@ -103,7 +103,14 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-3 pb-2">
-      <StatTiles bg={bg} iob={iob} cob={cob} />
+      <StatTiles
+        bg={bg}
+        iob={iob}
+        cob={cob}
+        onRefresh={xdrip.configured ? xdrip.refresh : undefined}
+        syncing={xdrip.syncing}
+        refreshNote={xdrip.note}
+      />
       <DailyBasalCard profile={profile} doses={insulinList} />
       <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}

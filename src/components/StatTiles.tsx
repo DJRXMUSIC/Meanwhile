@@ -8,10 +8,17 @@ export function StatTiles({
   bg,
   iob,
   cob,
+  onRefresh,
+  syncing = false,
+  refreshNote,
 }: {
   bg?: BgReading;
   iob: number;
   cob: number;
+  /** Omitted when no xDrip+ URL is configured — nothing to refresh from. */
+  onRefresh?: () => void;
+  syncing?: boolean;
+  refreshNote?: string | null;
 }) {
   const cls = bg ? bgClass(bg.mgdl) : "in-range";
   const color =
@@ -25,7 +32,20 @@ export function StatTiles({
   return (
     <div className="grid grid-cols-3 gap-2 px-3">
       <div className="glass rounded-2xl p-4 col-span-2">
-        <div className="text-xs uppercase tracking-wider text-muted">Blood Glucose</div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-xs uppercase tracking-wider text-muted">Blood Glucose</div>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={syncing}
+              aria-label="Refresh glucose from xDrip+"
+              title="Refresh from xDrip+"
+              className="-mt-1.5 -mr-1.5 size-8 shrink-0 grid place-items-center rounded-full text-muted hover:text-ink active:scale-90 transition disabled:opacity-40"
+            >
+              <span className={`text-base leading-none ${syncing ? "motion-safe:animate-spin" : ""}`}>⟳</span>
+            </button>
+          )}
+        </div>
         <div className="mt-1 flex items-baseline gap-3 flex-wrap">
           <div className={`num text-5xl font-semibold ${color}`}>{bg ? bg.mgdl : "—"}</div>
           <div className="text-2xl text-muted"><TrendArrow trend={bg?.trend} /></div>
@@ -35,6 +55,7 @@ export function StatTiles({
         </div>
         <div className="mt-1 text-xs text-muted">
           mg/dL {ageMin != null ? `· ${ageMin}m ago` : ""} {stale ? "· stale" : ""}
+          {syncing ? " · checking…" : refreshNote ? ` · ${refreshNote}` : ""}
         </div>
       </div>
       <div className="glass rounded-2xl p-4">

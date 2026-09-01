@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getProfile } from "./db";
 import { totalCOB, totalIOB } from "./insulin";
@@ -77,11 +77,78 @@ export function useLiveData() {
   return { profile, bg, bgList, insulinList, carbsList, iob, cob, now };
 }
 
-export function useXdripPolling(profile: Profile | null) {
+export interface XdripControl {
+  /** Fetch now, reporting the outcome. Safe to call while a poll is running. */
+  refresh: () => Promise<void>;
+  syncing: boolean;
+  /** Short outcome of the last manual refresh; clears itself. */
+  note: string | null;
+  configured: boolean;
+}
+
+export function useXdripPolling(profile: Profile | null): XdripControl {
+  const base = profile?.xdrip_url ?? "";
+  const pollerRef = useRef<XdripPoller | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (!profile?.xdrip_url) return;
-    const poller = new XdripPoller(profile.xdrip_url, 60_000);
+    if (!base) return;
+    const poller = new XdripPoller(base, 60_000);
+    pollerRef.current = poller;
     poller.start();
-    return () => poller.stop();
-  }, [profile?.xdrip_url]);
+
+    // A backgrounded PWA has its intervals throttled or suspended outright,
+    // so returning to the app could leave a stale reading on screen until
+    // the next tick happened to fire. Sync on wake instead — the same
+    // pattern lib/useNow, PreBolusTimer and DailyBasalCard already use.
+    const onWake = () => {
+      if (document.visibilityState === "hidden") return;
+      poller.poll();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("pageshow", onWake);
+
+    return () => {
+      poller.stop();
+      pollerRef.current = null;
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("pageshow", onWake);
+    };
+  }, [base]);
+
+  useEffect(() => {
+    return () => {
+      if (noteTimer.current) clearTimeout(noteTimer.current);
+    };
+  }, []);
+
+  const flashNote = useCallback((msg: string) => {
+    setNote(msg);
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => setNote(null), 4000);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const poller = pollerRef.current;
+    if (!poller) {
+      flashNote("No xDrip+ URL set");
+      return;
+    }
+    setSyncing(true);
+    setNote(null);
+    try {
+      const n = await poller.refreshNow();
+      flashNote(n > 0 ? `+${n} reading${n === 1 ? "" : "s"}` : "up to date");
+    } catch (e) {
+      flashNote(`failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSyncing(false);
+    }
+  }, [flashNote]);
+
+  return { refresh, syncing, note, configured: !!base };
 }
