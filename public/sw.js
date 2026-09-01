@@ -1,11 +1,32 @@
 // Lightweight PWA service worker — app-shell + runtime caching.
-const VERSION = "v1";
+//
+// VERSION comes from the ?v= parameter this script is registered with (see
+// ServiceWorkerRegister), which carries the build id. Cache names are
+// derived from it, so a deploy activates a new worker and the activate
+// handler below drops every cache belonging to the previous build. With a
+// hardcoded version the runtime cache outlived deploys and the cache-first
+// branch went on serving stale assets indefinitely.
+const VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
 const SHELL = `meanwhile-shell-${VERSION}`;
 const RUNTIME = `meanwhile-runtime-${VERSION}`;
-const SHELL_URLS = ["/", "/profile", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
+const SHELL_URLS = [
+  "/",
+  "/profile",
+  "/settings",
+  "/manifest.webmanifest",
+  "/icon-192.svg",
+  "/icon-512.svg",
+];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_URLS)).then(() => self.skipWaiting()));
+  // Deliberately no skipWaiting() here: a new worker taking over underneath
+  // a running page can leave it fetching assets the old build doesn't have.
+  // The page prompts instead, and posts SKIP_WAITING when the user accepts.
+  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_URLS)));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
