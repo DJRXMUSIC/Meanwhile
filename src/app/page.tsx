@@ -20,8 +20,8 @@ import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 
 export default function HomePage() {
-  const { profile, bg, bgList, iob, cob, insulinList, carbsList } = useLiveData();
-  useXdripPolling(profile);
+  const { profile, bg, bgList, iob, cob, insulinList, carbsList, now } = useLiveData();
+  const xdrip = useXdripPolling(profile);
   useAutoSync(profile);
   const [mode] = useMode();
   const {
@@ -103,7 +103,14 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-3 pb-2">
-      <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <StatTiles
+        bg={bg}
+        iob={iob}
+        cob={cob}
+        onRefresh={xdrip.configured ? xdrip.refresh : undefined}
+        syncing={xdrip.syncing}
+        refreshNote={xdrip.note}
+      />
       <DailyBasalCard profile={profile} doses={insulinList} />
       <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}
@@ -120,7 +127,9 @@ export default function HomePage() {
       <Chart5h
         readings={bgList}
         doses={insulinList}
+        carbs={carbsList}
         windowHours={windowHours}
+        now={now}
         panMs={panMs}
         onPanChange={setPanMs}
         targetLow={profile?.tir_low ?? 70}

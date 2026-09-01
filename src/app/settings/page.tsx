@@ -11,6 +11,7 @@ import {
   lastSyncStatus as readLastSyncStatus,
   syncOnce,
 } from "@/lib/sync";
+import { NumberField } from "@/components/NumberField";
 import { formatBytes, requestPersistentStorage, type PersistState } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
 
@@ -237,42 +238,24 @@ export default function SettingsPage() {
 
       <Section title="Insulin action">
         <div className="grid grid-cols-3 gap-2">
-          <label className="block">
-            <span className="text-xs text-muted">DIA (h)</span>
-            <input
-              type="number"
-              step={0.5}
-              min={2}
-              max={10}
-              value={profile.dia_hours}
-              onChange={(e) => update({ dia_hours: Math.max(2, Math.min(10, Number(e.target.value) || 6)) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs text-muted">Peak (min)</span>
-            <input
-              type="number"
-              step={5}
-              min={20}
-              max={180}
-              value={profile.peak_min ?? 75}
-              onChange={(e) => update({ peak_min: Math.max(20, Math.min(180, Number(e.target.value) || 75)) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs text-muted">Delay (min)</span>
-            <input
-              type="number"
-              step={5}
-              min={0}
-              max={60}
-              value={profile.delay_min ?? 15}
-              onChange={(e) => update({ delay_min: Math.max(0, Math.min(60, Number(e.target.value) || 15)) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
+          <NumberField
+            label="DIA (h)"
+            step={0.5}
+            value={profile.dia_hours}
+            onCommit={(v) => update({ dia_hours: v })}
+          />
+          <NumberField
+            label="Peak (min)"
+            step={5}
+            value={profile.peak_min ?? 75}
+            onCommit={(v) => update({ peak_min: v })}
+          />
+          <NumberField
+            label="Delay (min)"
+            step={5}
+            value={profile.delay_min ?? 15}
+            onCommit={(v) => update({ delay_min: v })}
+          />
         </div>
         <p className="text-[11px] text-muted mt-2">
           IOB uses the Loop / OpenAPS exponential model with an oref0-style absorption delay. Defaults: DIA <b>6h</b>, peak <b>75 min</b>, delay <b>15 min</b> (insulin stays at 100% IOB during the lag, then decays). Long-acting basal is excluded from this calculation.
@@ -290,18 +273,12 @@ export default function SettingsPage() {
           />
         </label>
         <div className="grid grid-cols-3 gap-2 mt-2">
-          <label className="block">
-            <span className="text-xs text-muted">Units</span>
-            <input
-              type="number"
-              step={0.5}
-              min={0}
-              max={200}
-              value={profile.daily_basal_units ?? 20}
-              onChange={(e) => update({ daily_basal_units: Math.max(0, Math.min(200, Number(e.target.value) || 0)) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
+          <NumberField
+            label="Units"
+            step={0.5}
+            value={profile.daily_basal_units ?? 20}
+            onCommit={(v) => update({ daily_basal_units: v })}
+          />
           <label className="block">
             <span className="text-xs text-muted">Time</span>
             <input
@@ -338,24 +315,16 @@ export default function SettingsPage() {
 
       <Section title="Time-in-range bounds">
         <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="text-xs text-muted">Low (mg/dL)</span>
-            <input
-              type="number"
-              value={profile.tir_low ?? 70}
-              onChange={(e) => update({ tir_low: Math.max(40, Number(e.target.value) || 70) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs text-muted">High (mg/dL)</span>
-            <input
-              type="number"
-              value={profile.tir_high ?? 160}
-              onChange={(e) => update({ tir_high: Math.min(350, Number(e.target.value) || 160) })}
-              className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-            />
-          </label>
+          <NumberField
+            label="Low (mg/dL)"
+            value={profile.tir_low ?? 70}
+            onCommit={(v) => update({ tir_low: v })}
+          />
+          <NumberField
+            label="High (mg/dL)"
+            value={profile.tir_high ?? 160}
+            onCommit={(v) => update({ tir_high: v })}
+          />
         </div>
         <p className="text-[11px] text-muted mt-2">Used in chart band shading and Profile statistics.</p>
       </Section>

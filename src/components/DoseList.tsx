@@ -27,6 +27,7 @@ export function DoseList({ doses }: { doses: InsulinDose[] }) {
         <ul className="divide-y divide-white/5">
           {recent.map((d) => {
             const isBasal = d.kind === "basal";
+            const isCorrection = d.kind === "correction";
             return (
               <li key={d.id ?? d.ts}>
                 <button
@@ -42,6 +43,11 @@ export function DoseList({ doses }: { doses: InsulinDose[] }) {
                       {isBasal && (
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-good/15 text-good ring-1 ring-good/40">
                           basal
+                        </span>
+                      )}
+                      {isCorrection && (
+                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-warn/15 text-warn ring-1 ring-warn/40">
+                          correction
                         </span>
                       )}
                     </span>

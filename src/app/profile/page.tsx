@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { NumberField } from "@/components/NumberField";
 import { db, getProfile, saveProfile } from "@/lib/db";
 import { attachOutcomes, refineProfile, timeInRange, tdd, avgCarbsPerDay } from "@/lib/refine";
 import type { Profile } from "@/lib/types";
@@ -123,11 +124,11 @@ export default function ProfilePage() {
 
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted">Base profile</div>
-        <NumberField label="I:C ratio (1U covers Xg)" value={draft.ic_ratio} onChange={(v) => setDraft({ ...draft, ic_ratio: v })} />
-        <NumberField label="ISF (1U drops X mg/dL)" value={draft.isf} onChange={(v) => setDraft({ ...draft, isf: v })} />
-        <NumberField label="Target BG (mg/dL)" value={draft.target_bg} onChange={(v) => setDraft({ ...draft, target_bg: v })} />
-        <NumberField label="Basal (U/hr)" value={draft.basal_u_per_hr} step={0.05} onChange={(v) => setDraft({ ...draft, basal_u_per_hr: v })} />
-        <NumberField label="DIA (hours)" value={draft.dia_hours} step={0.5} onChange={(v) => setDraft({ ...draft, dia_hours: v })} />
+        <NumberField label="I:C ratio (1U covers Xg)" value={draft.ic_ratio} onCommit={(v) => setDraft({ ...draft, ic_ratio: v })} />
+        <NumberField label="ISF (1U drops X mg/dL)" value={draft.isf} onCommit={(v) => setDraft({ ...draft, isf: v })} />
+        <NumberField label="Target BG (mg/dL)" value={draft.target_bg} onCommit={(v) => setDraft({ ...draft, target_bg: v })} />
+        <NumberField label="Basal (U/hr)" value={draft.basal_u_per_hr} step={0.05} onCommit={(v) => setDraft({ ...draft, basal_u_per_hr: v })} />
+        <NumberField label="DIA (hours)" value={draft.dia_hours} step={0.5} onCommit={(v) => setDraft({ ...draft, dia_hours: v })} />
         <button
           onClick={save}
           disabled={saving}
@@ -165,17 +166,3 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function NumberField({ label, value, onChange, step = 1 }: { label: string; value: number; onChange: (v: number) => void; step?: number }) {
-  return (
-    <label className="block">
-      <span className="text-xs text-muted">{label}</span>
-      <input
-        type="number"
-        value={value}
-        step={step}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60"
-      />
-    </label>
-  );
-}
