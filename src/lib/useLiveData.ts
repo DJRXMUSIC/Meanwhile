@@ -57,11 +57,20 @@ export function useLiveData() {
   const dia = profile?.dia_hours ?? 6;
   const peak = profile?.peak_min ?? 75;
   const delay = profile?.delay_min ?? 15;
+  // `now` is the *dependency* — it is what makes these recompute as time
+  // passes — but the evaluation instant is the real clock. A quantized now
+  // can sit behind real time between ticks, and both totalIOB and totalCOB
+  // discard rows timestamped after the evaluation instant, so a dose or
+  // meal logged a moment ago would be dropped from its own tile. Logging a
+  // row also changes the array identity, so this recomputes immediately.
   const iob = useMemo(
-    () => totalIOB(insulinList, now, dia, peak, delay),
+    () => totalIOB(insulinList, Math.max(now, Date.now()), dia, peak, delay),
     [insulinList, now, dia, peak, delay]
   );
-  const cob = useMemo(() => totalCOB(carbsList, now), [carbsList, now]);
+  const cob = useMemo(
+    () => totalCOB(carbsList, Math.max(now, Date.now())),
+    [carbsList, now]
+  );
 
   // `now` is returned so consumers (the chart, in particular) share this
   // clock instead of starting their own.

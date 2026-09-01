@@ -47,22 +47,33 @@ function stop() {
   window.removeEventListener("pageshow", fire);
 }
 
-// Floor a timestamp to a granularity. Exported because callers derive
-// coarser values from a fine-grained `now` (e.g. a 5-minute query window
-// off a 30-second clock) and need the same flooring.
+// Floor a timestamp to a granularity. Exported for callers deriving a
+// coarser value from `now` where an *earlier* boundary is what's wanted —
+// the lower edge of a database query window, for instance.
 export function bucket(ts: number, granularityMs: number): number {
   return Math.floor(ts / granularityMs) * granularityMs;
 }
 
-// Returns the current time, floored to `granularityMs`, advancing on the
+// Ceiling, not floor. A quantized clock that rounded down would sit up to
+// `granularityMs` in the past, and everything consuming it treats data
+// timestamped after "now" as invalid: totalIOB and totalCOB skip rows with
+// a negative elapsed time, and the chart clips anything past its right
+// edge. A dose logged this instant would then be missing from the IOB tile
+// and off the chart until the clock caught up. Rounding up keeps `now` at
+// or ahead of the true time, so freshly logged rows always count.
+function ceilTo(ts: number, granularityMs: number): number {
+  return Math.ceil(ts / granularityMs) * granularityMs;
+}
+
+// Returns the current time, rounded up to `granularityMs`, advancing on the
 // shared tick. Stable across renders within a bucket, so it is safe to use
 // as a memo or query dependency.
 export function useNow(granularityMs: number = TICK_MS): number {
-  const [now, setNow] = useState(() => bucket(Date.now(), granularityMs));
+  const [now, setNow] = useState(() => ceilTo(Date.now(), granularityMs));
 
   useEffect(() => {
     const update = () => {
-      const next = bucket(Date.now(), granularityMs);
+      const next = ceilTo(Date.now(), granularityMs);
       setNow((prev) => (prev === next ? prev : next));
     };
     // Catch up immediately: on mount, and whenever the granularity changes.

@@ -167,6 +167,10 @@ export async function logCarbs(c: Omit<CarbEntry, "id">): Promise<number> {
   return db().carbs.add(c as CarbEntry);
 }
 
+export async function deleteCarbs(id: number): Promise<void> {
+  await db().carbs.delete(id);
+}
+
 export async function logDecision(d: Omit<Decision, "id">): Promise<number> {
   return db().decisions.add(d as Decision);
 }

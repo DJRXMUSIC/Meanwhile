@@ -103,7 +103,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-3 pb-2">
-      <StatTiles bg={bg} iob={iob} cob={cob} showCob={mode === "decide"} />
+      <StatTiles bg={bg} iob={iob} cob={cob} />
       <DailyBasalCard profile={profile} doses={insulinList} />
       <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}
@@ -120,6 +120,7 @@ export default function HomePage() {
       <Chart5h
         readings={bgList}
         doses={insulinList}
+        carbs={carbsList}
         windowHours={windowHours}
         now={now}
         panMs={panMs}

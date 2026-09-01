@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { deleteInsulin, updateInsulin } from "@/lib/db";
 import type { InsulinDose } from "@/lib/types";
+import { KindChips } from "./LearnPanel";
 
 export function EditDoseSheet({
   dose,
@@ -13,8 +14,15 @@ export function EditDoseSheet({
 }) {
   const [units, setUnits] = useState(dose.units);
   const [tsLocal, setTsLocal] = useState(toLocalInput(dose.ts));
+  const [kind, setKind] = useState<"bolus" | "correction">(
+    dose.kind === "correction" ? "correction" : "bolus"
+  );
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Long-acting basal isn't a meal/correction distinction, so the chips
+  // only apply to rapid-acting rows.
+  const isBasal = dose.kind === "basal";
 
   const save = async () => {
     if (!dose.id) return;
@@ -25,6 +33,7 @@ export function EditDoseSheet({
         units: Math.max(0, units),
         ts: newTs,
         backdated_min: Math.max(0, Math.round((Date.now() - newTs) / 60_000)),
+        ...(isBasal ? {} : { kind }),
       };
       await updateInsulin(dose.id, patch);
       onClose();
@@ -87,6 +96,13 @@ export function EditDoseSheet({
             >+</button>
           </div>
         </div>
+
+        {!isBasal && (
+          <div className="mt-5">
+            <div className="text-xs uppercase tracking-wider text-muted mb-1">Kind</div>
+            <KindChips value={kind} onChange={setKind} />
+          </div>
+        )}
 
         <div className="mt-5">
           <div className="text-xs uppercase tracking-wider text-muted mb-1">Time</div>

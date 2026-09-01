@@ -8,12 +8,10 @@ export function StatTiles({
   bg,
   iob,
   cob,
-  showCob = true,
 }: {
   bg?: BgReading;
   iob: number;
   cob: number;
-  showCob?: boolean;
 }) {
   const cls = bg ? bgClass(bg.mgdl) : "in-range";
   const color =
@@ -42,12 +40,8 @@ export function StatTiles({
       <div className="glass rounded-2xl p-4">
         <div className="text-xs uppercase tracking-wider text-muted">IOB</div>
         <div className="num text-3xl font-semibold mt-1">{iob.toFixed(2)}<span className="text-base text-muted ml-1">U</span></div>
-        {showCob && (
-          <>
-            <div className="mt-2 text-xs uppercase tracking-wider text-muted">COB</div>
-            <div className="num text-2xl font-medium">{cob.toFixed(0)}<span className="text-sm text-muted ml-1">g</span></div>
-          </>
-        )}
+        <div className="mt-2 text-xs uppercase tracking-wider text-muted">COB</div>
+        <div className="num text-2xl font-medium">{cob.toFixed(0)}<span className="text-sm text-muted ml-1">g</span></div>
       </div>
     </div>
   );
