@@ -35,6 +35,14 @@ class MeanwhileDB extends Dexie {
     this.version(2).stores({
       carbs: null,
     });
+    // v3 collapses the meal/correction split: every rapid-acting row is
+    // just a bolus now, so legacy `correction` rows are rewritten in
+    // place rather than left as a kind nothing in the app can produce.
+    this.version(3).upgrade((tx) =>
+      tx.table("insulin").toCollection().modify((d: InsulinDose) => {
+        if ((d.kind as string) === "correction") d.kind = "bolus";
+      })
+    );
   }
 }
 
