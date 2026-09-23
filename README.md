@@ -1,6 +1,6 @@
 # Meanwhile — AI-Powered T1D Harness
 
-A lightning-fast PWA decision-support harness for Type 1 Diabetes. The home screen forces a single interaction: **what is happening now?** Voice or type. The AI extracts food, considers BG/IOB/COB, and returns a clear *Next Best Action* with transparent math.
+A lightning-fast PWA decision-support harness for Type 1 Diabetes. The home screen forces a single interaction: **what is happening now?** Voice or type. The AI considers BG/trend/IOB and returns a clear *Next Best Action* with transparent math.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ A lightning-fast PWA decision-support harness for Type 1 Diabetes. The home scre
 src/
   app/
     layout.tsx              ← global shell
-    page.tsx                ← Home: BG/IOB/COB tiles + mic/text + DecisionCard
+    page.tsx                ← Home: BG/IOB tiles + mic/text + DecisionCard
     profile/page.tsx        ← Ratios, TIR, AI refinement, history
     settings/page.tsx       ← xDrip URL, AI provider, sync, manual BG, import/export
     api/ai/decide/route.ts  ← Server: provider abstraction + JSON tool call
@@ -27,12 +27,12 @@ src/
   lib/
     db.ts                   ← Dexie schema + helpers
     types.ts                ← Domain types + DEFAULT_PROFILE
-    insulin.ts              ← IOB (bilinear), COB (linear w/ fat/protein extension), suggestDose
+    insulin.ts              ← IOB (exponential, Loop/oref0), suggestDose
     xdrip.ts                ← Local poller + manualBg
-    refine.ts               ← Outcome attachment + I:C/ISF nudge from BG@2h
+    refine.ts               ← Outcome attachment + ISF nudge from BG@2h
     sync.ts                 ← Bundle build / push / pull / export / import
     speech.ts               ← Web Speech API wrapper
-    useLiveData.ts          ← React hooks: live BG/IOB/COB, xDrip polling
+    useLiveData.ts          ← React hooks: live BG/IOB, xDrip polling
     ai/
       prompt.ts             ← System + user prompt builders
       providers.ts          ← Anthropic + OpenAI + auto-fallback
@@ -48,7 +48,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Visit http://localhost:3000. The profile is seeded with **I:C 1:10**, **ISF 1:40**, **target 110 mg/dL**.
+Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **target 110 mg/dL**.
 
 ### xDrip+ setup
 
@@ -59,10 +59,10 @@ Visit http://localhost:3000. The profile is seeded with **I:C 1:10**, **ISF 1:40
 
 ## Insulin math
 
-`dose = (carbs ÷ I:C) + ((BG − target) ÷ ISF) − IOB`
+`dose = ((BG − target) ÷ ISF) − IOB`
 
-- **IOB** uses a bilinear curve over DIA (default 4 h, peak at 30% of DIA).
-- **COB** is linear over a 180-min window, extended by fat (+0.6 min/g) and protein (+0.4 min/g).
+- Corrections only — the app does not track carbohydrates, so there is no meal component and no I:C ratio.
+- **IOB** uses the Loop / oref0 exponential curve (DIA 6 h, peak 75 min, 15 min absorption delay).
 - The full substituted formula is shown in every Decision card.
 
 ## Safety

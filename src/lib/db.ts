@@ -3,7 +3,6 @@
 import Dexie, { type Table } from "dexie";
 import {
   type BgReading,
-  type CarbEntry,
   type ContextEntry,
   type Decision,
   type InsulinDose,
@@ -15,7 +14,6 @@ import {
 class MeanwhileDB extends Dexie {
   bg!: Table<BgReading, number>;
   insulin!: Table<InsulinDose, number>;
-  carbs!: Table<CarbEntry, number>;
   decisions!: Table<Decision, number>;
   context!: Table<ContextEntry, number>;
   profile!: Table<Profile, string>;
@@ -29,6 +27,13 @@ class MeanwhileDB extends Dexie {
       decisions: "++id, ts",
       context: "++id, ts, kind",
       profile: "id",
+    });
+    // v2 drops the carb store outright — carb tracking was removed from
+    // the app, and `null` is Dexie's way of deleting an object store on
+    // upgrade. Existing installs shed the table (and its rows) on open;
+    // fresh ones replay both versions and never materialise it.
+    this.version(2).stores({
+      carbs: null,
     });
   }
 }
@@ -137,11 +142,6 @@ export async function recentInsulin(sinceMin = 360): Promise<InsulinDose[]> {
   return db().insulin.where("ts").above(cutoff).sortBy("ts");
 }
 
-export async function recentCarbs(sinceMin = 360): Promise<CarbEntry[]> {
-  const cutoff = Date.now() - sinceMin * 60_000;
-  return db().carbs.where("ts").above(cutoff).sortBy("ts");
-}
-
 export async function recentDecisions(limit = 50): Promise<Decision[]> {
   const all = await db().decisions.orderBy("ts").reverse().limit(limit).toArray();
   return all;
@@ -161,14 +161,6 @@ export async function updateInsulin(id: number, patch: Partial<InsulinDose>): Pr
 
 export async function deleteInsulin(id: number): Promise<void> {
   await db().insulin.delete(id);
-}
-
-export async function logCarbs(c: Omit<CarbEntry, "id">): Promise<number> {
-  return db().carbs.add(c as CarbEntry);
-}
-
-export async function deleteCarbs(id: number): Promise<void> {
-  await db().carbs.delete(id);
 }
 
 export async function logDecision(d: Omit<Decision, "id">): Promise<number> {

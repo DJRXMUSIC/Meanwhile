@@ -56,10 +56,10 @@ export function bucket(ts: number, granularityMs: number): number {
 
 // Ceiling, not floor. A quantized clock that rounded down would sit up to
 // `granularityMs` in the past, and everything consuming it treats data
-// timestamped after "now" as invalid: totalIOB and totalCOB skip rows with
-// a negative elapsed time, and the chart clips anything past its right
-// edge. A dose logged this instant would then be missing from the IOB tile
-// and off the chart until the clock caught up. Rounding up keeps `now` at
+// timestamped after "now" as invalid: totalIOB skips rows with a negative
+// elapsed time, and the chart clips anything past its right edge. A dose
+// logged this instant would then be missing from the IOB tile and off the
+// chart until the clock caught up. Rounding up keeps `now` at
 // or ahead of the true time, so freshly logged rows always count.
 function ceilTo(ts: number, granularityMs: number): number {
   return Math.ceil(ts / granularityMs) * granularityMs;

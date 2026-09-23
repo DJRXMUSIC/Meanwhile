@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BgReading, CarbEntry, InsulinDose } from "@/lib/types";
+import type { BgReading, InsulinDose } from "@/lib/types";
 
 // Five-zone bolus chart with a piecewise-linear y-axis:
 //   • 40–70   → 10% of plot height  (compressed; we rarely live there)
@@ -62,16 +62,9 @@ function buildOverlay(
     .sort((a, b) => a.ts - b.ts);
 }
 
-// Carb markers sit on their own rail just above the x-axis rather than on
-// the BG trace: they are frequently simultaneous with a bolus, and stacking
-// both on the line made the labels collide.
-const CARB_RAIL_Y = pad.t + plotH - 16;
-const CARB_COLOR = "#ffd166";
-
 interface Props {
   readings: BgReading[];
   doses: InsulinDose[];
-  carbs: CarbEntry[];
   windowHours: WindowHours;
   now: number;                   // shared clock — see lib/useNow
   panMs: number;                 // how far back from "now" the right edge sits
@@ -85,7 +78,6 @@ interface Props {
 function Chart5hImpl({
   readings,
   doses,
-  carbs,
   windowHours,
   now,
   panMs,
@@ -107,9 +99,8 @@ function Chart5hImpl({
     let m = 0;
     for (const r of readings) if (r.ts > m) m = r.ts;
     for (const d of doses) if (d.ts > m) m = d.ts;
-    for (const c of carbs) if (c.ts > m) m = c.ts;
     return m;
-  }, [readings, doses, carbs]);
+  }, [readings, doses]);
 
   const maxT = Math.max(now, latestTs) - panMs;
   const minT = maxT - windowHours * 3600_000;
@@ -134,11 +125,6 @@ function Chart5hImpl({
         .sort((a, b) => a.ts - b.ts),
     [doses, minT, maxT]
   );
-  const carbsInWin = useMemo(
-    () => carbs.filter((c) => c.ts >= minT && c.ts <= maxT).sort((a, b) => a.ts - b.ts),
-    [carbs, minT, maxT]
-  );
-
   // BG dots. The line is always drawn from every reading; the circles are
   // thinned on wide windows, where at 5-minute CGM cadence they would
   // otherwise put ~288 nodes in the DOM to draw a solid smear.
@@ -479,21 +465,6 @@ function Chart5hImpl({
             />
           )}
 
-          {/* Carb markers — amber ticks on their own rail above the x-axis. */}
-          {carbsInWin.map((c) => (
-            <rect
-              key={`cm-${c.id ?? c.ts}-${c.carbs_g}`}
-              x={xOf(c.ts) - 3}
-              y={CARB_RAIL_Y}
-              width={6}
-              height={12}
-              rx={2}
-              fill={CARB_COLOR}
-              stroke="#0a0a0c"
-              strokeWidth={1.5}
-            />
-          ))}
-
           {/* Dose markers (dot only — labels are HTML overlay below for crisp text).
               Bolus = orange circle; basal = green diamond. */}
           {dosesInWin.map((d) => {
@@ -591,10 +562,6 @@ function Chart5hImpl({
               <span className="block w-2.5 h-2.5 ring-1 ring-black rotate-45" style={{ background: "#3ddc97" }} />
               basal
             </span>
-            <span className="flex items-center gap-1">
-              <span className="block w-1.5 h-3 rounded-sm ring-1 ring-black" style={{ background: CARB_COLOR }} />
-              carbs
-            </span>
             {overlay24 && (
               <span className="flex items-center gap-1 opacity-90">
                 <span className="block w-4 h-[2px]" style={{ background: "repeating-linear-gradient(90deg, #5cd0ff 0 6px, transparent 6px 10px)" }} />
@@ -608,35 +575,6 @@ function Chart5hImpl({
               </span>
             )}
           </div>
-
-          {/* Carb gram labels, sitting just above their rail ticks */}
-          {carbsInWin.map((c) => {
-            const pctX = (xOf(c.ts) / view.w) * 100;
-            const align: "start" | "end" | "center" =
-              pctX < 8 ? "start" : pctX > 92 ? "end" : "center";
-            const transform =
-              align === "start" ? "translate(0, -100%)" :
-              align === "end"   ? "translate(-100%, -100%)" :
-                                  "translate(-50%, -100%)";
-            return (
-              <div
-                key={`cl-${c.id ?? c.ts}-${c.carbs_g}`}
-                className="absolute pb-1"
-                style={{
-                  left: `${pctX}%`,
-                  top: `${(CARB_RAIL_Y / view.h) * 100}%`,
-                  transform,
-                }}
-              >
-                <div
-                  className="num leading-none px-1.5 py-0.5 rounded bg-black/85 text-[11px] font-bold whitespace-nowrap"
-                  style={{ color: CARB_COLOR, boxShadow: `0 0 0 1px ${CARB_COLOR} inset` }}
-                >
-                  {c.carbs_g}g
-                </div>
-              </div>
-            );
-          })}
 
           {/* Bolus / basal unit labels above their markers */}
           {dosesInWin.map((d) => {
@@ -681,7 +619,7 @@ function Chart5hImpl({
           })}
         </div>
       </div>
-      {bgInWin.length === 0 && dosesInWin.length === 0 && carbsInWin.length === 0 && (
+      {bgInWin.length === 0 && dosesInWin.length === 0 && (
         <div className="text-center text-xs text-muted -mt-44 mb-32">no data in this window</div>
       )}
     </div>

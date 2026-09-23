@@ -20,7 +20,7 @@ import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 
 export default function HomePage() {
-  const { profile, bg, bgList, iob, cob, insulinList, carbsList, now } = useLiveData();
+  const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
   const xdrip = useXdripPolling(profile);
   useAutoSync(profile);
   const [mode] = useMode();
@@ -51,9 +51,8 @@ export default function HomePage() {
         bg_trend: bg?.trend ?? null,
         bg_delta: bg?.delta ?? null,
         bg_history: bgList.map((r) => ({ ts: r.ts, mgdl: r.mgdl })),
-        iob, cob,
+        iob,
         recent_doses: insulinList.map((d) => ({ ts: d.ts, units: d.units, kind: d.kind })),
-        recent_carbs: carbsList.map((c) => ({ ts: c.ts, g: c.carbs_g, desc: c.description })),
       };
       const res = await fetch("/api/ai/decide", {
         method: "POST",
@@ -70,10 +69,11 @@ export default function HomePage() {
       }
       const { decision: d, provider, model } = await res.json();
 
-      const extractedCarbs = d.suggested_carbs_g ?? d.extracted?.carbs_g ?? 0;
+      // When the model declines to put a number on it, fall back to the
+      // local correction math so the card still shows transparent working.
       let math: Record<string, number | string> = {};
-      if (bg?.mgdl != null && (d.suggested_units == null) && extractedCarbs > 0) {
-        const calc = suggestDose({ bg: bg.mgdl, carbs_g: extractedCarbs, iob, profile });
+      if (bg?.mgdl != null && d.suggested_units == null) {
+        const calc = suggestDose({ bg: bg.mgdl, iob, profile });
         math = { ...calc, computed_locally: 1 };
       }
 
@@ -82,11 +82,9 @@ export default function HomePage() {
         user_input: text,
         bg_at_time: bg?.mgdl,
         iob_at_time: iob,
-        cob_at_time: cob,
         headline: d.headline,
         rationale: d.rationale,
         suggested_units: d.suggested_units ?? undefined,
-        suggested_carbs_g: d.suggested_carbs_g ?? d.extracted?.carbs_g ?? undefined,
         extracted: d.extracted ?? {},
         math,
         provider,
@@ -106,7 +104,6 @@ export default function HomePage() {
       <StatTiles
         bg={bg}
         iob={iob}
-        cob={cob}
         onRefresh={xdrip.configured ? xdrip.refresh : undefined}
         syncing={xdrip.syncing}
         refreshNote={xdrip.note}
@@ -127,7 +124,6 @@ export default function HomePage() {
       <Chart5h
         readings={bgList}
         doses={insulinList}
-        carbs={carbsList}
         windowHours={windowHours}
         now={now}
         panMs={panMs}
