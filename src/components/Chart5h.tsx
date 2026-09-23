@@ -120,7 +120,6 @@ function Chart5hImpl({
   const dosesInWin = useMemo(
     () =>
       doses
-        .filter((d) => d.kind === "bolus" || d.kind === "correction" || d.kind === "basal")
         .filter((d) => d.ts >= minT && d.ts <= maxT)
         .sort((a, b) => a.ts - b.ts),
     [doses, minT, maxT]

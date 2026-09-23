@@ -18,7 +18,7 @@ export interface InsulinDose {
   id?: number;
   ts: number;            // administration time (may be backdated)
   units: number;
-  kind: "bolus" | "correction" | "basal";
+  kind: "bolus" | "basal";
   note?: string;
   // analytics fields — non-breaking, optional on legacy rows.
   entered_at?: number;   // wall-clock time the user actually tapped log

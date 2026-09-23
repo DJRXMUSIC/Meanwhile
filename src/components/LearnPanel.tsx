@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteInsulin, logInsulin, updateInsulin } from "@/lib/db";
+import { deleteInsulin, logInsulin } from "@/lib/db";
 import type { InsulinDose } from "@/lib/types";
+import { EditDoseSheet } from "./EditDoseSheet";
 
 const QUICK_UNITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -20,6 +21,7 @@ export function LearnPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [openDose, setOpenDose] = useState(false);
+  const [editing, setEditing] = useState<InsulinDose | null>(null);
 
   // Keyed by toast id rather than by message text: two identical messages
   // used to cancel each other's timers, so the second toast could vanish
@@ -46,12 +48,26 @@ export function LearnPanel() {
     };
   }, []);
 
+  // Correcting the amount is the other thing you want in the seconds after
+  // a mis-tap, so the toast carries it next to Undo: same window, same
+  // place, one tap into the row that was just written.
+  const editAction = useCallback(
+    (dose: InsulinDose): ToastAction => ({
+      label: "Edit",
+      run: async () => {
+        setToast(null);
+        setEditing(dose);
+      },
+    }),
+    []
+  );
+
   const quickLog = async (units: number) => {
     const key = `u${units}`;
     setBusy(key);
     try {
       const now = Date.now();
-      const id = await logInsulin({
+      const row: Omit<InsulinDose, "id"> = {
         ts: now,
         units,
         kind: "bolus",
@@ -59,7 +75,8 @@ export function LearnPanel() {
         entered_at: now,
         backdated_min: 0,
         note: `quick ${units}U`,
-      });
+      };
+      const id = await logInsulin(row);
 
       const prev = lastQuickRef.current;
       const duplicate = !!prev && prev.units === units && now - prev.at < DUPLICATE_MS;
@@ -68,22 +85,13 @@ export function LearnPanel() {
       show(
         duplicate ? `Logged ${units}U twice` : `Logged ${units}U`,
         [
+          editAction({ ...row, id }),
           {
             label: duplicate ? "Undo one" : "Undo",
             run: async () => {
               await deleteInsulin(id);
               lastQuickRef.current = null;
               show(`Removed ${units}U`);
-            },
-          },
-          {
-            // Quick-log defaults to a meal bolus so the one-tap path stays
-            // one tap; this makes the correction case reachable without a
-            // trip to the dose list.
-            label: "Correction",
-            run: async () => {
-              await updateInsulin(id, { kind: "correction" });
-              show(`${units}U marked as correction`);
             },
           },
         ],
@@ -152,8 +160,22 @@ export function LearnPanel() {
       {openDose && (
         <CustomDoseSheet
           onClose={() => setOpenDose(false)}
-          onLogged={(msg, undo) => show(msg, [{ label: "Undo", run: undo }])}
+          onLogged={(msg, dose) =>
+            show(msg, [
+              editAction(dose),
+              {
+                label: "Undo",
+                run: async () => {
+                  if (dose.id != null) await deleteInsulin(dose.id);
+                  show(`Removed ${dose.units}U`);
+                },
+              },
+            ])
+          }
         />
+      )}
+      {editing && (
+        <EditDoseSheet dose={editing} onClose={() => setEditing(null)} />
       )}
     </div>
   );
@@ -251,10 +273,9 @@ function CustomDoseSheet({
   onLogged,
 }: {
   onClose: () => void;
-  onLogged: (msg: string, undo: () => Promise<void>) => void;
+  onLogged: (msg: string, dose: InsulinDose) => void;
 }) {
   const [unitsText, setUnitsText] = useState("");
-  const [kind, setKind] = useState<Extract<InsulinDose["kind"], "bolus" | "correction">>("bolus");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const when = useWhen();
@@ -270,7 +291,10 @@ function CustomDoseSheet({
   }, []);
 
   const units = parseFloat(unitsText);
-  const validUnits = Number.isFinite(units) && units > 0;
+  // Doses are whole units — a fraction is refused rather than rounded, so
+  // the number logged is always the number that was typed.
+  const validUnits = Number.isInteger(units) && units > 0;
+  const fractional = Number.isFinite(units) && !Number.isInteger(units);
 
   const submit = async () => {
     if (!validUnits) return;
@@ -278,20 +302,19 @@ function CustomDoseSheet({
     try {
       const { ts, effectiveOffset } = when;
       const enteredAt = Date.now();
-      const id = await logInsulin({
+      const row: Omit<InsulinDose, "id"> = {
         ts,
         units,
-        kind,
+        kind: "bolus",
         source: "custom",
         entered_at: enteredAt,
         backdated_min: effectiveOffset,
         note: effectiveOffset > 0 ? `backdated ${effectiveOffset}m` : undefined,
-      });
+      };
+      const id = await logInsulin(row);
       onLogged(
-        `Logged ${units}U ${kind === "correction" ? "correction" : "bolus"} · ${
-          effectiveOffset === 0 ? "now" : `${effectiveOffset}m ago`
-        }`,
-        async () => { await deleteInsulin(id); }
+        `Logged ${units}U · ${effectiveOffset === 0 ? "now" : `${effectiveOffset}m ago`}`,
+        { ...row, id }
       );
       onClose();
     } finally {
@@ -308,20 +331,18 @@ function CustomDoseSheet({
         <input
           ref={inputRef}
           type="number"
-          inputMode="decimal"
-          step="0.5"
+          inputMode="numeric"
+          step="1"
           min="0"
-          placeholder="0.0"
+          placeholder="0"
           value={unitsText}
           onChange={(e) => setUnitsText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
           className="num w-full h-14 text-center rounded-xl bg-surface2 text-3xl font-semibold outline-none ring-1 ring-white/5 focus:ring-accent/60"
         />
-      </div>
-
-      <div className="mt-4">
-        <div className="text-xs uppercase tracking-wider text-muted mb-1">Kind</div>
-        <KindChips value={kind} onChange={setKind} />
+        {fractional && (
+          <p className="text-[11px] text-warn mt-1.5">Whole units only.</p>
+        )}
       </div>
 
       <WhenPicker when={when} />
@@ -341,34 +362,6 @@ function CustomDoseSheet({
 }
 
 // ---- Bits ---------------------------------------------------------------
-
-export function KindChips({
-  value,
-  onChange,
-}: {
-  value: "bolus" | "correction";
-  onChange: (k: "bolus" | "correction") => void;
-}) {
-  const chip = (k: "bolus" | "correction", label: string) => (
-    <button
-      key={k}
-      onClick={() => onChange(k)}
-      className={`h-11 rounded-xl text-sm font-semibold transition ${
-        value === k
-          ? "bg-accent text-white"
-          : "bg-surface2/60 ring-1 ring-white/5 text-ink hover:bg-surface2"
-      }`}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div className="grid grid-cols-2 gap-1.5">
-      {chip("bolus", "Meal")}
-      {chip("correction", "Correction")}
-    </div>
-  );
-}
 
 function TimeBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (

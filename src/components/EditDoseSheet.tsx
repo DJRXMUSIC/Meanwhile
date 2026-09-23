@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { deleteInsulin, updateInsulin } from "@/lib/db";
 import type { InsulinDose } from "@/lib/types";
-import { KindChips } from "./LearnPanel";
 
 export function EditDoseSheet({
   dose,
@@ -14,15 +13,13 @@ export function EditDoseSheet({
 }) {
   const [units, setUnits] = useState(dose.units);
   const [tsLocal, setTsLocal] = useState(toLocalInput(dose.ts));
-  const [kind, setKind] = useState<"bolus" | "correction">(
-    dose.kind === "correction" ? "correction" : "bolus"
-  );
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Long-acting basal isn't a meal/correction distinction, so the chips
-  // only apply to rapid-acting rows.
-  const isBasal = dose.kind === "basal";
+  // Doses are whole units. A legacy row may still hold a fraction, so
+  // rather than rounding it behind the user's back the save is blocked
+  // until they pick a whole number — the steppers snap to one.
+  const wholeUnits = Number.isInteger(units);
 
   const save = async () => {
     if (!dose.id) return;
@@ -33,8 +30,11 @@ export function EditDoseSheet({
         units: Math.max(0, units),
         ts: newTs,
         backdated_min: Math.max(0, Math.round((Date.now() - newTs) / 60_000)),
-        ...(isBasal ? {} : { kind }),
       };
+      // Every note the app writes itself records the original entry
+      // ("quick 4U"), so it goes stale the moment the amount changes and
+      // would sit under the new number contradicting it.
+      if (units !== dose.units) patch.note = undefined;
       await updateInsulin(dose.id, patch);
       onClose();
     } finally {
@@ -78,31 +78,27 @@ export function EditDoseSheet({
           <div className="text-xs uppercase tracking-wider text-muted mb-1">Units</div>
           <div className="flex items-center gap-2 min-w-0">
             <button
-              onClick={() => setUnits((u) => Math.max(0, +(u - 0.5).toFixed(1)))}
+              onClick={() => setUnits((u) => Math.max(0, Math.round(u) - 1))}
               className="size-12 shrink-0 rounded-xl bg-surface2 text-xl"
             >−</button>
             <input
               type="number"
-              inputMode="decimal"
-              step="0.5"
+              inputMode="numeric"
+              step="1"
               min="0"
               value={units}
               onChange={(e) => setUnits(Math.max(0, Number(e.target.value) || 0))}
               className="num min-w-0 flex-1 h-12 text-center rounded-xl bg-surface2 text-2xl font-semibold outline-none ring-1 ring-white/5 focus:ring-accent/60"
             />
             <button
-              onClick={() => setUnits((u) => +(u + 0.5).toFixed(1))}
+              onClick={() => setUnits((u) => Math.round(u) + 1)}
               className="size-12 shrink-0 rounded-xl bg-surface2 text-xl"
             >+</button>
           </div>
+          {!wholeUnits && (
+            <p className="text-[11px] text-warn mt-1.5">Whole units only — use − or + to round.</p>
+          )}
         </div>
-
-        {!isBasal && (
-          <div className="mt-5">
-            <div className="text-xs uppercase tracking-wider text-muted mb-1">Kind</div>
-            <KindChips value={kind} onChange={setKind} />
-          </div>
-        )}
 
         <div className="mt-5">
           <div className="text-xs uppercase tracking-wider text-muted mb-1">Time</div>
@@ -117,7 +113,7 @@ export function EditDoseSheet({
         <div className="mt-5 grid grid-cols-2 gap-2">
           <button
             onClick={save}
-            disabled={saving || units < 0}
+            disabled={saving || units < 0 || !wholeUnits}
             className="col-span-2 rounded-xl bg-accent text-white px-3 py-3 text-sm font-semibold disabled:opacity-40"
           >
             {saving ? "Saving…" : `Save ${units}U`}
