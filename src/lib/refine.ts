@@ -1,7 +1,7 @@
 "use client";
 
 import type { BgReading, Decision, InsulinDose, Profile } from "./types";
-import { totalIOB } from "./insulin";
+import { isRapidActing, totalIOB } from "./insulin";
 
 // Profile refinement: scan completed decisions where we have outcome BG values
 // and estimate an adjustment to ISF based on observed deviation from target.
@@ -140,20 +140,20 @@ export function avgBolusWindow(insulin: InsulinDose[], windowMs: number): number
   const cutoff = Date.now() - windowMs;
   const vals = insulin
     .filter((d) => d.ts >= cutoff)
-    .filter((d) => d.kind === "bolus" || d.kind === "correction")
+    .filter(isRapidActing)
     .map((d) => d.units);
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-// Average total daily bolus over the last N days. Sums bolus + correction
-// units in the window and divides by the number of days, giving "average
-// daily insulin from meal/correction boluses".
+// Average total daily bolus over the last N days. Sums rapid-acting units
+// in the window and divides by the number of days, giving "average daily
+// insulin from boluses".
 export function avgDailyBolus(insulin: InsulinDose[], days = 3): { units: number; n: number } | null {
   const cutoff = Date.now() - days * 24 * 3600_000;
   const subset = insulin
     .filter((d) => d.ts >= cutoff)
-    .filter((d) => d.kind === "bolus" || d.kind === "correction");
+    .filter(isRapidActing);
   if (!subset.length) return null;
   const total = subset.reduce((a, d) => a + d.units, 0);
   return { units: total / days, n: subset.length };
@@ -166,7 +166,7 @@ export function totalBolusToday(insulin: InsulinDose[]): { units: number; n: num
   const cutoff = start.getTime();
   const subset = insulin
     .filter((d) => d.ts >= cutoff)
-    .filter((d) => d.kind === "bolus" || d.kind === "correction");
+    .filter(isRapidActing);
   return {
     units: subset.reduce((a, d) => a + d.units, 0),
     n: subset.length,

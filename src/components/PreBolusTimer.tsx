@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { InsulinDose } from "@/lib/types";
+import { isRapidActing } from "@/lib/insulin";
 import { useNow } from "@/lib/useNow";
 
 const WINDOW_MIN = 45;
@@ -22,13 +23,13 @@ const WINDOW_MIN = 45;
 export function PreBolusTimer({ doses }: { doses: InsulinDose[] }) {
   const now = useNow(15_000);
 
-  // Only meal/correction bolus triggers a pre-bolus timer — once-daily
+  // Only a rapid-acting bolus starts a pre-bolus timer — once-daily
   // long-acting basal isn't relevant to meal timing.
   const lastDose = useMemo(() => {
     let best: InsulinDose | null = null;
     for (const d of doses) {
       if (!d || typeof d.ts !== "number") continue;
-      if (d.kind !== "bolus" && d.kind !== "correction") continue;
+      if (!isRapidActing(d)) continue;
       if (!best || d.ts > best.ts) best = d;
     }
     return best;

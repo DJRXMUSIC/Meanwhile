@@ -38,9 +38,17 @@ export function iobFraction(
   return Math.max(0, Math.min(1, iob));
 }
 
-// Sum bolus/correction IOB only. Long-acting basal is intentionally
-// excluded because its kinetics are entirely different (24h+ depot,
-// near-steady-state once equilibrated) and lumping it through the same
+// Rapid-acting = anything that isn't long-acting basal. Tested this way
+// round rather than against "bolus" so rows carrying a legacy kind — a
+// pre-v3 `correction`, or one synced from a device still on the old
+// build — keep counting toward IOB instead of silently dropping out.
+export function isRapidActing(d: InsulinDose): boolean {
+  return d.kind !== "basal";
+}
+
+// Sum rapid-acting IOB only. Long-acting basal is intentionally excluded
+// because its kinetics are entirely different (24h+ depot, near
+// steady-state once equilibrated) and lumping it through the same
 // rapid-acting curve would double-count and mislead the IOB tile.
 export function totalIOB(
   doses: InsulinDose[],
@@ -51,7 +59,7 @@ export function totalIOB(
 ): number {
   let iob = 0;
   for (const d of doses) {
-    if (d.kind !== "bolus" && d.kind !== "correction") continue;
+    if (!isRapidActing(d)) continue;
     const tMin = (at - d.ts) / 60_000;
     if (tMin < 0 || tMin > delayMin + diaHours * 60) continue;
     iob += d.units * iobFraction(tMin, diaHours, peakMin, delayMin);
