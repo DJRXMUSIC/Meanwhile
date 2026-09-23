@@ -30,7 +30,7 @@ export function useAutoSync(profile: Profile | null) {
   const writeMarker = useLiveQuery(async () => {
     const d = db();
     const counts = await Promise.all([
-      d.bg.count(), d.insulin.count(), d.carbs.count(),
+      d.bg.count(), d.insulin.count(),
       d.decisions.count(), d.context.count(), d.profile.count(),
     ]);
     return counts.reduce((a, b) => a + b, 0);

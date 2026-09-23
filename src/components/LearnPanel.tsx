@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteCarbs, deleteInsulin, logCarbs, logInsulin, updateInsulin } from "@/lib/db";
+import { deleteInsulin, logInsulin, updateInsulin } from "@/lib/db";
 import type { InsulinDose } from "@/lib/types";
 
 const QUICK_UNITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const CARB_PRESETS = [15, 30, 45, 60];
 
 // How long an action toast stays on screen. Long enough to notice a
 // mis-tap and undo it, short enough not to hang around.
@@ -21,7 +20,6 @@ export function LearnPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [openDose, setOpenDose] = useState(false);
-  const [openCarbs, setOpenCarbs] = useState(false);
 
   // Keyed by toast id rather than by message text: two identical messages
   // used to cancel each other's timers, so the second toast could vanish
@@ -96,26 +94,6 @@ export function LearnPanel() {
     }
   };
 
-  const quickCarbs = async (grams: number) => {
-    const key = `c${grams}`;
-    setBusy(key);
-    try {
-      const now = Date.now();
-      const id = await logCarbs({ ts: now, carbs_g: grams, description: `quick ${grams}g` });
-      show(`Logged ${grams}g`, [
-        {
-          label: "Undo",
-          run: async () => {
-            await deleteCarbs(id);
-            show(`Removed ${grams}g`);
-          },
-        },
-      ]);
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <div className="px-3 space-y-2">
       <div className="rounded-2xl bg-surface ring-1 ring-white/10 p-3">
@@ -140,33 +118,6 @@ export function LearnPanel() {
               }`}
             >
               {u}<span className="text-[10px] text-muted ml-0.5">U</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-surface ring-1 ring-white/10 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs uppercase tracking-wider text-muted">Quick carbs</div>
-          <button
-            onClick={() => setOpenCarbs(true)}
-            className="text-xs rounded-full bg-accent/15 ring-1 ring-accent/40 text-accent px-3 py-1"
-          >
-            Custom carbs…
-          </button>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {CARB_PRESETS.map((g) => (
-            <button
-              key={g}
-              disabled={busy === `c${g}`}
-              onClick={() => quickCarbs(g)}
-              aria-label={`Log ${g} grams of carbohydrate`}
-              className={`num h-9 rounded-lg bg-surface2 active:scale-[0.97] transition text-sm font-semibold ${
-                busy === `c${g}` ? "opacity-50" : "hover:bg-surface2/80"
-              }`}
-            >
-              {g}<span className="text-[10px] text-muted ml-0.5">g</span>
             </button>
           ))}
         </div>
@@ -201,12 +152,6 @@ export function LearnPanel() {
       {openDose && (
         <CustomDoseSheet
           onClose={() => setOpenDose(false)}
-          onLogged={(msg, undo) => show(msg, [{ label: "Undo", run: undo }])}
-        />
-      )}
-      {openCarbs && (
-        <CustomCarbSheet
-          onClose={() => setOpenCarbs(false)}
           onLogged={(msg, undo) => show(msg, [{ label: "Undo", run: undo }])}
         />
       )}
@@ -389,99 +334,6 @@ function CustomDoseSheet({
           className="flex-1 rounded-xl bg-accent text-white px-3 py-3 text-sm font-medium disabled:opacity-40"
         >
           {submitting ? "Logging…" : `Log ${validUnits ? units : "—"}U`}
-        </button>
-      </div>
-    </Sheet>
-  );
-}
-
-// ---- Custom carbs -------------------------------------------------------
-
-function CustomCarbSheet({
-  onClose,
-  onLogged,
-}: {
-  onClose: () => void;
-  onLogged: (msg: string, undo: () => Promise<void>) => void;
-}) {
-  const [gramsText, setGramsText] = useState("");
-  const [description, setDescription] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const when = useWhen();
-
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }, 50);
-    return () => window.clearTimeout(id);
-  }, []);
-
-  const grams = parseFloat(gramsText);
-  const validGrams = Number.isFinite(grams) && grams > 0;
-
-  const submit = async () => {
-    if (!validGrams) return;
-    setSubmitting(true);
-    try {
-      const { ts, effectiveOffset } = when;
-      const id = await logCarbs({
-        ts,
-        carbs_g: grams,
-        description: description.trim() || undefined,
-      });
-      onLogged(
-        `Logged ${grams}g · ${effectiveOffset === 0 ? "now" : `${effectiveOffset}m ago`}`,
-        async () => { await deleteCarbs(id); }
-      );
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Sheet onClose={onClose}>
-      <h2 className="text-lg font-semibold">Custom carbs</h2>
-
-      <div className="mt-3">
-        <div className="text-xs uppercase tracking-wider text-muted mb-1">Grams</div>
-        <input
-          ref={inputRef}
-          type="number"
-          inputMode="decimal"
-          step="1"
-          min="0"
-          placeholder="0"
-          value={gramsText}
-          onChange={(e) => setGramsText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          className="num w-full h-14 text-center rounded-xl bg-surface2 text-3xl font-semibold outline-none ring-1 ring-white/5 focus:ring-accent/60"
-        />
-      </div>
-
-      <div className="mt-4">
-        <div className="text-xs uppercase tracking-wider text-muted mb-1">What (optional)</div>
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="bagel, pasta, …"
-          className="w-full h-12 rounded-xl bg-surface2 px-3 text-base outline-none ring-1 ring-white/5 focus:ring-accent/60"
-        />
-      </div>
-
-      <WhenPicker when={when} />
-
-      <div className="mt-5 flex gap-2">
-        <button onClick={onClose} className="flex-1 rounded-xl bg-surface2 px-3 py-3 text-sm">Cancel</button>
-        <button
-          onClick={submit}
-          disabled={submitting || !validGrams}
-          className="flex-1 rounded-xl bg-accent text-white px-3 py-3 text-sm font-medium disabled:opacity-40"
-        >
-          {submitting ? "Logging…" : `Log ${validGrams ? grams : "—"}g`}
         </button>
       </div>
     </Sheet>

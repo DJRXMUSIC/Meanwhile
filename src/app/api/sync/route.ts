@@ -19,7 +19,7 @@ const PushSchema = z.object({
   push: BundleRowsSchema,
 });
 
-const TABLE_NAMES = ["bg", "insulin", "carbs", "decisions", "context", "profile"] as const;
+const TABLE_NAMES = ["bg", "insulin", "decisions", "context", "profile"] as const;
 type TableName = (typeof TABLE_NAMES)[number];
 
 interface StoredBundle {
@@ -29,7 +29,7 @@ interface StoredBundle {
 
 function emptyStored(): StoredBundle {
   return {
-    rows: { bg: {}, insulin: {}, carbs: {}, decisions: {}, context: {}, profile: {} },
+    rows: { bg: {}, insulin: {}, decisions: {}, context: {}, profile: {} },
     updated_at: 0,
   };
 }
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
   await save(bundle);
 
   // Project back to the client: all rows newer than `since`, table-keyed.
-  const pull: Record<TableName, unknown[]> = { bg: [], insulin: [], carbs: [], decisions: [], context: [], profile: [] };
+  const pull: Record<TableName, unknown[]> = { bg: [], insulin: [], decisions: [], context: [], profile: [] };
   let pulled = 0;
   for (const table of TABLE_NAMES) {
     for (const entry of Object.values(bundle.rows[table])) {

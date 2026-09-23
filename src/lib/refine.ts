@@ -1,15 +1,14 @@
 "use client";
 
-import type { BgReading, CarbEntry, Decision, InsulinDose, Profile } from "./types";
+import type { BgReading, Decision, InsulinDose, Profile } from "./types";
 import { totalIOB } from "./insulin";
 
 // Profile refinement: scan completed decisions where we have outcome BG values
-// and estimate adjustments to I:C and ISF based on observed deviation from target.
+// and estimate an adjustment to ISF based on observed deviation from target.
 
 export interface Outcome {
   decision_id: number;
   ts: number;
-  carbs_g: number;
   units: number;
   bg_start: number;
   bg_120: number | null;
@@ -21,9 +20,9 @@ export function attachOutcomes(decisions: Decision[], bg: BgReading[], target: n
   const out: Outcome[] = [];
   for (const d of decisions) {
     if (d.bg_at_time == null || d.suggested_units == null) continue;
-    const carbs = d.suggested_carbs_g ?? d.extracted?.carbs_g ?? 0;
     const units = d.suggested_units;
-    if (carbs === 0 && units === 0) continue;
+    // A zero-unit suggestion carries no signal about ISF.
+    if (units === 0) continue;
     const t120 = d.ts + 120 * 60_000;
     // closest BG within ±15min of t120
     const candidate = bg
@@ -34,7 +33,6 @@ export function attachOutcomes(decisions: Decision[], bg: BgReading[], target: n
     out.push({
       decision_id: d.id!,
       ts: d.ts,
-      carbs_g: carbs,
       units,
       bg_start: d.bg_at_time,
       bg_120: bg120,
@@ -46,41 +44,34 @@ export function attachOutcomes(decisions: Decision[], bg: BgReading[], target: n
 }
 
 export interface RefinementSuggestion {
-  ic_ratio: number;
   isf: number;
   samples_used: number;
   notes: string;
 }
 
-// Very conservative least-squares-style nudge:
-// for meals (carbs > 15g, dose > 0): if BG@2h is consistently above/below target, nudge I:C.
-// for corrections (carbs ≈ 0): nudge ISF.
+// Very conservative least-squares-style nudge: if dosed decisions land
+// consistently above or below target at BG@2h, move ISF in proportion.
 export function refineProfile(profile: Profile, outcomes: Outcome[]): RefinementSuggestion {
-  const meals = outcomes.filter((o) => o.carbs_g >= 15 && o.delta_to_target != null);
-  const corrections = outcomes.filter((o) => o.carbs_g < 5 && o.units > 0 && o.delta_to_target != null);
+  const dosed = outcomes.filter((o) => o.units > 0 && o.delta_to_target != null);
 
   const avg = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 
-  const mealDeltaAvg = avg(meals.map((o) => o.delta_to_target!));
-  const corrDeltaAvg = avg(corrections.map((o) => o.delta_to_target!));
+  const deltaAvg = avg(dosed.map((o) => o.delta_to_target!));
 
-  // If meals end +30 above target on average, I:C is too weak → lower the ratio (more insulin per carb).
-  // Magnitude: scale ratio by (target / (target + delta))-ish; clamp 5–20%.
-  const icScale = clamp(profile.target_bg / (profile.target_bg + mealDeltaAvg), 0.85, 1.15);
-  const isfScale = clamp(profile.target_bg / (profile.target_bg + corrDeltaAvg), 0.85, 1.15);
+  // If doses end +30 above target on average, ISF is too weak → lower it
+  // (more insulin per mg/dL). Magnitude scales by
+  // (target / (target + delta))-ish; clamp to ±15%.
+  const isfScale = clamp(profile.target_bg / (profile.target_bg + deltaAvg), 0.85, 1.15);
 
-  const ic = round(profile.ic_ratio * icScale, 1);
   const isf = round(profile.isf * isfScale, 0);
 
-  const notes = [
-    meals.length ? `Meals (n=${meals.length}): avg BG@2h ${signed(mealDeltaAvg)} from target → I:C ${profile.ic_ratio} → ${ic}` : "Not enough meal samples.",
-    corrections.length ? `Corrections (n=${corrections.length}): avg BG@2h ${signed(corrDeltaAvg)} → ISF ${profile.isf} → ${isf}` : "Not enough correction samples.",
-  ].join("\n");
+  const notes = dosed.length
+    ? `Corrections (n=${dosed.length}): avg BG@2h ${signed(deltaAvg)} from target → ISF ${profile.isf} → ${isf}`
+    : "Not enough dosed samples.";
 
   return {
-    ic_ratio: ic,
     isf,
-    samples_used: meals.length + corrections.length,
+    samples_used: dosed.length,
     notes,
   };
 }
@@ -180,13 +171,6 @@ export function totalBolusToday(insulin: InsulinDose[]): { units: number; n: num
     units: subset.reduce((a, d) => a + d.units, 0),
     n: subset.length,
   };
-}
-
-// Average carbs/day
-export function avgCarbsPerDay(carbs: CarbEntry[], days = 7): number {
-  const cutoff = Date.now() - days * 24 * 3600_000;
-  const total = carbs.filter((c) => c.ts >= cutoff).reduce((a, c) => a + c.carbs_g, 0);
-  return total / days;
 }
 
 // Convenience IOB-now wrapper

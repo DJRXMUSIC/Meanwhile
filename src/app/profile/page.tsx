@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { NumberField } from "@/components/NumberField";
 import { db, getProfile, saveProfile } from "@/lib/db";
-import { attachOutcomes, refineProfile, timeInRange, tdd, avgCarbsPerDay } from "@/lib/refine";
+import { attachOutcomes, refineProfile, timeInRange, tdd } from "@/lib/refine";
 import type { Profile } from "@/lib/types";
 
 export default function ProfilePage() {
@@ -19,13 +19,11 @@ export default function ProfilePage() {
   const decisions = useLiveQuery(() => db().decisions.where("ts").above(since).toArray(), [since], []) ?? [];
   const bgList = useLiveQuery(() => db().bg.where("ts").above(since).sortBy("ts"), [since], []) ?? [];
   const insulinList = useLiveQuery(() => db().insulin.where("ts").above(since).sortBy("ts"), [since], []) ?? [];
-  const carbsList = useLiveQuery(() => db().carbs.where("ts").above(since).sortBy("ts"), [since], []) ?? [];
 
   const tirLow = profile?.tir_low ?? 70;
   const tirHigh = profile?.tir_high ?? 160;
   const tirSummary = useMemo(() => timeInRange(bgList, tirLow, tirHigh), [bgList, tirLow, tirHigh]);
   const dailyTDD = useMemo(() => tdd(insulinList), [insulinList]);
-  const dailyCarbs = useMemo(() => avgCarbsPerDay(carbsList), [carbsList]);
 
   const refinement = useMemo(() => {
     if (!profile) return null;
@@ -47,7 +45,6 @@ export default function ProfilePage() {
     if (!refinement || !profile) return;
     const next = await saveProfile({
       ai_overrides: {
-        ic_ratio: refinement.ic_ratio,
         isf: refinement.isf,
         notes: refinement.notes,
         updated_ts: Date.now(),
@@ -66,7 +63,6 @@ export default function ProfilePage() {
   if (!profile || !draft) return <div className="p-6 text-muted">Loading…</div>;
 
   const eff = {
-    ic: profile.ai_overrides?.ic_ratio ?? profile.ic_ratio,
     isf: profile.ai_overrides?.isf ?? profile.isf,
   };
 
@@ -76,8 +72,7 @@ export default function ProfilePage() {
 
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5">
         <div className="text-xs uppercase tracking-wider text-muted mb-2">Active ratios</div>
-        <div className="grid grid-cols-3 gap-2">
-          <Tile label="I:C" value={`1:${eff.ic}`} hint={profile.ai_overrides?.ic_ratio ? `from ${profile.ic_ratio}` : "base"} />
+        <div className="grid grid-cols-2 gap-2">
           <Tile label="ISF" value={`1:${eff.isf}`} hint={profile.ai_overrides?.isf ? `from ${profile.isf}` : "base"} />
           <Tile label="Target" value={`${profile.target_bg}`} hint="mg/dL" />
         </div>
@@ -85,10 +80,9 @@ export default function ProfilePage() {
 
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5">
         <div className="text-xs uppercase tracking-wider text-muted mb-2">Last 14 days</div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Tile label="TIR" value={`${(tirSummary.tir * 100).toFixed(0)}%`} hint={`${tirLow}–${tirHigh}`} />
           <Tile label="TDD (24h)" value={`${dailyTDD.toFixed(1)}U`} hint="all insulin" />
-          <Tile label="Carbs/day" value={`${dailyCarbs.toFixed(0)}g`} hint="7d avg" />
         </div>
         <div className="mt-3 text-[11px] text-muted">
           Below {tirLow}: {(tirSummary.below * 100).toFixed(0)}% · Above {tirHigh}: {(tirSummary.above * 100).toFixed(0)}%
@@ -124,7 +118,6 @@ export default function ProfilePage() {
 
       <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted">Base profile</div>
-        <NumberField label="I:C ratio (1U covers Xg)" value={draft.ic_ratio} onCommit={(v) => setDraft({ ...draft, ic_ratio: v })} />
         <NumberField label="ISF (1U drops X mg/dL)" value={draft.isf} onCommit={(v) => setDraft({ ...draft, isf: v })} />
         <NumberField label="Target BG (mg/dL)" value={draft.target_bg} onCommit={(v) => setDraft({ ...draft, target_bg: v })} />
         <NumberField label="Basal (U/hr)" value={draft.basal_u_per_hr} step={0.05} onCommit={(v) => setDraft({ ...draft, basal_u_per_hr: v })} />
@@ -146,7 +139,7 @@ export default function ProfilePage() {
             <li key={d.id} className="rounded-xl bg-surface2/60 p-3">
               <div className="text-sm">{d.headline}</div>
               <div className="text-[11px] text-muted mt-1">
-                {new Date(d.ts).toLocaleString()} · BG {d.bg_at_time ?? "—"} · IOB {d.iob_at_time?.toFixed(2) ?? "—"} · {d.suggested_units != null ? `${d.suggested_units}U` : "no dose"} · {d.suggested_carbs_g ?? d.extracted?.carbs_g ?? 0}g
+                {new Date(d.ts).toLocaleString()} · BG {d.bg_at_time ?? "—"} · IOB {d.iob_at_time?.toFixed(2) ?? "—"} · {d.suggested_units != null ? `${d.suggested_units}U` : "no dose"}
               </div>
             </li>
           ))}

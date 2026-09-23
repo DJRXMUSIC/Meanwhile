@@ -15,13 +15,12 @@ const META_LAST_SYNC = "meanwhile.lastSync";
 const META_LAST_EXPORT = "meanwhile.lastExport";
 const META_LAST_STATUS = "meanwhile.lastSyncStatus";
 
-const TABLE_NAMES = ["bg", "insulin", "carbs", "decisions", "context", "profile"] as const;
+const TABLE_NAMES = ["bg", "insulin", "decisions", "context", "profile"] as const;
 type TableName = (typeof TABLE_NAMES)[number];
 
 export interface SyncBundle {
   bg: unknown[];
   insulin: unknown[];
-  carbs: unknown[];
   decisions: unknown[];
   context: unknown[];
   profile: unknown[];
@@ -64,21 +63,22 @@ function setLastSyncStatus(s: string) {
 
 export async function buildPush(since: number): Promise<Record<TableName, unknown[]>> {
   const d = db();
-  const [bg, insulin, carbs, decisions, context, profile] = await Promise.all([
+  const [bg, insulin, decisions, context, profile] = await Promise.all([
     d.bg.where("ts").above(since).toArray(),
     d.insulin.where("ts").above(since).toArray(),
-    d.carbs.where("ts").above(since).toArray(),
     d.decisions.where("ts").above(since).toArray(),
     d.context.where("ts").above(since).toArray(),
     d.profile.toArray(),
   ]);
-  return { bg, insulin, carbs, decisions, context, profile };
+  return { bg, insulin, decisions, context, profile };
 }
 
+// Only TABLE_NAMES are applied, so carb rows in an older export or from a
+// peer still running the previous build are ignored rather than imported.
 export async function applyPull(pull: Partial<Record<TableName, unknown[]>>): Promise<number> {
   const d = db();
   let applied = 0;
-  await d.transaction("rw", [d.bg, d.insulin, d.carbs, d.decisions, d.context, d.profile], async () => {
+  await d.transaction("rw", [d.bg, d.insulin, d.decisions, d.context, d.profile], async () => {
     for (const t of TABLE_NAMES) {
       const rows = pull[t];
       if (!rows) continue;

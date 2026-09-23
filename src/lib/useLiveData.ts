@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getProfile } from "./db";
-import { totalCOB, totalIOB } from "./insulin";
+import { totalIOB } from "./insulin";
 import type { Profile } from "./types";
 import { bucket, useNow } from "./useNow";
 import { XdripPoller } from "./xdrip";
@@ -25,10 +25,10 @@ export function useLiveData() {
   // this being stable within a tick:
   //
   //  - `since` below is a useLiveQuery dependency. A value that changed on
-  //    every render tore down and rebuilt all three Dexie subscriptions
-  //    each time, re-running three range queries over a four-day window.
-  //  - IOB and COB decay continuously, so they must recompute on a clock
-  //    rather than only when the underlying rows happen to change.
+  //    every render tore down and rebuilt both Dexie subscriptions each
+  //    time, re-running two range queries over a four-day window.
+  //  - IOB decays continuously, so it must recompute on a clock rather
+  //    than only when the underlying rows happen to change.
   const now = useNow(30_000);
 
   // Fetch enough history to feed both the 24h chart window and the
@@ -47,34 +47,25 @@ export function useLiveData() {
     [since],
     []
   ) ?? [];
-  const carbsList = useLiveQuery(
-    () => db().carbs.where("ts").above(since).sortBy("ts"),
-    [since],
-    []
-  ) ?? [];
 
   const bg = bgList[bgList.length - 1];
   const dia = profile?.dia_hours ?? 6;
   const peak = profile?.peak_min ?? 75;
   const delay = profile?.delay_min ?? 15;
-  // `now` is the *dependency* — it is what makes these recompute as time
+  // `now` is the *dependency* — it is what makes this recompute as time
   // passes — but the evaluation instant is the real clock. A quantized now
-  // can sit behind real time between ticks, and both totalIOB and totalCOB
-  // discard rows timestamped after the evaluation instant, so a dose or
-  // meal logged a moment ago would be dropped from its own tile. Logging a
-  // row also changes the array identity, so this recomputes immediately.
+  // can sit behind real time between ticks, and totalIOB discards rows
+  // timestamped after the evaluation instant, so a dose logged a moment
+  // ago would be dropped from its own tile. Logging a row also changes the
+  // array identity, so this recomputes immediately.
   const iob = useMemo(
     () => totalIOB(insulinList, Math.max(now, Date.now()), dia, peak, delay),
     [insulinList, now, dia, peak, delay]
   );
-  const cob = useMemo(
-    () => totalCOB(carbsList, Math.max(now, Date.now())),
-    [carbsList, now]
-  );
 
   // `now` is returned so consumers (the chart, in particular) share this
   // clock instead of starting their own.
-  return { profile, bg, bgList, insulinList, carbsList, iob, cob, now };
+  return { profile, bg, bgList, insulinList, iob, now };
 }
 
 export interface XdripControl {

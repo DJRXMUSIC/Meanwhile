@@ -1,4 +1,4 @@
-import type { CarbEntry, InsulinDose, Profile } from "./types";
+import type { InsulinDose, Profile } from "./types";
 
 // Loop / OpenAPS / oref0 exponential IOB curve.
 // Defaults match Loop's "rapid-acting adult" preset: peak 75 min, DIA 6h,
@@ -59,55 +59,32 @@ export function totalIOB(
   return round(iob, 2);
 }
 
-// COB model: linear absorption over `absorption_min` (default 180).
-// Fat/protein extend absorption slightly (heuristic: +6 min per 10g fat, +4 per 10g protein).
-export function carbAbsorptionMinutes(c: CarbEntry): number {
-  const base = c.absorption_min ?? 180;
-  const fatExt = (c.fat_g ?? 0) * 0.6;
-  const protExt = (c.protein_g ?? 0) * 0.4;
-  return Math.min(360, base + fatExt + protExt);
-}
-
-export function totalCOB(carbs: CarbEntry[], at: number): number {
-  let cob = 0;
-  for (const c of carbs) {
-    const tMin = (at - c.ts) / 60_000;
-    if (tMin < 0) continue;
-    const absMin = carbAbsorptionMinutes(c);
-    if (tMin >= absMin) continue;
-    const remaining = 1 - tMin / absMin;
-    cob += c.carbs_g * remaining;
-  }
-  return round(cob, 1);
-}
-
 export interface DoseCalc {
-  carbDose: number;
   correctionDose: number;
   iobOffset: number;
   total: number;
   formula: string;
 }
 
+// Correction-only dosing. With carb tracking removed there is no meal
+// component left to add, so the suggestion is purely "how far is BG from
+// target, minus what is already on board".
 export function suggestDose(input: {
   bg: number;
-  carbs_g: number;
   iob: number;
   profile: Profile;
 }): DoseCalc {
-  const { bg, carbs_g, iob, profile } = input;
-  const { ic_ratio, isf, target_bg } = profile;
-  const carbDose = carbs_g > 0 ? carbs_g / ic_ratio : 0;
+  const { bg, iob, profile } = input;
+  const { isf, target_bg } = profile;
   const bgDelta = bg - target_bg;
   const correctionDose = bgDelta / isf;
-  const total = round(carbDose + correctionDose - iob, 2);
+  const total = round(correctionDose - iob, 2);
   const formula =
-    `total = (carbs ÷ I:C) + ((BG − target) ÷ ISF) − IOB\n` +
-    `      = (${carbs_g}g ÷ ${ic_ratio}) + ((${bg} − ${target_bg}) ÷ ${isf}) − ${round(iob,2)}\n` +
-    `      = ${round(carbDose,2)} + ${round(correctionDose,2)} − ${round(iob,2)}\n` +
+    `total = ((BG − target) ÷ ISF) − IOB\n` +
+    `      = ((${bg} − ${target_bg}) ÷ ${isf}) − ${round(iob,2)}\n` +
+    `      = ${round(correctionDose,2)} − ${round(iob,2)}\n` +
     `      = ${total}U`;
   return {
-    carbDose: round(carbDose, 2),
     correctionDose: round(correctionDose, 2),
     iobOffset: round(iob, 2),
     total,

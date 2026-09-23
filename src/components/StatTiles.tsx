@@ -7,14 +7,12 @@ import { TrendArrow } from "./BGTrend";
 export function StatTiles({
   bg,
   iob,
-  cob,
   onRefresh,
   syncing = false,
   refreshNote,
 }: {
   bg?: BgReading;
   iob: number;
-  cob: number;
   /** Omitted when no xDrip+ URL is configured — nothing to refresh from. */
   onRefresh?: () => void;
   syncing?: boolean;
@@ -61,8 +59,6 @@ export function StatTiles({
       <div className="glass rounded-2xl p-4">
         <div className="text-xs uppercase tracking-wider text-muted">IOB</div>
         <div className="num text-3xl font-semibold mt-1">{iob.toFixed(2)}<span className="text-base text-muted ml-1">U</span></div>
-        <div className="mt-2 text-xs uppercase tracking-wider text-muted">COB</div>
-        <div className="num text-2xl font-medium">{cob.toFixed(0)}<span className="text-sm text-muted ml-1">g</span></div>
       </div>
     </div>
   );

@@ -26,31 +26,16 @@ export interface InsulinDose {
   backdated_min?: number; // entered_at - ts in minutes (0 if live)
 }
 
-export interface CarbEntry {
-  id?: number;
-  ts: number;
-  carbs_g: number;
-  fat_g?: number;
-  protein_g?: number;
-  description?: string;
-  absorption_min?: number; // default 180
-}
-
 export interface Decision {
   id?: number;
   ts: number;
   user_input: string;
   bg_at_time?: number;
   iob_at_time?: number;
-  cob_at_time?: number;
   headline: string;
   rationale: string;          // markdown
   suggested_units?: number;
-  suggested_carbs_g?: number;
   extracted?: {
-    carbs_g?: number;
-    fat_g?: number;
-    protein_g?: number;
     activity?: string;
     sleep?: string;
     notes?: string;
@@ -185,7 +170,6 @@ export const THEMES: { id: ThemeName; label: string; swatch: string; light?: boo
 
 export interface Profile {
   id: "current";
-  ic_ratio: number;       // grams of carb covered by 1U
   isf: number;            // mg/dL drop per 1U
   basal_u_per_hr: number;
   dia_hours: number;      // duration of insulin action
@@ -195,7 +179,6 @@ export interface Profile {
   tir_low?: number;       // time-in-range lower bound (default 70)
   tir_high?: number;      // time-in-range upper bound (default 160)
   ai_overrides?: {
-    ic_ratio?: number;
     isf?: number;
     notes?: string;
     updated_ts?: number;
@@ -222,7 +205,6 @@ export interface Profile {
 
 export const DEFAULT_PROFILE: Profile = {
   id: "current",
-  ic_ratio: 10,
   isf: 40,
   basal_u_per_hr: 0.7,
   dia_hours: 6,            // Loop default for rapid-acting analogs

@@ -15,9 +15,7 @@ const RequestSchema = z.object({
     bg_delta: z.number().nullable(),
     bg_history: z.array(z.object({ ts: z.number(), mgdl: z.number() })),
     iob: z.number(),
-    cob: z.number(),
     recent_doses: z.array(z.object({ ts: z.number(), units: z.number(), kind: z.string() })),
-    recent_carbs: z.array(z.object({ ts: z.number(), g: z.number(), desc: z.string().optional() })),
   }),
   preferred_provider: z.enum(["anthropic", "openai", "google", "auto"]).optional(),
 });
