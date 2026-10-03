@@ -66,7 +66,6 @@ If xDrip+ is also installed with its local web service on, it already holds port
 ## The screen
 
 * **Last reading:** big value and trend arrow. Green means the reading is under 6 minutes old, amber under 15, red older. It also shows how long ago the reading was, its exact time to the millisecond, the rate per 5 minutes, and where the time came from.
-* **3-hour chart** with the 70–180 band.
 * **Status:** Eversense app, notification access, listener, battery, app notifications, keep-alive service, data endpoint, and last Eversense update. Anything red has a button that fixes it.
 * **Run self-test:** checks the endpoint answers, a test notification reaches the listener and parses, storage works, and the keep-alive service is running. It doesn't need the Eversense app and stores nothing.
 * **Save log file / Share log** (see below).

@@ -42,7 +42,7 @@ import app.meanwhile.bridge.core.Reading;
 import app.meanwhile.bridge.core.Trend;
 
 /**
- * One screen: last reading, 3-hour chart, a status list where every problem has a fix
+ * One screen: last reading, a status list where every problem has a fix
  * button, self-test, log export, recent readings, and (collapsed) advanced settings.
  *
  * Automation (used by the emulator test): start with {@code --es action export_log} or
@@ -76,7 +76,6 @@ public class MainActivity extends Activity {
     private TextView value;
     private TextView age;
     private TextView detail;
-    private GlucoseChart chart;
     private LinearLayout statusList;
     private TextView selfTestResult;
     private Button selfTestButton;
@@ -210,7 +209,6 @@ public class MainActivity extends Activity {
                     + "  ·  time from " + (r.timestampSource.equals("notification_when") ? "Eversense" : "notification post")
                     + "\n" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date(r.timestamp)));
         }
-        chart.setReadings(recent, now);
 
         final Check[] checks = checks(now);
         statusList.removeAllViews();
@@ -474,9 +472,6 @@ public class MainActivity extends Activity {
         detail.setAlpha(0.75f);
         card.addView(detail);
         col.addView(card, marginTop(12));
-
-        chart = new GlucoseChart(this, textColor);
-        col.addView(chart, marginTop(12));
 
         col.addView(header("Status"));
         statusList = new LinearLayout(this);

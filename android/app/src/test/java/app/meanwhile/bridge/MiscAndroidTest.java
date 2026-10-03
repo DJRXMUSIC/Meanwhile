@@ -118,7 +118,7 @@ public class MiscAndroidTest {
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
         assertTrue(all, all.contains("Waiting for the first reading"));
-        assertTrue(all, all.contains("no readings in the last 3 hours") || all.contains("--"));
+        assertTrue(all, all.contains("--"));
         c.pause().stop().destroy();
     }
 
