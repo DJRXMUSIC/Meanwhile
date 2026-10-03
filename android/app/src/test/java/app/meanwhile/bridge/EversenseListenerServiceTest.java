@@ -104,8 +104,9 @@ public class EversenseListenerServiceTest {
         final Notification broken = TestNotifications.extrasOnly(ctx, "99 mg/dL", now);
         broken.contentView = new RemoteViews(ctx.getPackageName(), 0x7f0fffff);
         service.onNotificationPosted(TestNotifications.sbn(EV365, broken, now));
-        // the title is still used when the custom view fails
+        // the title is still used when the custom view fails, and the failure is logged
         assertEquals(99, bridge.store.latest(1).get(0).mgdl);
+        org.junit.Assert.assertNotNull(bridge.engine.log().last().input.viewError);
 
         final Notification empty = new Notification();
         empty.extras = null;

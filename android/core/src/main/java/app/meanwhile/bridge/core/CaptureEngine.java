@@ -49,9 +49,16 @@ public final class CaptureEngine {
         public final List<String> viewTexts;
         /** Title, text, big text, sub text, info text. */
         public final List<String> extrasTexts;
+        /** Why the custom view could not be read, if it could not (diagnostics only). */
+        public final String viewError;
 
         public Input(String pkg, long when, long postTime, long receivedAt, boolean ongoing,
                      List<String> viewTexts, List<String> extrasTexts) {
+            this(pkg, when, postTime, receivedAt, ongoing, viewTexts, extrasTexts, null);
+        }
+
+        public Input(String pkg, long when, long postTime, long receivedAt, boolean ongoing,
+                     List<String> viewTexts, List<String> extrasTexts, String viewError) {
             this.pkg = pkg;
             this.when = when;
             this.postTime = postTime;
@@ -59,10 +66,11 @@ public final class CaptureEngine {
             this.ongoing = ongoing;
             this.viewTexts = viewTexts;
             this.extrasTexts = extrasTexts;
+            this.viewError = viewError;
         }
 
         public String describeTexts() {
-            return "views=" + viewTexts + " extras=" + extrasTexts;
+            return "views=" + (viewError != null ? "<" + viewError + ">" : viewTexts) + " extras=" + extrasTexts;
         }
     }
 

@@ -16,10 +16,14 @@ final class TestNotifications {
     private TestNotifications() {
     }
 
-    /** Custom content view with "value" and "unit" TextViews (framework two-line layout). */
+    /**
+     * Custom content view with "value" and "unit" TextViews. Uses the framework's
+     * two_line_list_item (LinearLayout + TextViews); RemoteViews refuses layouts with
+     * non-@RemoteView classes such as simple_list_item_2's TwoLineListItem.
+     */
     @SuppressWarnings("deprecation")
     static Notification customView(Context ctx, String value, String unit, long when) {
-        final RemoteViews rv = new RemoteViews(ctx.getPackageName(), android.R.layout.simple_list_item_2);
+        final RemoteViews rv = new RemoteViews(ctx.getPackageName(), android.R.layout.two_line_list_item);
         rv.setTextViewText(android.R.id.text1, value);
         rv.setTextViewText(android.R.id.text2, unit);
         final Notification n = new Notification.Builder(ctx, "glucose")
