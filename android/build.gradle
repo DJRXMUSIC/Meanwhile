@@ -1,0 +1,2 @@
+// Plugin versions live in settings.gradle (pluginManagement) so that
+// -PcoreOnly builds never need to resolve the Android Gradle Plugin.

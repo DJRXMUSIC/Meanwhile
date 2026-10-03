@@ -1,0 +1,28 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    toolchain {
+        // Robolectric (used by :app tests) needs 21 for SDK 35; keep one JDK everywhere.
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Bytecode/API level that D8 and Android's core library accept.
+    options.release = 11
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
+
+tasks.named('test') {
+    testLogging {
+        events 'failed'
+        exceptionFormat 'full'
+    }
+}

@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.meanwhile.bridge'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.meanwhile.bridge'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    // A fixed key lets each new APK install over the previous one (a different key forces
+    // an uninstall, which wipes the reading history). The keystore is never committed:
+    // CI writes it from the BRIDGE_KEYSTORE_B64 secret (see android/README.md). Without
+    // it, builds fall back to the machine's debug key.
+    def keystorePath = System.getenv('BRIDGE_KEYSTORE_FILE')
+    def haveKeystore = keystorePath != null && file(keystorePath).exists()
+    signingConfigs {
+        if (haveKeystore) {
+            sideload {
+                storeFile file(keystorePath)
+                storePassword System.getenv('BRIDGE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('BRIDGE_KEY_ALIAS') ?: 'sideload'
+                keyPassword System.getenv('BRIDGE_KEY_PASSWORD') ?: System.getenv('BRIDGE_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (haveKeystore) signingConfig signingConfigs.sideload
+        }
+        release {
+            minifyEnabled false
+            signingConfig haveKeystore ? signingConfigs.sideload : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                testLogging {
+                    events 'failed'
+                    exceptionFormat 'full'
+                }
+            }
+        }
+    }
+
+    lint {
+        abortOnError true
+        checkDependencies true
+    }
+}
+
+dependencies {
+    implementation project(':core')
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+}
