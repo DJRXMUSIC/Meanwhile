@@ -47,9 +47,13 @@ final class TestNotifications {
                 .build();
     }
 
-    @SuppressWarnings("deprecation")
     static StatusBarNotification sbn(String pkg, Notification n, long postTime) {
-        return new StatusBarNotification(pkg, pkg, 1, null, Process.myUid(), 0, 0, n,
+        return sbn(pkg, null, 1, n, postTime);
+    }
+
+    @SuppressWarnings("deprecation")
+    static StatusBarNotification sbn(String pkg, String tag, int id, Notification n, long postTime) {
+        return new StatusBarNotification(pkg, pkg, id, tag, Process.myUid(), 0, 0, n,
                 Process.myUserHandle(), postTime);
     }
 }

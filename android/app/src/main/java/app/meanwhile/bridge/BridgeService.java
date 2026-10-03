@@ -14,7 +14,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.service.notification.NotificationListenerService;
-import android.util.Log;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -46,7 +45,7 @@ public class BridgeService extends Service {
             try {
                 tick();
             } catch (RuntimeException e) {
-                Log.e(Bridge.TAG, "watchdog", e);
+                EventLog.log(BridgeService.this, "ERROR", "watchdog: " + e);
             }
             handler.postDelayed(this, WATCHDOG_MS);
         }
@@ -60,7 +59,7 @@ public class BridgeService extends Service {
             // e.g. ForegroundServiceStartNotAllowedException when started from the background
             // without a battery-optimisation exemption. Capture still works while the listener
             // is bound; the UI flags the missing exemption.
-            Log.w(Bridge.TAG, "Could not start foreground service: " + e);
+            EventLog.log(context, "SERVICE", "could not start keep-alive service: " + e);
         }
     }
 
@@ -81,6 +80,7 @@ public class BridgeService extends Service {
         createChannels(this);
         goForeground();
         running = true;
+        EventLog.log(this, "SERVICE", "keep-alive service started");
         Bridge.get(this).ensureServer();
         handler.post(watchdog);
     }
@@ -96,6 +96,7 @@ public class BridgeService extends Service {
     public void onDestroy() {
         running = false;
         handler.removeCallbacks(watchdog);
+        EventLog.log(this, "SERVICE", "keep-alive service stopped");
         super.onDestroy();
     }
 
@@ -120,7 +121,7 @@ public class BridgeService extends Service {
         final long now = System.currentTimeMillis();
         if (bridge.hasNotificationAccess() && !bridge.isListenerConnected()
                 && now - bridge.listenerChangedAt() > REBIND_AFTER_MS) {
-            Log.w(Bridge.TAG, "Listener not connected; requesting rebind");
+            EventLog.log(this, "WATCHDOG", "listener not connected; requesting rebind");
             NotificationListenerService.requestRebind(new ComponentName(this, EversenseListenerService.class));
         }
 
@@ -129,6 +130,7 @@ public class BridgeService extends Service {
         final NotificationManager nm = getSystemService(NotificationManager.class);
         if (stale && last != null && bridge.settings.staleAlert() && now - lastStaleAlert > STALE_REALERT_MS) {
             lastStaleAlert = now;
+            EventLog.log(this, "STALE", "no reading for " + ((now - last.timestamp) / 60_000) + " min: " + staleHint(bridge));
             nm.notify(STALE_ID, new Notification.Builder(this, CHANNEL_STALE)
                     .setSmallIcon(R.drawable.ic_stat_bridge)
                     .setContentTitle("No Eversense reading for " + ((now - last.timestamp) / 60_000) + " min")

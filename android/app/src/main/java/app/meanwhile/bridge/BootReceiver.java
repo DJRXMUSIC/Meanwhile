@@ -10,6 +10,7 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         final String action = intent != null ? intent.getAction() : null;
         if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+            EventLog.log(context, "BOOT", action);
             Bridge.get(context).ensureServer();
             BridgeService.start(context);
         }

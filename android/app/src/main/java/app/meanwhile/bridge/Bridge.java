@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.os.PowerManager;
 import android.provider.Settings.Secure;
 import android.text.TextUtils;
-import android.util.Log;
 
 import java.util.List;
 
@@ -93,7 +92,8 @@ public final class Bridge {
         if (server.isRunning() && config.equals(appliedServerConfig)) return true;
         final boolean ok = server.start(settings.port(), settings.lan(), settings.apiSecret());
         appliedServerConfig = ok ? config : null;
-        if (!ok) Log.e(TAG, "HTTP server: " + server.lastError());
+        EventLog.log(app, "SERVER", ok ? "listening on " + (settings.lan() ? "all interfaces" : "127.0.0.1")
+                + ":" + server.port() : "FAILED: " + server.lastError());
         return ok;
     }
 

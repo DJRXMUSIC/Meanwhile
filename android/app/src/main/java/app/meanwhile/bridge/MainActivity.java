@@ -3,18 +3,20 @@ package app.meanwhile.bridge;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.Settings.Secure;
+import android.service.notification.NotificationListenerService;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -37,13 +39,24 @@ import java.util.Locale;
 
 import app.meanwhile.bridge.core.CaptureEngine;
 import app.meanwhile.bridge.core.Reading;
-import app.meanwhile.bridge.core.SgvJson;
 import app.meanwhile.bridge.core.Trend;
 
-/** Status, setup checklist, recent readings, capture diagnostics and settings. */
+/**
+ * One screen: last reading, 3-hour chart, a status list where every problem has a fix
+ * button, self-test, log export, recent readings, and (collapsed) advanced settings.
+ *
+ * Automation (used by the emulator test): start with {@code --es action export_log} or
+ * {@code --es action self_test} to run those buttons.
+ */
 public class MainActivity extends Activity {
 
+    static final String RELEASE_PAGE = "https://github.com/DJRXMUSIC/Meanwhile/releases/tag/bridge-latest";
+    static final String EXTRA_ACTION = "action";
     private static final long REFRESH_MS = 5_000L;
+    private static final int GREEN = Color.rgb(46, 160, 120);
+    private static final int AMBER = Color.rgb(239, 152, 0);
+    private static final int RED = Color.rgb(211, 47, 47);
+    private static final int GREY = Color.rgb(140, 140, 140);
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refresher = new Runnable() {
@@ -55,14 +68,24 @@ public class MainActivity extends Activity {
     };
 
     private Bridge bridge;
+    private int textColor;
+
+    private LinearLayout setupBanner;
+    private TextView setupText;
+    private Button setupButton;
     private TextView value;
-    private TextView valueDetail;
-    private TextView checklist;
+    private TextView age;
+    private TextView detail;
+    private GlucoseChart chart;
+    private LinearLayout statusList;
+    private TextView selfTestResult;
+    private Button selfTestButton;
+    private TextView logResult;
+    private LogExport.Saved lastSaved;
+    private Button shareButton;
     private TextView readings;
+    private LinearLayout advanced;
     private TextView captures;
-    private Button accessButton;
-    private Button batteryButton;
-    private Button notifyButton;
 
     private EditText portField;
     private CheckBox lanBox;
@@ -78,8 +101,19 @@ public class MainActivity extends Activity {
         bridge = Bridge.get(this);
         bridge.ensureServer();
         BridgeService.start(this);
+        final TypedValue tv = new TypedValue();
+        getTheme().resolveAttribute(android.R.attr.textColorPrimary, tv, true);
+        textColor = tv.resourceId != 0 ? getColor(tv.resourceId) : tv.data;
         setContentView(buildUi());
         loadSettings();
+        askForNotificationPermissionOnce();
+        handleAutomation(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleAutomation(intent);
     }
 
     @Override
@@ -94,95 +128,172 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
-    // ---------------------------------------------------------------- rendering
+    private void handleAutomation(Intent intent) {
+        final String action = intent != null ? intent.getStringExtra(EXTRA_ACTION) : null;
+        if ("export_log".equals(action)) saveLog(false);
+        else if ("self_test".equals(action)) runSelfTest();
+    }
 
-    private void render() {
-        final long now = System.currentTimeMillis();
-        final List<Reading> recent = bridge.store.latest(13);
-        if (recent.isEmpty()) {
-            value.setText("—");
-            valueDetail.setText("No reading captured yet. Open the Eversense app once the checklist is all ✓.");
-        } else {
-            final Reading r = recent.get(0);
-            final String dir = Trend.direction(Trend.slope(r, recent.size() > 1 ? recent.get(1) : null));
-            value.setText(r.mgdl + " mg/dL " + Trend.arrow(dir));
-            valueDetail.setText(fullTime(r.timestamp) + "  ·  " + ago(now - r.timestamp) + "\n"
-                    + "time source: " + r.timestampSource
-                    + "  ·  posted " + time(r.postTime) + "  ·  received " + time(r.receivedAt));
+    // ---------------------------------------------------------------- state
+
+    private static final class Check {
+        final String label;
+        final boolean ok;
+        final String value;
+        final String fix;
+        final Runnable action;
+
+        Check(String label, boolean ok, String value, String fix, Runnable action) {
+            this.label = label;
+            this.ok = ok;
+            this.value = value;
+            this.fix = fix;
+            this.action = action;
         }
+    }
 
+    private Check[] checks(long now) {
+        final String ev = bridge.installedEversensePackage();
         final boolean access = bridge.hasNotificationAccess();
         final boolean battery = bridge.isIgnoringBatteryOptimizations();
         final boolean notify = Build.VERSION.SDK_INT < 33
                 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        final String ev = bridge.installedEversensePackage();
-        final StringBuilder c = new StringBuilder();
-        line(c, ev != null, "Eversense app installed" + (ev != null ? " (" + ev + ")" : ""));
-        line(c, access, "Notification access granted");
-        line(c, bridge.isListenerConnected(), "Notification listener connected");
-        line(c, battery, "Battery: unrestricted (no optimisation)");
-        line(c, notify, "Allowed to show notifications");
-        line(c, BridgeService.isRunning(), "Keep-alive service running");
-        line(c, bridge.server.isRunning(), bridge.server.isRunning()
-                ? "Endpoint http://127.0.0.1:" + bridge.server.port() + "/sgv.json"
-                : "Endpoint down: " + bridge.server.lastError());
         final long post = bridge.lastMonitoredPostAt();
-        c.append("\nLast Eversense notification seen: ").append(post == 0 ? "not since app start" : ago(now - post));
-        if (!access) {
-            c.append("\n\nIf the switch for this app is greyed out (Android 13+ sideloaded apps): ")
-                    .append("Settings › Apps › Eversense Bridge › ⋮ › Allow restricted settings, then try again.");
+        return new Check[]{
+                new Check("Eversense app", ev != null, ev != null ? "installed" : "not found",
+                        null, null),
+                new Check("Notification access", access, access ? "on" : "off",
+                        "Turn on", this::openNotificationAccess),
+                new Check("Listener", bridge.isListenerConnected(), bridge.isListenerConnected() ? "connected" : "not connected",
+                        access ? "Reconnect" : null, () -> {
+                            EventLog.log(this, "UI", "reconnect listener requested");
+                            NotificationListenerService.requestRebind(new ComponentName(this, EversenseListenerService.class));
+                        }),
+                new Check("Battery", battery, battery ? "unrestricted" : "optimised (may be killed)",
+                        "Fix", this::requestBatteryExemption),
+                new Check("App notifications", notify, notify ? "allowed" : "blocked",
+                        "Allow", this::requestNotificationPermission),
+                new Check("Keep-alive service", BridgeService.isRunning(), BridgeService.isRunning() ? "running" : "stopped",
+                        "Start", () -> BridgeService.start(this)),
+                new Check("Data endpoint", bridge.server.isRunning(), bridge.server.isRunning()
+                        ? "127.0.0.1:" + bridge.server.port() + " · " + bridge.server.requestsServed() + " requests"
+                        : "down: " + bridge.server.lastError(),
+                        "Restart", () -> bridge.ensureServer()),
+                new Check("Last Eversense update", post > 0, post > 0 ? ago(now - post) : "none since app start",
+                        null, null),
+        };
+    }
+
+    // ---------------------------------------------------------------- rendering
+
+    private void render() {
+        final long now = System.currentTimeMillis();
+        final List<Reading> recent = bridge.store.latest(48);
+
+        if (recent.isEmpty()) {
+            value.setText("--");
+            value.setTextColor(GREY);
+            age.setText("Waiting for the first reading");
+            detail.setText("Open the Eversense app once everything below shows a green dot.");
+        } else {
+            final Reading r = recent.get(0);
+            final double slope = Trend.slope(r, recent.size() > 1 ? recent.get(1) : null);
+            final long ageMs = now - r.timestamp;
+            final int color = ageMs <= 6 * 60_000L ? GREEN : ageMs <= 15 * 60_000L ? AMBER : RED;
+            value.setText(r.mgdl + " " + Trend.arrow(Trend.direction(slope)));
+            value.setTextColor(color);
+            age.setText(ago(ageMs) + "  ·  " + new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(r.timestamp)));
+            age.setTextColor(color);
+            final double d = Trend.delta5min(slope);
+            detail.setText("mg/dL"
+                    + (Double.isNaN(d) ? "" : String.format(Locale.ROOT, "  ·  %+.0f per 5 min", d))
+                    + "  ·  time from " + (r.timestampSource.equals("notification_when") ? "Eversense" : "notification post")
+                    + "\n" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date(r.timestamp)));
         }
-        checklist.setText(c.toString());
-        accessButton.setVisibility(access ? View.GONE : View.VISIBLE);
-        batteryButton.setVisibility(battery ? View.GONE : View.VISIBLE);
-        notifyButton.setVisibility(notify ? View.GONE : View.VISIBLE);
+        chart.setReadings(recent, now);
+
+        final Check[] checks = checks(now);
+        statusList.removeAllViews();
+        Check firstProblem = null;
+        int problems = 0;
+        for (Check c : checks) {
+            statusList.addView(statusRow(c));
+            if (!c.ok && c.fix != null) {
+                problems++;
+                if (firstProblem == null) firstProblem = c;
+            }
+        }
+        if (firstProblem != null) {
+            final Check fix = firstProblem;
+            setupBanner.setVisibility(View.VISIBLE);
+            setupText.setText("Setup: " + problems + (problems == 1 ? " step" : " steps") + " left. Next: "
+                    + fix.label.toLowerCase(Locale.ROOT) + " (" + fix.value + ")"
+                    + (fix.label.equals("Notification access")
+                    ? "\nIf the switch is greyed out: App info › ⋮ › Allow restricted settings, then try again." : ""));
+            setupButton.setText(fix.fix + ": " + fix.label);
+            setupButton.setOnClickListener(v -> fix.action.run());
+        } else {
+            setupBanner.setVisibility(View.GONE);
+        }
 
         final StringBuilder rs = new StringBuilder();
-        for (int i = 0; i < Math.min(12, recent.size()); i++) {
+        for (int i = 0; i < Math.min(8, recent.size()); i++) {
             final Reading r = recent.get(i);
             final double slope = Trend.slope(r, i + 1 < recent.size() ? recent.get(i + 1) : null);
-            rs.append(fullTime(r.timestamp)).append("   ")
-                    .append(String.format(Locale.ROOT, "%3d", r.mgdl)).append(' ')
-                    .append(Trend.arrow(Trend.direction(slope))).append("   ")
-                    .append(r.timestampSource).append('\n');
+            rs.append(new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(r.timestamp)))
+                    .append("   ").append(String.format(Locale.ROOT, "%3d", r.mgdl)).append(' ')
+                    .append(Trend.arrow(Trend.direction(slope))).append('\n');
         }
-        rs.append("\nStored readings: ").append(bridge.store.count());
+        rs.append("Stored: ").append(bridge.store.count()).append(" readings");
         readings.setText(rs.toString());
 
-        final StringBuilder cs = new StringBuilder();
-        final List<CaptureEngine.Result> log = bridge.engine.log().recent();
-        for (int i = 0; i < Math.min(25, log.size()); i++) {
-            final CaptureEngine.Result r = log.get(i);
-            cs.append(time(r.input.receivedAt)).append("  ").append(r.outcome);
-            if (r.reading != null) cs.append("  ").append(r.reading.mgdl);
-            if (r.detail != null) cs.append("  ").append(r.detail);
-            cs.append('\n');
+        if (advanced.getVisibility() == View.VISIBLE) {
+            final StringBuilder cs = new StringBuilder();
+            final List<CaptureEngine.Result> log = bridge.engine.log().recent();
+            for (int i = 0; i < Math.min(20, log.size()); i++) {
+                final CaptureEngine.Result r = log.get(i);
+                cs.append(new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(r.input.receivedAt)))
+                        .append(' ').append(r.outcome);
+                if (r.reading != null) cs.append(' ').append(r.reading.mgdl);
+                if (r.detail != null) cs.append("  ").append(r.detail);
+                cs.append('\n');
+            }
+            if (log.isEmpty()) cs.append("Nothing from the Eversense app since this app started.");
+            captures.setText(cs.toString());
         }
-        if (log.isEmpty()) cs.append("Nothing from the Eversense app since this app started.");
-        captures.setText(cs.toString());
     }
 
-    private static void line(StringBuilder sb, boolean ok, String text) {
-        if (sb.length() > 0) sb.append('\n');
-        sb.append(ok ? "✓  " : "✗  ").append(text);
-    }
-
-    private static String time(long ms) {
-        return ms <= 0 ? "-" : new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(new Date(ms));
-    }
-
-    private static String fullTime(long ms) {
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date(ms));
-    }
-
-    private static String ago(long ms) {
-        final long s = Math.max(0, ms / 1000);
-        if (s < 90) return s + " s ago";
-        if (s < 5400) return (s / 60) + " min ago";
-        return (s / 3600) + " h " + (s % 3600) / 60 + " min ago";
+    private View statusRow(Check c) {
+        final LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+        final TextView dot = text("●", 16, false);
+        dot.setTextColor(c.ok ? GREEN : c.label.startsWith("Last") ? AMBER : RED);
+        dot.setPadding(0, 0, dp(10), 0);
+        row.addView(dot);
+        final TextView label = text(c.label, 15, false);
+        row.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        final TextView val = text(c.value, 14, false);
+        val.setAlpha(0.75f);
+        val.setGravity(Gravity.END);
+        row.addView(val, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f));
+        if (!c.ok && c.fix != null) {
+            final Button b = smallButton(c.fix, v -> c.action.run());
+            row.addView(b);
+        }
+        return row;
     }
 
     // ---------------------------------------------------------------- actions
+
+    private void askForNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        final SharedPreferences p = getSharedPreferences("ui", Context.MODE_PRIVATE);
+        if (p.getBoolean("asked_notifications", false)) return;
+        p.edit().putBoolean("asked_notifications", true).apply();
+        requestNotificationPermission();
+    }
 
     private void openNotificationAccess() {
         Intent i;
@@ -216,25 +327,57 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void copyDiagnostics() {
-        final StringBuilder sb = new StringBuilder();
-        sb.append("status.json:\n").append(bridge.statusJson()).append("\n\n");
-        sb.append("sgv.json (latest 6):\n").append(SgvJson.entries(bridge.store.latest(7), 6, "mgdl")).append("\n\n");
-        sb.append("enabled_notification_listeners: ")
-                .append(Secure.getString(getContentResolver(), "enabled_notification_listeners")).append("\n\n");
-        sb.append("capture log:\n");
-        for (CaptureEngine.Result r : bridge.engine.log().recent()) {
-            sb.append(fullTime(r.input.receivedAt)).append(' ').append(r.outcome)
-                    .append(" when=").append(r.input.when)
-                    .append(" post=").append(r.input.postTime)
-                    .append(" ongoing=").append(r.input.ongoing)
-                    .append(' ').append(r.input.describeTexts());
-            if (r.detail != null) sb.append(" :: ").append(r.detail);
-            sb.append('\n');
+    private void runSelfTest() {
+        selfTestButton.setEnabled(false);
+        selfTestResult.setVisibility(View.VISIBLE);
+        selfTestResult.setText("Running…");
+        SelfTest.run(this, report -> {
+            selfTestButton.setEnabled(true);
+            selfTestResult.setText(report);
+            selfTestResult.setTextColor(report.startsWith("PASS") ? GREEN : RED);
+        });
+    }
+
+    private void saveLog(boolean thenShare) {
+        logResult.setVisibility(View.VISIBLE);
+        logResult.setText("Collecting…");
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            String msg;
+            LogExport.Saved saved = null;
+            try {
+                saved = LogExport.save(app);
+                msg = "Saved " + saved.where + " (" + Math.max(1, saved.bytes / 1024) + " KB)";
+            } catch (Exception e) {
+                msg = "Could not save log: " + e;
+                EventLog.log(app, "EXPORT", msg);
+            }
+            final LogExport.Saved result = saved;
+            final String text = msg;
+            handler.post(() -> {
+                lastSaved = result;
+                logResult.setText(text);
+                shareButton.setEnabled(result != null);
+                if (thenShare && result != null) share();
+            });
+        }, "bridge-export").start();
+    }
+
+    private void share() {
+        if (lastSaved == null) {
+            saveLog(true);
+            return;
         }
-        final ClipboardManager cm = getSystemService(ClipboardManager.class);
-        cm.setPrimaryClip(ClipData.newPlainText("Eversense Bridge diagnostics", sb.toString()));
-        Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show();
+        try {
+            startActivity(LogExport.shareIntent(this, lastSaved));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No app to share with", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void toggle(View v) {
+        v.setVisibility(v.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        render();
     }
 
     private void loadSettings() {
@@ -265,6 +408,8 @@ public class MainActivity extends Activity {
         bridge.settings.save(port, lanBox.isChecked(), secretField.getText().toString(), units,
                 packagesField.getText().toString(), staleBox.isChecked(), stale);
         bridge.applySettings();
+        EventLog.log(this, "SETTINGS", "port=" + port + " lan=" + lanBox.isChecked() + " units=" + units
+                + " packages=" + bridge.settings.packagesCsv() + " stale=" + staleBox.isChecked() + "/" + stale);
         final boolean ok = bridge.ensureServer();
         loadSettings();
         render();
@@ -280,6 +425,13 @@ public class MainActivity extends Activity {
         }
     }
 
+    static String ago(long ms) {
+        final long s = Math.max(0, ms / 1000);
+        if (s < 60) return s + " s ago";
+        if (s < 5400) return (s / 60) + " min ago";
+        return (s / 3600) + " h " + (s % 3600) / 60 + " min ago";
+    }
+
     // ---------------------------------------------------------------- layout
 
     private View buildUi() {
@@ -288,79 +440,136 @@ public class MainActivity extends Activity {
         final int pad = dp(16);
         col.setPadding(pad, pad, pad, pad);
 
-        final TextView title = text("Eversense → Meanwhile bridge", 20, true);
-        col.addView(title);
+        final LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("Eversense Bridge", 20, true),
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        final TextView version = text("v" + bridge.versionName(), 12, false);
+        version.setAlpha(0.6f);
+        header.addView(version);
+        col.addView(header);
 
-        value = text("—", 44, true);
-        value.setGravity(Gravity.START);
-        col.addView(value);
-        valueDetail = text("", 13, false);
-        col.addView(valueDetail);
+        setupBanner = new LinearLayout(this);
+        setupBanner.setOrientation(LinearLayout.VERTICAL);
+        setupBanner.setPadding(dp(12), dp(10), dp(12), dp(10));
+        setupBanner.setBackground(rounded(Color.argb(40, 239, 152, 0)));
+        setupText = text("", 14, false);
+        setupBanner.addView(setupText);
+        setupButton = button("", null);
+        setupBanner.addView(setupButton);
+        col.addView(setupBanner, marginTop(12));
 
-        col.addView(header("Setup"));
-        checklist = text("", 14, false);
-        col.addView(checklist);
-        accessButton = button("Grant notification access", v -> openNotificationAccess());
-        batteryButton = button("Set battery to unrestricted", v -> requestBatteryExemption());
-        notifyButton = button("Allow notifications", v -> requestNotificationPermission());
-        col.addView(accessButton);
-        col.addView(batteryButton);
-        col.addView(notifyButton);
+        final LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(12), dp(16), dp(14));
+        card.setBackground(rounded(Color.argb(22, Color.red(textColor), Color.green(textColor), Color.blue(textColor))));
+        final TextView lastLabel = text("LAST READING", 11, true);
+        lastLabel.setAlpha(0.6f);
+        card.addView(lastLabel);
+        value = text("--", 56, true);
+        card.addView(value);
+        age = text("", 16, true);
+        card.addView(age);
+        detail = text("", 13, false);
+        detail.setAlpha(0.75f);
+        card.addView(detail);
+        col.addView(card, marginTop(12));
+
+        chart = new GlucoseChart(this, textColor);
+        col.addView(chart, marginTop(12));
+
+        col.addView(header("Status"));
+        statusList = new LinearLayout(this);
+        statusList.setOrientation(LinearLayout.VERTICAL);
+        col.addView(statusList);
+
+        col.addView(header("Check & troubleshoot"));
+        selfTestButton = button("Run self-test", v -> runSelfTest());
+        col.addView(selfTestButton);
+        selfTestResult = text("", 13, false);
+        selfTestResult.setVisibility(View.GONE);
+        col.addView(selfTestResult);
+        final LinearLayout logRow = new LinearLayout(this);
+        logRow.addView(button("Save log file", v -> saveLog(false)),
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        shareButton = button("Share log", v -> share());
+        logRow.addView(shareButton, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        col.addView(logRow);
+        logResult = text("", 13, false);
+        logResult.setVisibility(View.GONE);
+        col.addView(logResult);
+        final TextView logHint = text("The log file has everything needed to diagnose a problem "
+                + "(status, raw Eversense notification, readings, events, app logcat). "
+                + "It is saved in Downloads/" + LogExport.FOLDER + ".", 12, false);
+        logHint.setAlpha(0.6f);
+        col.addView(logHint);
 
         col.addView(header("Recent readings"));
         readings = mono();
         col.addView(readings);
 
-        col.addView(header("Capture log (this session)"));
-        captures = mono();
-        col.addView(captures);
-        col.addView(button("Copy diagnostics", v -> copyDiagnostics()));
-        col.addView(button("Open sgv.json in browser", v -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("http://127.0.0.1:" + bridge.server.port() + "/sgv.json?count=12")));
-            } catch (ActivityNotFoundException ignored) {
-            }
-        }));
-
-        col.addView(header("Settings"));
-        col.addView(text("Port (xDrip+ uses 17580; stop xDrip's web service if both are installed)", 13, false));
-        portField = field(InputType.TYPE_CLASS_NUMBER);
-        col.addView(portField);
-        lanBox = new CheckBox(this);
-        lanBox.setText("Also listen on Wi-Fi/LAN (other devices can read glucose)");
-        col.addView(lanBox);
-        col.addView(text("API secret for LAN clients (sent as SHA-1 in the api-secret header; blank = none)", 13, false));
-        secretField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        col.addView(secretField);
-        col.addView(text("Units shown by the Eversense app", 13, false));
-        unitsGroup = new RadioGroup(this);
-        unitsGroup.setOrientation(RadioGroup.HORIZONTAL);
-        unitsGroup.addView(radio(1, "Auto"));
-        unitsGroup.addView(radio(2, "mg/dL"));
-        unitsGroup.addView(radio(3, "mmol/L"));
-        col.addView(unitsGroup);
-        col.addView(text("Eversense app package names (comma separated)", 13, false));
-        packagesField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        col.addView(packagesField);
-        staleBox = new CheckBox(this);
-        staleBox.setText("Alert when no reading arrives for (minutes):");
-        col.addView(staleBox);
-        staleField = field(InputType.TYPE_CLASS_NUMBER);
-        col.addView(staleField);
-        col.addView(button("Save settings", v -> saveSettings()));
+        advanced = new LinearLayout(this);
+        advanced.setOrientation(LinearLayout.VERTICAL);
+        advanced.setVisibility(View.GONE);
+        col.addView(button("Advanced ▾", v -> toggle(advanced)), marginTop(16));
+        col.addView(advanced);
+        buildAdvanced(advanced);
 
         final ScrollView scroll = new ScrollView(this);
         scroll.addView(col);
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {
-            applyInsets(v, insets, pad);
+            applyInsets(v, insets);
             return insets;
         });
         return scroll;
     }
 
+    private void buildAdvanced(LinearLayout a) {
+        a.addView(header("Capture log (this session)"));
+        captures = mono();
+        a.addView(captures);
+        a.addView(button("Open sgv.json in browser", v -> openUrl(
+                "http://127.0.0.1:" + bridge.server.port() + "/sgv.json?count=12")));
+        a.addView(button("Get latest app version", v -> openUrl(RELEASE_PAGE)));
+
+        a.addView(header("Settings"));
+        a.addView(text("Port (xDrip+ uses 17580; stop xDrip's web service if both are installed)", 13, false));
+        portField = field(InputType.TYPE_CLASS_NUMBER);
+        a.addView(portField);
+        lanBox = new CheckBox(this);
+        lanBox.setText("Also listen on Wi-Fi/LAN (other devices can read glucose)");
+        a.addView(lanBox);
+        a.addView(text("API secret for LAN clients (blank = none)", 13, false));
+        secretField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        a.addView(secretField);
+        a.addView(text("Units shown by the Eversense app", 13, false));
+        unitsGroup = new RadioGroup(this);
+        unitsGroup.setOrientation(RadioGroup.HORIZONTAL);
+        unitsGroup.addView(radio(1, "Auto"));
+        unitsGroup.addView(radio(2, "mg/dL"));
+        unitsGroup.addView(radio(3, "mmol/L"));
+        a.addView(unitsGroup);
+        a.addView(text("Eversense app package names (comma separated)", 13, false));
+        packagesField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        a.addView(packagesField);
+        staleBox = new CheckBox(this);
+        staleBox.setText("Alert when no reading arrives for (minutes):");
+        a.addView(staleBox);
+        staleField = field(InputType.TYPE_CLASS_NUMBER);
+        a.addView(staleField);
+        a.addView(button("Save settings", v -> saveSettings()));
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException ignored) {
+            Toast.makeText(this, url, Toast.LENGTH_LONG).show();
+        }
+    }
+
     @SuppressWarnings("deprecation")
-    private static void applyInsets(View v, WindowInsets insets, int pad) {
+    private static void applyInsets(View v, WindowInsets insets) {
         // targetSdk 35 is edge-to-edge on Android 15+: keep content clear of the system bars
         if (Build.VERSION.SDK_INT >= 30) {
             final android.graphics.Insets i = insets.getInsets(
@@ -372,6 +581,20 @@ public class MainActivity extends Activity {
         }
     }
 
+    private GradientDrawable rounded(int color) {
+        final GradientDrawable g = new GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(dp(14));
+        return g;
+    }
+
+    private LinearLayout.LayoutParams marginTop(int topDp) {
+        final LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(topDp);
+        return lp;
+    }
+
     private int dp(int v) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
     }
@@ -381,7 +604,6 @@ public class MainActivity extends Activity {
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setTextIsSelectable(true);
         return t;
     }
 
@@ -392,8 +614,9 @@ public class MainActivity extends Activity {
     }
 
     private TextView mono() {
-        final TextView t = text("", 12, false);
+        final TextView t = text("", 13, false);
         t.setTypeface(Typeface.MONOSPACE);
+        t.setTextIsSelectable(true);
         return t;
     }
 
@@ -402,6 +625,14 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setOnClickListener(l);
+        return b;
+    }
+
+    private Button smallButton(String label, View.OnClickListener l) {
+        final Button b = button(label, l);
+        b.setMinHeight(0);
+        b.setMinimumHeight(0);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         return b;
     }
 

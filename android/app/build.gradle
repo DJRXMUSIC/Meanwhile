@@ -10,34 +10,43 @@ android {
         applicationId 'app.meanwhile.bridge'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0.0'
+        // CI run number, so each published build is a newer version than the last
+        def build = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionCode build
+        versionName "1.1.${build}"
     }
 
-    // A fixed key lets each new APK install over the previous one (a different key forces
-    // an uninstall, which wipes the reading history). The keystore is never committed:
-    // CI writes it from the BRIDGE_KEYSTORE_B64 secret (see android/README.md). Without
-    // it, builds fall back to the machine's debug key.
-    def keystorePath = System.getenv('BRIDGE_KEYSTORE_FILE')
-    def haveKeystore = keystorePath != null && file(keystorePath).exists()
+    // One fixed key so every new APK installs over the previous one (a different key
+    // forces an uninstall, which wipes the reading history). The key is committed with a
+    // simple passcode so builds work with no setup. That is "quasi secure": anyone with
+    // the repo could sign an APK that updates this app, but only if you install it.
+    // To use a private key instead, set the BRIDGE_KEYSTORE_B64 / BRIDGE_KEYSTORE_PASSWORD
+    // repository secrets (CI then exports BRIDGE_KEYSTORE_FILE).
+    def privateKeystore = System.getenv('BRIDGE_KEYSTORE_FILE')
+    def usePrivate = privateKeystore != null && file(privateKeystore).exists()
     signingConfigs {
-        if (haveKeystore) {
-            sideload {
-                storeFile file(keystorePath)
+        sideload {
+            if (usePrivate) {
+                storeFile file(privateKeystore)
                 storePassword System.getenv('BRIDGE_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('BRIDGE_KEY_ALIAS') ?: 'sideload'
                 keyPassword System.getenv('BRIDGE_KEY_PASSWORD') ?: System.getenv('BRIDGE_KEYSTORE_PASSWORD')
+            } else {
+                storeFile rootProject.file('signing/bridge-sideload.p12')
+                storePassword 'bridge-2026'
+                keyAlias 'bridge'
+                keyPassword 'bridge-2026'
             }
         }
     }
 
     buildTypes {
         debug {
-            if (haveKeystore) signingConfig signingConfigs.sideload
+            signingConfig signingConfigs.sideload
         }
         release {
             minifyEnabled false
-            signingConfig haveKeystore ? signingConfigs.sideload : signingConfigs.debug
+            signingConfig signingConfigs.sideload
         }
     }
 

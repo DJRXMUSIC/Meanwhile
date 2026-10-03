@@ -92,7 +92,7 @@ public class MiscAndroidTest {
     }
 
     @Test
-    public void mainActivityRendersStatusAndLatestReading() {
+    public void mainActivityShowsLastReadingStatusAndSetupSteps() {
         final long now = System.currentTimeMillis();
         Bridge.get(app).store.insert(new Reading(now - 300_000, 124, TimestampSource.POST_TIME, 0, now, now, EV365, ""));
         Bridge.get(app).store.insert(new Reading(now - 1_000, 131, TimestampSource.NOTIFICATION_WHEN, now - 1_000, now, now, EV365, ""));
@@ -100,10 +100,37 @@ public class MiscAndroidTest {
         final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
-        assertTrue(all, all.contains("131 mg/dL ↗"));
-        assertTrue(all, all.contains("time source: notification_when"));
-        assertTrue(all, all.contains("✗  Notification access granted"));
-        assertTrue(all, all.contains("Stored readings: 2"));
+        assertTrue(all, all.contains("LAST READING"));
+        assertTrue(all, all.contains("131 ↗"));
+        assertTrue(all, all.contains("time from Eversense"));
+        assertTrue(all, all.contains("Notification access"));
+        assertTrue(all, all.contains("Setup: "));
+        assertTrue(all, all.contains("Turn on: Notification access"));
+        assertTrue(all, all.contains("Stored: 2 readings"));
+        assertTrue(all, all.contains("Run self-test"));
+        assertTrue(all, all.contains("Save log file"));
+        c.pause().stop().destroy();
+    }
+
+    @Test
+    public void mainActivityWithNoReadingsSaysWaiting() {
+        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
+        shadowOf(Looper.getMainLooper()).idle();
+        final String all = allText(c.get().findViewById(android.R.id.content));
+        assertTrue(all, all.contains("Waiting for the first reading"));
+        assertTrue(all, all.contains("no readings in the last 3 hours") || all.contains("--"));
+        c.pause().stop().destroy();
+    }
+
+    @Test
+    public void exportLogAutomationIntentSavesAFile() throws Exception {
+        final Intent i = new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "export_log");
+        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class, i).setup();
+        final long deadline = System.currentTimeMillis() + 10_000;
+        while (!EventLog.readAll(app).contains("[EXPORT] saved") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        assertTrue(EventLog.readAll(app), EventLog.readAll(app).contains("[EXPORT] saved"));
         c.pause().stop().destroy();
     }
 

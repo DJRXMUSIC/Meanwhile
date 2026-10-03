@@ -149,6 +149,29 @@ wait_until 20 count_is 6 || fail "no capture after reboot"
 [ "$(newest date)" = "$(last_fake_when)" ] || fail "timestamp mismatch after reboot"
 ok "after reboot: endpoint + listener back by themselves, history kept, capture works"
 
+# ------------------------------------------------------------------ self-test button
+adb shell am start -W -n "$APP/.MainActivity" --es action self_test >/dev/null
+selftest_line() { adb logcat -d -s EversenseBridge:I | grep "SELFTEST:" | tail -1; }
+selftest_done() { [ -n "$(selftest_line)" ]; }
+wait_until 30 selftest_done || fail "self-test did not finish"
+selftest_line | grep -q "SELFTEST: PASS" || fail "self-test reported problems: $(selftest_line)"
+ok "self-test PASS: $(selftest_line | sed 's/.*SELFTEST: //' | cut -c1-200)"
+
+# ------------------------------------------------------------------ log file export
+adb shell am start -W -n "$APP/.MainActivity" --es action export_log >/dev/null
+log_saved() { adb shell ls /sdcard/Download/EversenseBridge/ 2>/dev/null | grep -q "eversense-bridge-log-"; }
+wait_until 60 log_saved || fail "log file not saved to Downloads/EversenseBridge"
+mkdir -p e2e-out
+LOGFILE=$(adb shell ls /sdcard/Download/EversenseBridge/ | tr -d '\r' | grep eversense-bridge-log- | tail -1)
+adb pull "/sdcard/Download/EversenseBridge/$LOGFILE" e2e-out/ >/dev/null
+L="e2e-out/$LOGFILE"
+for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag: $FAKE" \
+    "parse result: 155 mg/dL" "[CAPTURE] STORED 155 mg/dL" "[LISTENER] connected" "[BOOT]" \
+    "[SELFTEST] PASS" "===== Logcat" "===== end ====="; do
+  grep -qF "$needle" "$L" || { echo "--- saved log ---"; cat "$L"; fail "saved log is missing: $needle"; }
+done
+ok "log file saved to Downloads ($(wc -c < "$L") bytes) with raw Eversense notification, events, self-test PASS and logcat"
+
 echo "all $PASSED end-to-end checks passed"
 get "/sgv.json?count=6"
 echo

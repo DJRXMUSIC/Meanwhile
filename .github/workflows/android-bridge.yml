@@ -124,3 +124,40 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           disable-animations: true
           script: bash android/e2e/run-e2e.sh apks/app-release.apk apks/fake-eversense-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-saved-log-file
+          path: e2e-out/
+          if-no-files-found: ignore
+
+  release:
+    name: Publish APK (download link)
+    # Only builds that passed every unit, Robolectric, lint and emulator check reach the phone.
+    needs: [build-test, e2e]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: eversense-bridge-apk
+          path: apks
+
+      - name: Replace the bridge-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp apks/app-release.apk eversense-bridge.apk
+          gh release delete bridge-latest --cleanup-tag --yes || true
+          gh release create bridge-latest eversense-bridge.apk \
+            --target "$GITHUB_SHA" \
+            --title "Eversense Bridge (build ${{ github.run_number }})" \
+            --notes "Tap **eversense-bridge.apk** below on your phone to download, then open it to install or update.
+
+          Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed all unit, Robolectric, lint and Android 15 emulator end-to-end tests.
+
+          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/eversense-bridge.apk"
