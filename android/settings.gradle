@@ -1,0 +1,29 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    plugins {
+        id 'com.android.application' version '8.7.3'
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'meanwhile-bridge'
+
+// :core is plain Java (no Android SDK needed) and holds all of the capture,
+// dedupe, trend, JSON and HTTP logic. Pass -PcoreOnly to build/test just that
+// on a machine without the Android SDK.
+include ':core'
+if (!providers.gradleProperty('coreOnly').isPresent()) {
+    include ':app'
+    include ':fake-eversense'
+}

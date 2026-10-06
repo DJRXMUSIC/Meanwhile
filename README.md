@@ -57,6 +57,10 @@ Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **targe
 3. In Meanwhile → Settings, paste the URL and tap **Test connection**.
 4. Polling runs every 60 s while the app is open.
 
+### Eversense 365 without xDrip+
+
+`android/` contains **Eversense Bridge**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification (the same method as xDrip+'s Companion App mode) and serves it on the same `http://127.0.0.1:17580/sgv.json` endpoint. Use the same URL above. Install it on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense-bridge.apk. See [`android/README.md`](android/README.md) for install steps, what was taken from xDrip+, and the test suite.
+
 ## Insulin math
 
 `dose = ((BG − target) ÷ ISF) − IOB`

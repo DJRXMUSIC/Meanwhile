@@ -1,0 +1,24 @@
+// TEST DOUBLE ONLY. Pretends to be the Eversense 365 app (same package name) so the
+// emulator end-to-end test can post realistic glucose notifications. Never install this
+// on a phone that has the real Eversense app.
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.senseonics.fake'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.senseonics.eversense365.us'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName 'fake-1'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}

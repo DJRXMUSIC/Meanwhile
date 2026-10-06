@@ -1,0 +1,81 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.meanwhile.bridge'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.meanwhile.bridge'
+        minSdk 26
+        targetSdk 35
+        // CI run number, so each published build is a newer version than the last
+        def build = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionCode build
+        versionName "1.1.${build}"
+    }
+
+    // One fixed key so every new APK installs over the previous one (a different key
+    // forces an uninstall, which wipes the reading history). The key is committed with a
+    // simple passcode so builds work with no setup. That is "quasi secure": anyone with
+    // the repo could sign an APK that updates this app, but only if you install it.
+    // To use a private key instead, set the BRIDGE_KEYSTORE_B64 / BRIDGE_KEYSTORE_PASSWORD
+    // repository secrets (CI then exports BRIDGE_KEYSTORE_FILE).
+    def privateKeystore = System.getenv('BRIDGE_KEYSTORE_FILE')
+    def usePrivate = privateKeystore != null && file(privateKeystore).exists()
+    signingConfigs {
+        sideload {
+            if (usePrivate) {
+                storeFile file(privateKeystore)
+                storePassword System.getenv('BRIDGE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('BRIDGE_KEY_ALIAS') ?: 'sideload'
+                keyPassword System.getenv('BRIDGE_KEY_PASSWORD') ?: System.getenv('BRIDGE_KEYSTORE_PASSWORD')
+            } else {
+                storeFile rootProject.file('signing/bridge-sideload.p12')
+                storePassword 'bridge-2026'
+                keyAlias 'bridge'
+                keyPassword 'bridge-2026'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                testLogging {
+                    events 'failed'
+                    exceptionFormat 'full'
+                }
+            }
+        }
+    }
+
+    lint {
+        abortOnError true
+        checkDependencies true
+    }
+}
+
+dependencies {
+    implementation project(':core')
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+}
