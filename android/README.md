@@ -46,6 +46,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * Readings are written to SQLite (WAL) and dedupe state is committed synchronously, so nothing is lost or duplicated across restarts. History is kept for 120 days.
 * After reboot and after app updates, `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED` restart everything.
 * A **missing readings** alert fires if nothing arrives for 20 minutes (configurable). It tells you whether notification access, the listener or the Eversense app is the problem.
+* `GET /pebble` returns the newest reading as one JSON object, in xDrip+'s `/pebble` shape. The Garmin watch face (`garmin/`) reads it, because Connect IQ can't read `sgv.json`'s top-level array.
 * `GET /status.json` reports health (`ok`, listener state, last reading and its age, last capture outcome). The app's screen shows a setup checklist and a capture log, and **Copy diagnostics** puts everything, including raw notification texts, on the clipboard.
 
 ## Install on the Pixel 9a

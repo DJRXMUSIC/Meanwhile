@@ -1,6 +1,7 @@
 import Toybox.Background;
 import Toybox.Communications;
 import Toybox.Lang;
+import Toybox.PersistedContent;
 import Toybox.System;
 import Toybox.Time;
 
@@ -25,7 +26,7 @@ class BgService extends System.ServiceDelegate {
         );
     }
 
-    function onReceive(code, data) as Void {
+    function onReceive(code as Number, data as Dictionary or String or PersistedContent.Iterator or Null) as Void {
         Background.exit(Bg.parse(code, data, Time.now().value()));
     }
 }
