@@ -97,6 +97,19 @@ public class HttpServerTest {
     }
 
     @Test
+    public void pebbleIsAnObjectWithTheNewestReading() throws Exception {
+        final HttpURLConnection c = get("/pebble");
+        assertEquals(200, c.getResponseCode());
+        assertTrue(c.getContentType().startsWith("application/json"));
+        final JSONObject o = new JSONObject(body(c));
+        final JSONObject bg = o.getJSONArray("bgs").getJSONObject(0);
+        assertEquals("129", bg.getString("sgv"));
+        assertEquals(T + 29 * 300_000L, bg.getLong("datetime"));
+        assertEquals("Flat", bg.getString("direction"));
+        assertTrue(o.getJSONArray("status").getJSONObject(0).getLong("now") > 0);
+    }
+
+    @Test
     public void statusAndRootAnd404() throws Exception {
         assertTrue(new JSONObject(body(get("/status.json"))).getBoolean("ok"));
         assertTrue(body(get("/")).contains("sgv.json"));

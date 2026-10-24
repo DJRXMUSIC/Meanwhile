@@ -1,0 +1,70 @@
+name: Garmin watch face
+
+on:
+  push:
+    paths:
+      - 'garmin/**'
+      - '.github/workflows/garmin-watchface.yml'
+  pull_request:
+    paths:
+      - 'garmin/**'
+      - '.github/workflows/garmin-watchface.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: garmin-watchface-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build, simulator unit tests, screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Connect IQ SDK, device files and simulator.
+    container:
+      image: ghcr.io/matco/connectiq-tester:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 openssl x11-apps imagemagick procps >/dev/null
+
+      - name: Build, test, screenshot
+        env:
+          DEVELOPER_KEY_B64: ${{ secrets.GARMIN_DEVELOPER_KEY_B64 }}
+        run: bash garmin/tools/ci.sh garmin-out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: garmin-watchface
+          path: garmin-out/
+          if-no-files-found: warn
+
+  release:
+    name: Publish watch face (download link)
+    needs: build-test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: garmin-watchface
+          path: out
+
+      - name: Replace the watchface-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete watchface-latest --cleanup-tag --yes || true
+          gh release create watchface-latest out/*.prg out/*.png \
+            --target "$GITHUB_SHA" \
+            --title "Meanwhile watch face for Instinct E (build ${{ github.run_number }})" \
+            --notes "Download the file for your watch size: **meanwhile-instincte45mm.prg** or **meanwhile-instincte40mm.prg**. Copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).
+
+          Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed the simulator unit tests on both sizes. The screen-*.png files are simulator screenshots of this build."

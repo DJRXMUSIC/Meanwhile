@@ -93,6 +93,11 @@ wait_until 15 count_is 2 || fail "second reading not captured"
 [ "$(newest direction)" != NotComputable ] || fail "no trend computed"
 ok "second reading stored with direction $(newest direction), delta $(newest delta)"
 
+# /pebble: the same newest reading as one JSON object, for the Garmin watch face
+PEB=$(py /pebble "'%s %s %s' % (d['bgs'][0]['sgv'], d['bgs'][0]['datetime'], d['bgs'][0]['direction'])")
+[ "$PEB" = "131 $(newest date) $(newest direction)" ] || fail "/pebble '$PEB' != sgv.json newest"
+ok "/pebble serves the newest reading as an object: $PEB"
+
 # ------------------------------------------------------------------ mmol, standard notification
 sleep 11
 post --es value 7.6 --es unit mmol/L --es mode extras
