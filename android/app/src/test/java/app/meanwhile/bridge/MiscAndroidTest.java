@@ -79,8 +79,9 @@ public class MiscAndroidTest {
 
     @Test
     public void portSavedAsXdripsMovesOffItOnce() {
-        // saved by an earlier version, when 17580 was the default
-        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit().putInt("port", 17580).commit();
+        // saved by an earlier version, when 17580 was the default (and before the move existed)
+        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("port", 17580).remove(Settings.KEY_PORT_MOVED).commit();
         assertEquals(17590, new Settings(app).port());
         // chosen deliberately afterwards: kept
         new Settings(app).save(17580, false, "", "auto", "", true, 20);
@@ -89,7 +90,8 @@ public class MiscAndroidTest {
 
     @Test
     public void otherSavedPortIsKept() {
-        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit().putInt("port", 18000).commit();
+        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("port", 18000).remove(Settings.KEY_PORT_MOVED).commit();
         assertEquals(18000, new Settings(app).port());
     }
 

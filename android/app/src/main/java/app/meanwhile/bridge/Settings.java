@@ -29,7 +29,7 @@ final class Settings {
     private static final String KEY_PACKAGES = "packages";
     private static final String KEY_STALE_ALERT = "stale_alert";
     private static final String KEY_STALE_MINUTES = "stale_minutes";
-    private static final String KEY_PORT_MOVED = "port_moved_off_xdrip";
+    static final String KEY_PORT_MOVED = "port_moved_off_xdrip";
 
     private final SharedPreferences p;
 
