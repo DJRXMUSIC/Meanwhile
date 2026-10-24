@@ -29,7 +29,7 @@ jobs:
       - name: Tools
         run: |
           apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 openssl x11-apps imagemagick procps xdotool >/dev/null
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 openssl x11-apps imagemagick procps xdotool tesseract-ocr >/dev/null
 
       - name: Build, test, screenshot
         env:

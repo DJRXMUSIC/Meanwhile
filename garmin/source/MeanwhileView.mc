@@ -9,34 +9,39 @@ import Toybox.Time;
 import Toybox.Time.Gregorian;
 import Toybox.WatchUi;
 
-// Time, date, steps, heart rate, and the glucose reading with its trend arrow and
-// the minutes since it was taken.
-//
-// Layout, top to bottom: date (with heart rate in the Instinct's round subscreen,
-// or beside the steps on a watch without one), time, glucose row, steps.
 // How much of a font's ascent its digits and capitals actually fill, in percent
-// (measured on the Instinct E in the simulator). Rows are laid out by these glyph
-// heights, not by the fonts' much taller boxes.
+// (measured on the Instinct E in the simulator). Text is placed by its glyphs,
+// not by the fonts' much taller boxes.
 const NUM_GLYPH = 62;
 const TEXT_GLYPH = 70;
 
+// Width of the screen the layout is designed on (Instinct E 40 mm).
+const DESIGN = 166;
+
+// Modelled on the Instinct E's own "Instinct" face:
+//
+//   ┌──────────────┐   (steps)    <- subscreen
+//   │   123        │
+//   │ ///////////  /
+//   │   ↗  3      /
+//   │ //////////// ____________
+//   ────────────    │  ♥
+//      15 00     /  │  71
+//   ────────────    ////
+//         24 OCT
+//
+// Glucose sits in the top-left panel where that face says INSTINCT, with the trend
+// arrow and the minutes since the reading on the row below, in place of its arrow.
+//
+// Coordinates are designed on the 40 mm screen (166 px) and scaled to the 45 mm.
 class MeanwhileView extends WatchUi.WatchFace {
 
     private var _w as Number = 0;
     private var _h as Number = 0;
-    private var _sub = null; // Graphics.BoundingBox of the subscreen, or null
-
-    private var _timeFont = Graphics.FONT_NUMBER_HOT;
-    private var _bgFont = Graphics.FONT_NUMBER_MEDIUM;
-    private var _smallFont = Graphics.FONT_SMALL;
-    private var _minFont = Graphics.FONT_MEDIUM;
-
-    // glyph centre lines
-    private var _dateX as Number = 0;
-    private var _dateY as Number = 0;
-    private var _timeY as Number = 0;
-    private var _bgY as Number = 0;
-    private var _stepsY as Number = 0;
+    private var _sx as Number = 0; // subscreen box
+    private var _sy as Number = 0;
+    private var _sw as Number = 0;
+    private var _sh as Number = 0;
 
     function initialize() {
         WatchFace.initialize();
@@ -45,65 +50,36 @@ class MeanwhileView extends WatchUi.WatchFace {
     function onLayout(dc as Graphics.Dc) as Void {
         _w = dc.getWidth();
         _h = dc.getHeight();
-        _sub = null;
+        var sub = null;
         if (WatchUi has :getSubscreen) {
-            _sub = WatchUi.getSubscreen();
+            sub = WatchUi.getSubscreen();
         }
-
-        var top;
-        if (_sub != null) {
-            // Date to the left of the subscreen, level with its centre.
-            _dateY = _sub.y + _sub.height / 2;
-            _dateX = (chordLeft(_dateY) + _sub.x) / 2;
-            top = _sub.y + _sub.height;
+        if (sub != null) {
+            _sx = sub.x;
+            _sy = sub.y;
+            _sw = sub.width;
+            _sh = sub.height;
         } else {
-            _dateY = _h * 17 / 100;
-            _dateX = _w / 2;
-            top = _h * 25 / 100;
+            _sx = p(113);
+            _sy = 0;
+            _sw = p(52);
+            _sh = p(52);
         }
-        var avail = _h - _h * 5 / 100 - top;
-
-        // The largest time font, then the largest glucose font, that leave room for
-        // the steps row and four gaps of at least 4 px.
-        var stepsG = glyph(_smallFont, TEXT_GLYPH);
-        var timeFonts = [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
-        var bgFonts = [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
-        var done = false;
-        for (var i = 0; i < timeFonts.size() && !done; i++) {
-            for (var j = 0; j < bgFonts.size() && !done; j++) {
-                _timeFont = timeFonts[i];
-                _bgFont = bgFonts[j];
-                done = glyph(_timeFont, NUM_GLYPH) + glyph(_bgFont, NUM_GLYPH) + stepsG + 16 <= avail;
-            }
-        }
-        var timeG = glyph(_timeFont, NUM_GLYPH);
-        var bgG = glyph(_bgFont, NUM_GLYPH);
-        var gap = (avail - timeG - bgG - stepsG) / 4;
-        _timeY = top + gap + timeG / 2;
-        _bgY = _timeY + timeG / 2 + gap + bgG / 2;
-        _stepsY = _bgY + bgG / 2 + gap + stepsG / 2;
-        logLayout(top, avail, gap);
+        logLayout();
     }
 
     (:debug)
-    private function logLayout(top as Number, avail as Number, gap as Number) as Void {
-        System.println("layout " + _w + "x" + _h + " sub " + (_sub == null ? "none" : _sub.x + "," + _sub.y + " " + _sub.width + "x" + _sub.height)
-            + " top " + top + " avail " + avail + " gap " + gap + " timeY " + _timeY + " bgY " + _bgY + " stepsY " + _stepsY);
+    private function logLayout() as Void {
+        System.println("layout " + _w + "x" + _h + " sub " + _sx + "," + _sy + " " + _sw + "x" + _sh);
     }
 
     (:release)
-    private function logLayout(top as Number, avail as Number, gap as Number) as Void {
+    private function logLayout() as Void {
     }
 
-    // Glyph height of a font, px.
-    private function glyph(font, pct as Number) as Number {
-        return Graphics.getFontAscent(font) * pct / 100;
-    }
-
-    // Draws text so its glyphs (not its font box) are centred on y.
-    private function text(dc as Graphics.Dc, x as Number, y as Number, font, pct as Number, str as String, justify as Number) as Void {
-        var g = glyph(font, pct);
-        dc.drawText(x, y + g / 2 - Graphics.getFontAscent(font), font, str, justify);
+    // A design coordinate (40 mm screen) on this screen.
+    private function p(v as Number) as Number {
+        return v * _w / DESIGN;
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {
@@ -112,77 +88,132 @@ class MeanwhileView extends WatchUi.WatchFace {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(1);
 
         var now = Time.now();
-        var info = Gregorian.info(now, Time.FORMAT_MEDIUM);
-
-        // date: "24 OCT"
-        text(dc, _dateX, _dateY, _smallFont, TEXT_GLYPH, info.day.format("%d") + " " + info.month.toString().toUpper(),
-            Graphics.TEXT_JUSTIFY_CENTER);
-
-        // time
-        var hour = info.hour;
-        var timeStr;
-        if (System.getDeviceSettings().is24Hour) {
-            timeStr = hour.format("%02d") + ":" + info.min.format("%02d");
-        } else {
-            hour = hour % 12;
-            if (hour == 0) {
-                hour = 12;
-            }
-            timeStr = hour.format("%d") + ":" + info.min.format("%02d");
-        }
-        text(dc, _w / 2, _timeY, _timeFont, NUM_GLYPH, timeStr, Graphics.TEXT_JUSTIFY_CENTER);
-
+        drawFrame(dc);
         drawGlucose(dc, now.value());
+        drawTime(dc, Gregorian.info(now, Time.FORMAT_MEDIUM));
+        drawSteps(dc);
+        drawHeartRate(dc);
+    }
 
-        // heart rate and steps
-        var hr = heartRate();
-        var hrStr = (hr == null) ? "--" : hr.format("%d");
-        var steps = ActivityMonitor.getInfo().steps;
-        var stepsStr = (steps == null) ? "--" : steps.format("%d");
-        if (_sub != null) {
-            var scx = _sub.x + _sub.width / 2;
-            var scy = _sub.y + _sub.height / 2;
-            drawHeart(dc, scx, scy - _sub.height / 6, _sub.height / 11);
-            text(dc, scx, scy + _sub.height / 6, _smallFont, TEXT_GLYPH, hrStr, Graphics.TEXT_JUSTIFY_CENTER);
-            drawIconText(dc, _w / 2, _stepsY, stepsStr, :steps);
-        } else {
-            drawIconText(dc, _w * 30 / 100, _stepsY, stepsStr, :steps);
-            drawIconText(dc, _w * 70 / 100, _stepsY, hrStr, :heart);
+    // ---------------------------------------------------------------- panels
+
+    // The lines and hatching the Instinct face is built from.
+    private function drawFrame(dc as Graphics.Dc) as Void {
+        // top-left panel: diagonal right edge, hatch under it
+        dc.drawLine(p(106), p(10), p(94), p(60));
+        hatch(dc, p(30), p(91), p(60));
+        // rule above the time, stepping up into the right panel
+        dc.drawLine(p(14), p(64), p(116), p(64));
+        dc.drawLine(p(128), p(68), p(152), p(68));
+        // diagonal between the time and the right panel
+        dc.drawLine(p(130), p(68), p(118), p(112));
+        // rule under the time; hatch under the heart rate
+        dc.drawLine(p(14), p(115), p(116), p(115));
+        hatch(dc, p(124), p(150), p(115));
+        // short hatch under the date
+        hatch(dc, p(62), p(104), p(146));
+    }
+
+    // A row of short diagonal ticks from x0 to x1, its bottom on y.
+    private function hatch(dc as Graphics.Dc, x0 as Number, x1 as Number, y as Number) as Void {
+        var t = p(3);
+        if (t < 3) {
+            t = 3;
+        }
+        for (var x = x0; x + t <= x1; x += t) {
+            dc.drawLine(x, y, x + t - 1, y - t + 1);
         }
     }
 
-    // "123 ↗ 2": value, arrow, minutes since the reading, centred as one group.
+    // Glucose in the top-left panel; arrow and minutes since the reading below it.
     private function drawGlucose(dc as Graphics.Dc, nowSec as Number) as Void {
+        var cx = p(62);
         var sgv = Application.Storage.getValue(Bg.K_SGV);
         var at = Application.Storage.getValue(Bg.K_AT);
-        var cx = _w / 2;
         if (!(sgv instanceof String) || !(at instanceof Number)) {
-            text(dc, cx, _bgY, _minFont, TEXT_GLYPH, "--", Graphics.TEXT_JUSTIFY_CENTER);
+            text(dc, cx, p(28), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_CENTER);
             return;
         }
+        text(dc, cx, p(28), Graphics.FONT_NUMBER_MEDIUM, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_CENTER);
+
         var dir = Application.Storage.getValue(Bg.K_DIR);
         var minStr = minutesSince(at, nowSec).format("%d");
-
-        var font = _bgFont;
-        var size = glyph(font, NUM_GLYPH);
+        var font = Graphics.FONT_SMALL;
+        var size = p(15);
         var arrowW = arrowWidth(dir, size);
-        var gap = size / 4;
-        var total = dc.getTextWidthInPixels(sgv, font) + gap + arrowW + gap + dc.getTextWidthInPixels(minStr, _minFont);
-        if (total > chordWidth(_bgY) * 94 / 100 && font != Graphics.FONT_NUMBER_MILD) {
-            font = Graphics.FONT_NUMBER_MILD;
-            size = glyph(font, NUM_GLYPH);
-            arrowW = arrowWidth(dir, size);
-            gap = size / 4;
-            total = dc.getTextWidthInPixels(sgv, font) + gap + arrowW + gap + dc.getTextWidthInPixels(minStr, _minFont);
-        }
+        var gap = arrowW > 0 ? p(7) : 0;
+        var total = arrowW + gap + dc.getTextWidthInPixels(minStr, font);
         var x = cx - total / 2;
-        text(dc, x, _bgY, font, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_LEFT);
-        x += dc.getTextWidthInPixels(sgv, font) + gap;
-        drawArrow(dc, x + arrowW / 2, _bgY, size, dir);
-        x += arrowW + gap;
-        text(dc, x, _bgY, _minFont, TEXT_GLYPH, minStr, Graphics.TEXT_JUSTIFY_LEFT);
+        var y = p(47);
+        drawArrow(dc, x + arrowW / 2, y, size, dir);
+        text(dc, x + arrowW + gap, y, font, TEXT_GLYPH, minStr, Graphics.TEXT_JUSTIFY_LEFT);
+    }
+
+    // "15 00": hours solid, minutes striped, as on the Instinct face.
+    private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
+        var hour = info.hour;
+        var hStr;
+        if (System.getDeviceSettings().is24Hour) {
+            hStr = hour.format("%02d");
+        } else {
+            hour = hour % 12;
+            hStr = (hour == 0 ? 12 : hour).format("%d");
+        }
+        var mStr = info.min.format("%02d");
+        var font = Graphics.FONT_NUMBER_THAI_HOT;
+        var gap = p(3);
+        var hw = dc.getTextWidthInPixels(hStr, font);
+        var mw = dc.getTextWidthInPixels(mStr, font);
+        var x = p(66) - (hw + gap + mw) / 2;
+        var y = p(90);
+        text(dc, x, y, font, NUM_GLYPH, hStr, Graphics.TEXT_JUSTIFY_LEFT);
+        var mx = x + hw + gap;
+        text(dc, mx, y, font, NUM_GLYPH, mStr, Graphics.TEXT_JUSTIFY_LEFT);
+
+        // Stripe the minutes: blank every other row of their glyphs.
+        var g = glyph(font, NUM_GLYPH);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+        for (var row = y - g / 2 + 1; row < y + g / 2; row += 2) {
+            dc.drawLine(mx, row, mx + mw, row);
+        }
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+
+        // date
+        text(dc, _w / 2, p(132), Graphics.FONT_SMALL, TEXT_GLYPH,
+            info.day.format("%d") + " " + info.month.toString().toUpper(), Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // Steps in the subscreen: footprints over the count.
+    private function drawSteps(dc as Graphics.Dc) as Void {
+        var steps = ActivityMonitor.getInfo().steps;
+        var cx = _sx + _sw / 2;
+        var cy = _sy + _sh / 2;
+        drawFootprints(dc, cx, cy - _sh / 5, _sh / 11);
+        text(dc, cx, cy + _sh / 6, Graphics.FONT_SMALL, TEXT_GLYPH,
+            steps == null ? "--" : steps.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // Heart rate in the right panel.
+    private function drawHeartRate(dc as Graphics.Dc) as Void {
+        var hr = heartRate();
+        var cx = p(140);
+        drawHeart(dc, cx, p(80), p(5));
+        text(dc, cx, p(100), Graphics.FONT_SMALL, TEXT_GLYPH, hr == null ? "--" : hr.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // ---------------------------------------------------------------- text
+
+    // Glyph height of a font, px.
+    private function glyph(font, pct as Number) as Number {
+        return Graphics.getFontAscent(font) * pct / 100;
+    }
+
+    // Draws text so its glyphs (not its font box) are centred on y.
+    private function text(dc as Graphics.Dc, x as Number, y as Number, font, pct as Number, str as String, justify as Number) as Void {
+        dc.drawText(x, y + glyph(font, pct) / 2 - Graphics.getFontAscent(font), font, str, justify);
     }
 
     // ---------------------------------------------------------------- arrows
@@ -236,9 +267,9 @@ class MeanwhileView extends WatchUi.WatchFace {
     // A filled arrow of the given length, centred on (cx, cy).
     private function drawOneArrow(dc as Graphics.Dc, cx as Number, cy as Number, size as Number, angle as Number) as Void {
         var h = size / 2.0;
-        var head = size * 0.5;
-        var shaft = size * 0.09 + 0.6; // half the shaft's thickness
-        var wing = size * 0.32;        // half the head's width
+        var head = size * 0.45;
+        var shaft = size * 0.07 + 0.5; // half the shaft's thickness
+        var wing = size * 0.3;         // half the head's width
         var pts = [
             [-h, -shaft], [h - head, -shaft], [h - head, -wing], [h, 0.0],
             [h - head, wing], [h - head, shaft], [-h, shaft]
@@ -257,23 +288,6 @@ class MeanwhileView extends WatchUi.WatchFace {
 
     // ---------------------------------------------------------------- icons
 
-    private function drawIconText(dc as Graphics.Dc, cx as Number, cy as Number, str as String, icon as Symbol) as Void {
-        var r = glyph(_smallFont, TEXT_GLYPH) / 3;
-        if (r < 3) {
-            r = 3;
-        }
-        var iconW = 4 * r;
-        var gap = r;
-        var total = iconW + gap + dc.getTextWidthInPixels(str, _smallFont);
-        var x = cx - total / 2;
-        if (icon == :heart) {
-            drawHeart(dc, x + iconW / 2, cy, r);
-        } else {
-            drawSteps(dc, x + iconW / 2, cy, r);
-        }
-        text(dc, x + iconW + gap, cy, _smallFont, TEXT_GLYPH, str, Graphics.TEXT_JUSTIFY_LEFT);
-    }
-
     // A heart about 4r wide, centred on (cx, cy).
     private function drawHeart(dc as Graphics.Dc, cx as Number, cy as Number, r as Number) as Void {
         var top = cy - r / 2;
@@ -283,12 +297,12 @@ class MeanwhileView extends WatchUi.WatchFace {
     }
 
     // Two footprints about 4r wide, centred on (cx, cy).
-    private function drawSteps(dc as Graphics.Dc, cx as Number, cy as Number, r as Number) as Void {
+    private function drawFootprints(dc as Graphics.Dc, cx as Number, cy as Number, r as Number) as Void {
         var fw = r * 2 / 3;
         if (fw < 2) {
             fw = 2;
         }
-        // left foot, lower; right foot, higher
+        // left foot lower, right foot higher; each a sole and a heel
         dc.fillEllipse(cx - r, cy, fw, r);
         dc.fillCircle(cx - r, cy + r + fw, fw * 2 / 3);
         dc.fillEllipse(cx + r, cy - r, fw, r);
@@ -310,18 +324,6 @@ class MeanwhileView extends WatchUi.WatchFace {
             }
         }
         return null;
-    }
-
-    // Width of the round screen at height y.
-    private function chordWidth(y as Number) as Number {
-        var r = _w / 2.0;
-        var d = y - _h / 2.0;
-        var sq = r * r - d * d;
-        return sq <= 0 ? 0 : (2 * Math.sqrt(sq)).toNumber();
-    }
-
-    private function chordLeft(y as Number) as Number {
-        return (_w - chordWidth(y)) / 2;
     }
 }
 
