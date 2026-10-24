@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Stand-in for xDrip+ / Eversense Bridge on 127.0.0.1:17580, for the simulator.
+"""Stand-in for the Eversense Bridge on 127.0.0.1:17590, for the simulator.
 
 usage: fake_pebble.py SGV DIRECTION AGE_MINUTES [PORT]
 
-Serves /pebble in xDrip+'s shape with one reading taken AGE_MINUTES ago.
+Serves the bridge's /pebble with one reading taken AGE_MINUTES ago.
 """
 import json
 import sys
@@ -11,7 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 SGV, DIRECTION, AGE_MIN = sys.argv[1], sys.argv[2], float(sys.argv[3])
-PORT = int(sys.argv[4]) if len(sys.argv) > 4 else 17580
+PORT = int(sys.argv[4]) if len(sys.argv) > 4 else 17590
 TAKEN = int((time.time() - AGE_MIN * 60) * 1000)
 
 

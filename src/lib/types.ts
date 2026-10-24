@@ -184,7 +184,7 @@ export interface Profile {
     updated_ts?: number;
   };
   units: "mgdl";
-  xdrip_url?: string;     // local xDrip+ web service URL
+  xdrip_url?: string;     // Eversense Bridge URL (field name dates from when this read xDrip+)
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
   mode?: "decide" | "learn"; // persistent operating mode
   theme?: ThemeName;         // legacy preset (light + accent combined)
@@ -214,7 +214,7 @@ export const DEFAULT_PROFILE: Profile = {
   tir_low: 70,
   tir_high: 160,
   units: "mgdl",
-  xdrip_url: "http://127.0.0.1:17580",
+  xdrip_url: "http://127.0.0.1:17590",
   ai_provider: "auto",
   mode: "decide",
   theme: "default",
@@ -225,6 +225,6 @@ export const DEFAULT_PROFILE: Profile = {
   daily_basal_time: "18:30",
   daily_basal_tz: "America/New_York",
   sync_auto: true,
-  schema_version: 4,
+  schema_version: 5,
   updated_ts: Date.now(),
 };

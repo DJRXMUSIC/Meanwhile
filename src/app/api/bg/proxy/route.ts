@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Optional CORS proxy for xDrip+ when the device hosting xDrip+ is on the same
-// network as the Next.js server but the browser's CORS prevents direct fetch.
-// The browser passes ?base=<xdrip-url>&count=N.
+// Optional CORS proxy for the Eversense Bridge when the phone running it is on the
+// same network as the Next.js server but the browser's CORS prevents direct fetch.
+// The browser passes ?base=<bridge-url>&count=N.
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const base = url.searchParams.get("base");

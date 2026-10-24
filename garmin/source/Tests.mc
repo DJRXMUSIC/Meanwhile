@@ -6,8 +6,8 @@ import Toybox.Test;
 const T0 = 1790000000; // a reading time, s
 
 (:test)
-function parseReadsXdripPebbleReply(logger as Test.Logger) as Boolean {
-    // xDrip+'s shape: sgv is a string, status[0].now is the phone's clock.
+function parseReadsBridgePebbleReply(logger as Test.Logger) as Boolean {
+    // The bridge's /pebble: sgv is a string, status[0].now is the phone's clock.
     var r = Bg.parse(200, {
         "status" => [{"now" => 1790000090000l}],
         "bgs" => [{"sgv" => "123", "trend" => 4, "direction" => "Flat", "datetime" => 1790000000000l, "bgdelta" => -2}],

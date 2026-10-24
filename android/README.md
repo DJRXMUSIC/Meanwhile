@@ -1,10 +1,10 @@
 # Eversense Bridge (Android)
 
-A small Android app for the Pixel 9a. It captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17580/sgv.json`, the same endpoint and JSON format as xDrip+'s local web service. Meanwhile reads it with no changes; you don't need to install xDrip+.
+A small Android app for the Pixel 9a. It captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17590/sgv.json`, in the same JSON format as xDrip+'s local web service. It is the only glucose source for Meanwhile and its watch face. xDrip+ can stay installed with its own web service on 17580; the bridge neither needs nor reads it.
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
-  Eversense Bridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17580/sgv.json ──▶ Meanwhile
+  Eversense Bridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
 ```
 
 ## Why it reads the notification instead of Bluetooth
@@ -24,7 +24,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 | `services/UiBasedCollector` – package list (`com.senseonics.eversense365.us`, `…gen12androidapp`, `…androidapp`), `processRemote`/`getTextViews`, `filterString`, `arrowFilterString`, `basicFilterString`, `filterUnicodeRange`, `isValidMmol`, `tryExtractString` | `core/NotificationParser`, `app/NotificationTexts` | Same filters and the "exactly one number" rule |
 | `UiBasedCollector.handleNewValue`, `isDifferentToLast`, `isJammed`, `jamThreshold`; `DexCollectionType.getCurrentDeduplicationPeriod` | `core/ReadingGate` | 40–405 mg/dL, 10 s / 250 s dedupe, jam after 6 repeats |
 | `BgReading.calculateSlope`, `Dex_Constants.TREND_ARROW_VALUES` thresholds | `core/Trend` | Same direction names and thresholds |
-| `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17580, loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
+| `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17590 (xDrip+ keeps 17580), loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
 | `UiBasedCollectorTest` | `core/…/NotificationParserTest`, `ReadingGateTest` | Ported test-for-test |
 
 **Left out:** everything else, including every other collector (Dexcom, Libre, Medtronic, …), calibration, alarms, Nightscout upload, graphs, watch integration, and xDrip's ActiveAndroid database, `Pref`/`PersistentStore` and dagger plumbing. Because of those transitive dependencies, `UiBasedCollector` can't simply be copied out of xDrip. The bridge is about 2,600 lines of Java and has no third-party runtime dependencies.
@@ -46,7 +46,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * Readings are written to SQLite (WAL) and dedupe state is committed synchronously, so nothing is lost or duplicated across restarts. History is kept for 120 days.
 * After reboot and after app updates, `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED` restart everything.
 * A **missing readings** alert fires if nothing arrives for 20 minutes (configurable). It tells you whether notification access, the listener or the Eversense app is the problem.
-* `GET /pebble` returns the newest reading as one JSON object, in xDrip+'s `/pebble` shape. The Garmin watch face (`garmin/`) reads it, because Connect IQ can't read `sgv.json`'s top-level array.
+* `GET /pebble` returns the newest reading as one JSON object (the Nightscout `/pebble` shape). The Garmin watch face (`garmin/`) reads it, because Connect IQ can't read `sgv.json`'s top-level array.
 * `GET /status.json` reports health (`ok`, listener state, last reading and its age, last capture outcome). The app's screen shows a setup checklist and a capture log, and **Copy diagnostics** puts everything, including raw notification texts, on the clipboard.
 
 ## Install on the Pixel 9a
@@ -60,9 +60,9 @@ https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
 4. Tap **Run self-test**: it should say PASS.
-5. In Meanwhile → Settings, set the xDrip+ URL to `http://127.0.0.1:17580` and tap **Test connection**.
+5. In Meanwhile → Settings, the **Eversense Bridge URL** should be `http://127.0.0.1:17590`. Tap **Test connection**.
 
-If xDrip+ is also installed with its local web service on, it already holds port 17580. Turn its web service off, or pick another port under **Advanced**.
+The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 
 ## The screen
 

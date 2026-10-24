@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end test on a running emulator:
 #   fake Eversense app (same package name as Eversense 365) posts a glucose notification
-#   -> Eversense Bridge captures it -> http://127.0.0.1:17580/sgv.json serves it.
+#   -> Eversense Bridge captures it -> http://127.0.0.1:17590/sgv.json serves it.
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot.
 #
@@ -12,7 +12,7 @@ APP_APK=$1
 FAKE_APK=$2
 APP=app.meanwhile.bridge
 FAKE=com.senseonics.eversense365.us
-PORT=17580
+PORT=17590
 PASSED=0
 
 get() { curl -sS --max-time 5 "http://127.0.0.1:$PORT$1"; }

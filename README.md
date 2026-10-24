@@ -10,7 +10,7 @@ A lightning-fast PWA decision-support harness for Type 1 Diabetes. The home scre
 | UI | Tailwind, system fonts | No webfont round-trip, instant render |
 | Local store | IndexedDB via Dexie | Offline-first, fast queries, multi-tab safe |
 | AI | Pluggable: Anthropic (Claude) primary, OpenAI fallback | Redundancy across vendors |
-| BG source | xDrip+ local web service polled every 60s | Direct, no cloud middleman |
+| BG source | Eversense Bridge (`android/`) on the phone, polled every 60s | Direct, no cloud middleman |
 | PWA | Hand-rolled service worker (`/sw.js`) | Cache shell, never cache AI calls |
 | Sync | Generic `POST /sync` to user's own endpoint | Privacy: bring-your-own backend |
 
@@ -20,9 +20,9 @@ src/
     layout.tsx              ← global shell
     page.tsx                ← Home: BG/IOB tiles + mic/text + DecisionCard
     profile/page.tsx        ← Ratios, TIR, AI refinement, history
-    settings/page.tsx       ← xDrip URL, AI provider, sync, manual BG, import/export
+    settings/page.tsx       ← Bridge URL, AI provider, sync, manual BG, import/export
     api/ai/decide/route.ts  ← Server: provider abstraction + JSON tool call
-    api/bg/proxy/route.ts   ← Optional xDrip+ CORS proxy
+    api/bg/proxy/route.ts   ← Optional bridge CORS proxy
   components/               ← StatTiles, Sparkline, InputBar, DecisionCard, ...
   lib/
     db.ts                   ← Dexie schema + helpers
@@ -32,7 +32,7 @@ src/
     refine.ts               ← Outcome attachment + ISF nudge from BG@2h
     sync.ts                 ← Bundle build / push / pull / export / import
     speech.ts               ← Web Speech API wrapper
-    useLiveData.ts          ← React hooks: live BG/IOB, xDrip polling
+    useLiveData.ts          ← React hooks: live BG/IOB, bridge polling
     ai/
       prompt.ts             ← System + user prompt builders
       providers.ts          ← Anthropic + OpenAI + auto-fallback
@@ -50,20 +50,17 @@ npm run dev
 
 Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **target 110 mg/dL**.
 
-### xDrip+ setup
+### Glucose source: Eversense Bridge
 
-1. xDrip+ → Settings → Inter-app settings → enable **Local web service**.
-2. Default URL: `http://127.0.0.1:17580`. For cross-device use the phone's LAN IP.
-3. In Meanwhile → Settings, paste the URL and tap **Test connection**.
-4. Polling runs every 60 s while the app is open.
+`android/` contains **Eversense Bridge**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification and serves it at `http://127.0.0.1:17590`. It is Meanwhile's only glucose source. xDrip+ can stay installed, with its own web service on port 17580, and nothing here reads it.
 
-### Eversense 365 without xDrip+
-
-`android/` contains **Eversense Bridge**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification (the same method as xDrip+'s Companion App mode) and serves it on the same `http://127.0.0.1:17580/sgv.json` endpoint. Use the same URL above. Install it on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense-bridge.apk. See [`android/README.md`](android/README.md) for install steps, what was taken from xDrip+, and the test suite.
+1. Install the bridge on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense-bridge.apk (steps in [`android/README.md`](android/README.md)).
+2. In Meanwhile → Settings → **Eversense Bridge URL**, use `http://127.0.0.1:17590` (the default; a saved URL on xDrip+'s port 17580 moves to 17590 by itself) and tap **Test connection**.
+3. Polling runs every 60 s while the app is open.
 
 ### Garmin Instinct E watch face
 
-`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and minutes since the reading. It reads the same phone endpoint (xDrip+ or Eversense Bridge) through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
+`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and minutes since the reading. It reads the Eversense Bridge on the phone through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
 
 ## Insulin math
 

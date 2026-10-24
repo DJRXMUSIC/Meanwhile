@@ -13,8 +13,13 @@ import app.meanwhile.bridge.core.NotificationParser;
 final class Settings {
 
     static final String PREFS = "bridge_settings";
-    /** Same port as xDrip+'s local web service, so Meanwhile needs no changes. */
-    static final int DEFAULT_PORT = 17580;
+    /**
+     * Not xDrip+'s 17580, so xDrip+ can keep its own web service on while the bridge
+     * runs. Meanwhile, its watch face and anything else of ours read this port.
+     */
+    static final int DEFAULT_PORT = 17590;
+    /** The default before 17590: xDrip+'s port. */
+    static final int OLD_DEFAULT_PORT = 17580;
     static final int DEFAULT_STALE_MINUTES = 20;
 
     private static final String KEY_PORT = "port";
@@ -24,11 +29,24 @@ final class Settings {
     private static final String KEY_PACKAGES = "packages";
     private static final String KEY_STALE_ALERT = "stale_alert";
     private static final String KEY_STALE_MINUTES = "stale_minutes";
+    private static final String KEY_PORT_MOVED = "port_moved_off_xdrip";
 
     private final SharedPreferences p;
 
     Settings(Context context) {
         p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        movePortOffXdrip();
+    }
+
+    /**
+     * Once: a port saved as the old default (xDrip+'s 17580) moves to 17590. A port
+     * chosen after this runs is left alone.
+     */
+    private void movePortOffXdrip() {
+        if (p.getBoolean(KEY_PORT_MOVED, false)) return;
+        final SharedPreferences.Editor e = p.edit().putBoolean(KEY_PORT_MOVED, true);
+        if (p.getInt(KEY_PORT, DEFAULT_PORT) == OLD_DEFAULT_PORT) e.putInt(KEY_PORT, DEFAULT_PORT);
+        e.commit();
     }
 
     int port() {

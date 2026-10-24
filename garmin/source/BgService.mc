@@ -5,8 +5,8 @@ import Toybox.PersistedContent;
 import Toybox.System;
 import Toybox.Time;
 
-// Background process: fetch the newest reading from the phone and hand it to the face.
-// Garmin Connect on the phone performs the request, so 127.0.0.1 is the phone.
+// Background process: fetch the newest reading from the Eversense Bridge and hand it to
+// the face. Garmin Connect on the phone performs the request, so 127.0.0.1 is the phone.
 (:background)
 class BgService extends System.ServiceDelegate {
 

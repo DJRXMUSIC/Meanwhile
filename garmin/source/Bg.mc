@@ -5,10 +5,10 @@ import Toybox.Lang;
 // the storage keys and the parser.
 (:background)
 module Bg {
-    // xDrip+'s local web service and the Eversense Bridge both answer here. /pebble
-    // is used rather than /sgv.json because Connect IQ rejects a JSON reply whose
-    // top level is an array.
-    const URL = "http://127.0.0.1:17580/pebble";
+    // The Eversense Bridge app on the phone (its own port; xDrip+, which may also be
+    // installed, uses 17580 and is never read). /pebble rather than /sgv.json because
+    // Connect IQ rejects a JSON reply whose top level is an array.
+    const URL = "http://127.0.0.1:17590/pebble";
 
     // Keys of the reading in Application.Storage (and in the background's result).
     const K_SGV = "sgv"; // String, in the user's units, as shown

@@ -56,7 +56,14 @@ export function db(): MeanwhileDB {
 }
 
 // Schema version bumps trigger one-shot, non-destructive migrations.
-const CURRENT_SCHEMA = 4;
+const CURRENT_SCHEMA = 5;
+
+// v5: glucose comes only from the Eversense Bridge, on port 17590. Port 17580 is
+// xDrip+'s local web service, which is never read, so a URL on it moves to 17590.
+export function bridgeUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return DEFAULT_PROFILE.xdrip_url;
+  return url.replace(/:17580(?=\/|$)/, ":17590");
+}
 
 function newSyncKey(): string {
   // 32-char hex from a UUID — enough entropy to be unguessable, short
@@ -111,6 +118,8 @@ export async function getProfile(): Promise<Profile> {
       // v4 fields — sync
       sync_key: existing.sync_key ?? newSyncKey(),
       sync_auto: existing.sync_auto ?? true,
+      // v5: off xDrip+'s port
+      xdrip_url: bridgeUrl(existing.xdrip_url),
       // theme split
       theme_mode: migratedMode,
       theme_accent: migratedAccent,

@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Nightscout {@code /api/v1/entries/sgv.json} entries, in the shape xDrip+'s local web
- * service ({@code webservices/WebServiceSgv}) produces on port 17580, so existing clients
+ * service ({@code webservices/WebServiceSgv}) produces, so existing clients
  * (Meanwhile, watch faces, etc.) work unchanged.
  */
 public final class SgvJson {

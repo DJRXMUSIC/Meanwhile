@@ -164,10 +164,10 @@ export default function SettingsPage() {
         </p>
       </Section>
 
-      <Section title="xDrip+ local URL">
+      <Section title="Eversense Bridge URL">
         <input
           type="url"
-          placeholder="http://192.168.x.x:17580"
+          placeholder="http://127.0.0.1:17590"
           value={profile.xdrip_url ?? ""}
           onChange={(e) => update({ xdrip_url: e.target.value })}
           className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
@@ -176,16 +176,16 @@ export default function SettingsPage() {
           <button
             onClick={async () => {
               const url = (profile.xdrip_url || "").trim();
-              if (!url) { setStatus("xDrip: enter a URL first"); return; }
-              setStatus("xDrip: testing…");
+              if (!url) { setStatus("Bridge: enter a URL first"); return; }
+              setStatus("Bridge: testing…");
               try {
                 const n = await syncXdripOnce(url);
                 const msg = n > 0
-                  ? `xDrip: pulled ${n} new readings ✓`
-                  : `xDrip: connected ✓ (no new readings since last sync)`;
+                  ? `Bridge: pulled ${n} new readings ✓`
+                  : `Bridge: connected ✓ (no new readings since last sync)`;
                 setStatus(msg);
               } catch (e) {
-                setStatus(`xDrip error: ${(e as Error).message}. Tip: when this app is on a different device than xDrip+, use the phone's LAN IP (not 127.0.0.1) and make sure both are on the same WiFi.`);
+                setStatus(`Bridge error: ${(e as Error).message}. Check the Eversense Bridge app is running (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
               }
             }}
             className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
@@ -208,7 +208,7 @@ export default function SettingsPage() {
           </button>
         </div>
         <p className="text-[11px] text-muted mt-2">
-          xDrip+ → Settings → Inter-app settings → enable <b>Local web service</b>. Direct browser fetches work only if this page is HTTP and on the same device. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
+          Readings come from the <b>Eversense Bridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
         </p>
       </Section>
 

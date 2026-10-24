@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Nightscout {@code /pebble} reply, in the shape xDrip+'s local web service
- * ({@code webservices/WebServicePebble}) produces on port 17580.
+ * Nightscout {@code /pebble} reply, in the same shape as xDrip+'s local web service
+ * ({@code webservices/WebServicePebble}).
  *
  * Unlike {@code sgv.json}, whose top level is an array, this is a JSON object. Garmin
  * Connect IQ's {@code makeWebRequest} rejects a top-level array, so the Meanwhile watch face

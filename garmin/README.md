@@ -11,7 +11,7 @@ A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
 ```
-Eversense app ─▶ xDrip+ or Eversense Bridge (127.0.0.1:17580/pebble on the phone)
+Eversense app ─▶ Eversense Bridge (127.0.0.1:17590/pebble on the phone)
              ─▶ Garmin Connect app ─Bluetooth─▶ watch face background fetch ─▶ screen
 ```
 
@@ -28,8 +28,8 @@ To update, copy the new `.prg` over the old one.
 
 ## Phone setup
 
-* **xDrip+:** Settings → Inter-app settings → turn on **Local web service**.
-* **Eversense Bridge:** nothing to do; it serves `/pebble` on the same port (17580).
+* **Eversense Bridge** (`android/`) must be installed and running; the face reads only its `/pebble` endpoint on port 17590. To check it, open `http://127.0.0.1:17590/pebble` in Chrome on the phone: it should show your latest reading.
+* **xDrip+** can stay installed with its web service on. It uses port 17580, and nothing here reads it.
 * **Garmin Connect:** the face's fetch goes through it, so keep it running and exempt it from battery optimisation (Android Settings → Apps → Garmin Connect → Battery → Unrestricted).
 
 The first reading shows up within about 5 minutes of choosing the face.
@@ -58,7 +58,7 @@ Locally, with the Connect IQ SDK installed:
 ```bash
 cd garmin
 monkeyc -f monkey.jungle -d instincte40mm -y <developer_key.der> -o bin/meanwhile.prg
-python3 tools/fake_pebble.py 123 Flat 2 &   # pretend phone
+python3 tools/fake_pebble.py 123 Flat 2 &   # pretend bridge on :17590
 monkeydo bin/meanwhile.prg instincte40mm      # untick Settings > Use Device HTTPS Requirements first
 ```
 

@@ -126,7 +126,7 @@ export function useXdripPolling(profile: Profile | null): XdripControl {
   const refresh = useCallback(async () => {
     const poller = pollerRef.current;
     if (!poller) {
-      flashNote("No xDrip+ URL set");
+      flashNote("No Eversense Bridge URL set");
       return;
     }
     setSyncing(true);

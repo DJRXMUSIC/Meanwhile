@@ -3,7 +3,9 @@
 import { db, latestBg } from "./db";
 import type { BgReading, Trend } from "./types";
 
-// xDrip+ exposes a local web service (default :17580) returning Nightscout-style JSON.
+// Glucose from the Eversense Bridge app on the phone (http://127.0.0.1:17590), which
+// serves Nightscout-style JSON. (The names here date from when this read xDrip+; xDrip+
+// itself, on port 17580, is never read.)
 // Endpoint convention used here: GET {base}/sgv.json?count=N
 // Each entry: { date: ms, sgv: mg/dL, direction: Trend, delta: number }
 
@@ -14,10 +16,10 @@ export interface XdripEntry {
   delta?: number;
 }
 
-// Default fetch sized to cover overnight gaps without hammering xDrip:
+// Default fetch sized to cover overnight gaps without hammering the bridge:
 // 144 entries at 5-min intervals = 12 hours of history. We over-fetch
 // vs the typical 1-min poll interval so we survive long sleeps / closed
-// app gaps as long as xDrip itself is still recording on the phone.
+// app gaps as long as the bridge is still recording on the phone.
 const DEFAULT_COUNT = 144;
 // First poll after start: pull a much larger window so first-open after
 // a long absence backfills cleanly.
@@ -28,7 +30,7 @@ export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<X
   const direct = `${base.replace(/\/$/, "")}/sgv.json?count=${count}`;
 
   // 1) Try direct fetch from the browser. Works when the page is on the
-  //    same device as xDrip+ AND the page is HTTP (or xDrip+ exposes HTTPS).
+  //    same phone as the bridge (it answers CORS and Private Network Access).
   try {
     const res = await fetch(direct, { cache: "no-store", mode: "cors" });
     if (res.ok) {
@@ -40,11 +42,11 @@ export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<X
   }
 
   // 2) Fall back to the server-side proxy at /api/bg/proxy. The Next.js
-  //    server fetches xDrip+ on our behalf — works as long as the deploy
+  //    server fetches the bridge on our behalf — works as long as the deploy
   //    can reach `base` on the network.
   const proxied = `/api/bg/proxy?base=${encodeURIComponent(base)}&count=${count}`;
   const res2 = await fetch(proxied, { cache: "no-store" });
-  if (!res2.ok) throw new Error(`xDrip fetch failed: ${res2.status}`);
+  if (!res2.ok) throw new Error(`Bridge fetch failed: ${res2.status}`);
   const json = (await res2.json()) as XdripEntry[];
   return Array.isArray(json) ? json : [];
 }
@@ -101,7 +103,7 @@ export class XdripPoller {
     this.firstRun = true;
   }
 
-  // Background poll. Soft-fails: xDrip+ is routinely unreachable (phone off
+  // Background poll. Soft-fails: the bridge is routinely unreachable (phone off
   // the network, app closed) and that is not worth interrupting anyone over.
   // Also called on foreground wake, where the interval may have been
   // throttled or suspended while the PWA was backgrounded.
@@ -117,7 +119,7 @@ export class XdripPoller {
   // and lets failures through so the UI can say what went wrong: someone who
   // just tapped refresh is owed an answer either way.
   async refreshNow(): Promise<number> {
-    if (!this.base) throw new Error("No xDrip+ URL configured");
+    if (!this.base) throw new Error("No Eversense Bridge URL configured");
     return this.run(CATCHUP_COUNT);
   }
 
