@@ -1,10 +1,14 @@
 # Meanwhile watch face (Garmin Instinct E)
 
-A Connect IQ watch face for the Instinct E (40 mm and 45 mm) that shows:
+A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the watch's own "Instinct" face:
 
-* the time and date (`24 OCT`)
-* today's steps and current heart rate (in the round subscreen)
-* the latest glucose reading, its trend arrow, and the number of minutes since it was taken
+* **top-left panel** (where that face says INSTINCT): your glucose, and under it the trend arrow and the number of minutes since the reading was taken
+* **subscreen:** today's steps
+* **centre:** the time, hours solid and minutes striped
+* **right panel:** heart rate
+* **bottom:** the date (`24 OCT`)
+
+![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
 ```
 Eversense app ─▶ xDrip+ or Eversense Bridge (127.0.0.1:17580/pebble on the phone)
@@ -14,8 +18,8 @@ Eversense app ─▶ xDrip+ or Eversense Bridge (127.0.0.1:17580/pebble on the p
 ## Install
 
 1. Download the file for your watch from the **watchface-latest** release:
-   * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/meanwhile-instincte45mm.prg
    * 40 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/meanwhile-instincte40mm.prg
+   * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/meanwhile-instincte45mm.prg
 2. Connect the watch to a computer with its charging cable. It shows up as a drive (on a Mac, use Garmin Express or Android File Transfer).
 3. Copy the `.prg` into the watch's `GARMIN/APPS` folder, then unplug it.
 4. On the watch, hold **MENU** → **Watch Face**, and pick **Meanwhile BG**.
@@ -44,18 +48,18 @@ The minutes number counts from when the sensor reading was taken, measured on th
 
 CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-tester`, a public image with the Connect IQ SDK, device files and simulator. It:
 
-* builds release, debug and test versions for both sizes
+* builds release, debug and test versions for both sizes (debug builds log each fetch and schedule to the simulator console)
 * runs the unit tests (`source/Tests.mc`: reply parsing, minutes, scheduler) in the simulator
-* runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it
+* runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
 * if all of that passes, replaces the **watchface-latest** release
 
 Locally, with the Connect IQ SDK installed:
 
 ```bash
 cd garmin
-monkeyc -f monkey.jungle -d instincte45mm -y <developer_key.der> -o bin/meanwhile.prg
+monkeyc -f monkey.jungle -d instincte40mm -y <developer_key.der> -o bin/meanwhile.prg
 python3 tools/fake_pebble.py 123 Flat 2 &   # pretend phone
-monkeydo bin/meanwhile.prg instincte45mm
+monkeydo bin/meanwhile.prg instincte40mm      # untick Settings > Use Device HTTPS Requirements first
 ```
 
 Builds are signed with a throwaway key unless the repository secret `GARMIN_DEVELOPER_KEY_B64` (base64 of a `.der` developer key) is set. Any key works for sideloading.

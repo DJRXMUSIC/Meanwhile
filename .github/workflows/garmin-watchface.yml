@@ -62,9 +62,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release delete watchface-latest --cleanup-tag --yes || true
-          gh release create watchface-latest out/*.prg out/*.png \
+          gh release create watchface-latest out/*.prg out/screen-instincte40mm.png out/screen-instincte45mm.png \
             --target "$GITHUB_SHA" \
             --title "Meanwhile watch face for Instinct E (build ${{ github.run_number }})" \
-            --notes "Download the file for your watch size: **meanwhile-instincte45mm.prg** or **meanwhile-instincte40mm.prg**. Copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).
+            --notes "Download the file for your watch size: **meanwhile-instincte40mm.prg** or **meanwhile-instincte45mm.prg**. Copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).
 
           Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed the simulator unit tests on both sizes. The screen-*.png files are simulator screenshots of this build."
