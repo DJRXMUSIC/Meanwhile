@@ -71,6 +71,20 @@ for d in $DEVICES; do
   tail -1 "/tmp/result-$d.txt" | grep -q '^PASSED' || fail "unit tests on $d"
 done
 
+echo "=== simulator settings discovery"
+touch /tmp/marker; sleep 1
+start_sim
+find / -xdev -newer /tmp/marker -type f 2>/dev/null | grep -v -E '^/(proc|sys|dev|run|tmp/\.X)' | head -40
+for f in $(find / -xdev -newer /tmp/marker -type f -size -64k 2>/dev/null | grep -v -E '^/(proc|sys|dev|run|tmp/\.X)' | head -20); do
+  if grep -Iq . "$f" 2>/dev/null; then echo "----- $f"; head -c 3000 "$f"; echo; fi
+done
+grep -ril https "$HOME/.Garmin" /root/.Garmin /root/.config "$HOME/.config" 2>/dev/null | head
+if command -v xdotool >/dev/null; then
+  xdotool mousemove 73 12 click 1; sleep 2
+  xwd -root -silent | convert xwd:- -crop 600x500+0+0 +repage "$OUT/sim-settings-menu.png"
+  xdotool key Escape
+fi
+
 # Screenshot: the real path, end to end. The fake phone endpoint serves a reading
 # taken 3 minutes ago; the face's background fetches it like it would on the phone.
 python3 "$GARMIN/tools/fake_pebble.py" 287 DoubleUp 3 > /tmp/fake.log 2>&1 &
