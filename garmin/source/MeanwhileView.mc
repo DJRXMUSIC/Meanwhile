@@ -73,6 +73,24 @@ class MeanwhileView extends WatchUi.WatchFace {
         _timeY = top + gap + bigH / 2;
         _bgY = _timeY + bigH + gap;
         _stepsY = _bgY + bigH / 2 + gap + smallH / 2;
+        logLayout(dc, top, bottom);
+    }
+
+    (:debug)
+    private function logLayout(dc as Graphics.Dc, top as Number, bottom as Number) as Void {
+        System.println("screen " + _w + "x" + _h + " sub " + (_sub == null ? "none" : _sub.x + "," + _sub.y + " " + _sub.width + "x" + _sub.height) + " rows " + top + ".." + bottom);
+        var names = ["THAI_HOT", "HOT", "MEDIUM", "MILD", "XTINY", "TINY", "SMALL", "MEDIUM", "LARGE"];
+        var fonts = [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD,
+            Graphics.FONT_XTINY, Graphics.FONT_TINY, Graphics.FONT_SMALL, Graphics.FONT_MEDIUM, Graphics.FONT_LARGE];
+        for (var i = 0; i < fonts.size(); i++) {
+            System.println("font " + names[i] + " h=" + dc.getFontHeight(fonts[i]) + " asc=" + Graphics.getFontAscent(fonts[i])
+                + " desc=" + Graphics.getFontDescent(fonts[i]) + " w(12:59)=" + dc.getTextWidthInPixels("12:59", fonts[i]));
+        }
+        System.println("big font h=" + dc.getFontHeight(_bigFont) + " timeY " + _timeY + " bgY " + _bgY + " stepsY " + _stepsY);
+    }
+
+    (:release)
+    private function logLayout(dc as Graphics.Dc, top as Number, bottom as Number) as Void {
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {

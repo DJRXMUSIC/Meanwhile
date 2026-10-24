@@ -14,6 +14,15 @@ class BgService extends System.ServiceDelegate {
         ServiceDelegate.initialize();
     }
 
+    (:debug)
+    function log(msg as String) as Void {
+        System.println(msg);
+    }
+
+    (:release)
+    function log(msg as String) as Void {
+    }
+
     function onTemporalEvent() as Void {
         Communications.makeWebRequest(
             Bg.URL,
@@ -27,6 +36,8 @@ class BgService extends System.ServiceDelegate {
     }
 
     function onReceive(code as Number, data as Dictionary or String or PersistedContent.Iterator or Null) as Void {
-        Background.exit(Bg.parse(code, data, Time.now().value()));
+        var r = Bg.parse(code, data, Time.now().value());
+        log("fetch " + code + " -> " + r);
+        Background.exit(r);
     }
 }

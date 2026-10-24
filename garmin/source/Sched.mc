@@ -82,6 +82,7 @@ module Sched {
 
     // Stores the background's result and sets the next fetch.
     function onData(data) as Void {
+        log("onData " + data);
         var lag = currentLag();
         if (data instanceof Dictionary) {
             var prevDt = Application.Storage.getValue(Bg.K_DT);
@@ -110,12 +111,22 @@ module Sched {
             now,
             currentLag()
         );
+        log("arm: now " + now + " next fetch in " + (t - now) + " s (lag " + currentLag() + ")");
         try {
             Background.registerForTemporalEvent(new Time.Moment(t));
         } catch (e) {
             // Fall back to a plain 5-minute timer rather than stop fetching.
             Background.registerForTemporalEvent(new Time.Duration(PERIOD));
         }
+    }
+
+    (:debug)
+    function log(msg as String) as Void {
+        System.println(msg);
+    }
+
+    (:release)
+    function log(msg as String) as Void {
     }
 
     // Called once a minute by the face: re-arms if the one-shot timer is gone.

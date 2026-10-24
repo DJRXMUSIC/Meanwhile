@@ -75,15 +75,19 @@ done
 # taken 3 minutes ago; the face's background fetches it like it would on the phone.
 python3 "$GARMIN/tools/fake_pebble.py" 287 DoubleUp 3 > /tmp/fake.log 2>&1 &
 FAKE=$!
+shot() { xwd -root -silent | convert xwd:- -crop 400x520+0+26 +repage "$1" || fail "screenshot $1"; }
 for d in $DEVICES; do
   start_sim
   echo "--- screenshot on $d"
   monkeydo "/tmp/debug-$d.prg" "$d" > "/tmp/run-$d.txt" 2>&1 &
   RUN=$!
-  sleep 25
-  xwd -root -silent | convert xwd:- "$OUT/screen-$d.png" || fail "screenshot $d"
+  sleep 20
+  shot "$OUT/screen-$d-start.png"
+  # past the next minute boundary, when a watch face redraws in low-power mode
+  sleep $(( 65 - $(date +%S | sed 's/^0//') ))
+  shot "$OUT/screen-$d.png"
   kill $RUN 2>/dev/null
-  cat "/tmp/run-$d.txt"
+  echo "simulator output:"; cat "/tmp/run-$d.txt"
 done
 kill $FAKE 2>/dev/null
 echo "--- fake endpoint log"; cat /tmp/fake.log
