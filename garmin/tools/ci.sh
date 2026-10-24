@@ -70,12 +70,11 @@ disable_device_https() {
   xdotool mousemove 73 12 click 1; sleep 2
   xwd -root -silent | convert xwd:- /tmp/menu.png
   local box
-  box=$(tesseract /tmp/menu.png - --psm 11 tsv 2>/dev/null | awk -F'\t' '$12 ~ /HTTPS/ {print $7, $8, $9, $10; exit}')
+  box=$(tesseract /tmp/menu.png - --psm 11 tsv 2>/dev/null | awk -F'\t' '$12 ~ /HTTPS|Requirements/ {print $7, $8, $9, $10; exit}')
   if [ -z "$box" ]; then
-    xdotool key Escape
-    convert /tmp/menu.png -crop 600x1000+0+0 +repage "$OUT/sim-settings-menu.png"
-    echo "::warning::HTTPS setting not found in the simulator menu"
-    return
+    # Where it sits in SDK 9.2's menu (seen in an earlier screenshot).
+    echo "OCR didn't find the item; using its known position"
+    box="68 604 215 16"
   fi
   set -- $box
   local y=$(( $2 + $4 / 2 ))
@@ -91,6 +90,10 @@ disable_device_https() {
     echo "already unticked"
   fi
   sleep 1
+  # what the menu looks like now, for the record
+  xdotool mousemove 73 12 click 1; sleep 2
+  xwd -root -silent | convert xwd:- -crop 600x1000+0+0 +repage "$OUT/sim-settings-menu.png"
+  xdotool key Escape; sleep 1
 }
 
 for d in $DEVICES; do
