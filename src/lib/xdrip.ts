@@ -3,7 +3,7 @@
 import { db, latestBg } from "./db";
 import type { BgReading, Trend } from "./types";
 
-// Glucose from the Eversense Bridge app on the phone (http://127.0.0.1:17590), which
+// Glucose from the EverBridge app on the phone (http://127.0.0.1:17590), which
 // serves Nightscout-style JSON. (The names here date from when this read xDrip+; xDrip+
 // itself, on port 17580, is never read.)
 // Endpoint convention used here: GET {base}/sgv.json?count=N
@@ -119,7 +119,7 @@ export class XdripPoller {
   // and lets failures through so the UI can say what went wrong: someone who
   // just tapped refresh is owed an answer either way.
   async refreshNow(): Promise<number> {
-    if (!this.base) throw new Error("No Eversense Bridge URL configured");
+    if (!this.base) throw new Error("No EverBridge URL configured");
     return this.run(CATCHUP_COUNT);
   }
 

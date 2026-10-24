@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
-    <iq:application id="36c44dc8535c48068c9ec56ca8b05fce" type="watchface" name="@Strings.AppName" entry="MeanwhileApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.2.0">
+    <iq:application id="36c44dc8535c48068c9ec56ca8b05fce" type="watchface" name="@Strings.AppName" entry="EverBridgeApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.2.0">
         <iq:products>
             <iq:product id="instincte40mm"/>
             <iq:product id="instincte45mm"/>

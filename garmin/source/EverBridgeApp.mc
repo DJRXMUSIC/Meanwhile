@@ -4,7 +4,7 @@ import Toybox.System;
 import Toybox.WatchUi;
 
 (:background)
-class MeanwhileApp extends Application.AppBase {
+class EverBridgeApp extends Application.AppBase {
 
     function initialize() {
         AppBase.initialize();
@@ -12,7 +12,7 @@ class MeanwhileApp extends Application.AppBase {
 
     function getInitialView() {
         Sched.arm();
-        return [new MeanwhileView()];
+        return [new EverBridgeView()];
     }
 
     function getServiceDelegate() {

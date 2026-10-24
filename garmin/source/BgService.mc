@@ -5,7 +5,7 @@ import Toybox.PersistedContent;
 import Toybox.System;
 import Toybox.Time;
 
-// Background process: fetch the newest reading from the Eversense Bridge and hand it to
+// Background process: fetch the newest reading from EverBridge and hand it to
 // the face. Garmin Connect on the phone performs the request, so 127.0.0.1 is the phone.
 (:background)
 class BgService extends System.ServiceDelegate {
@@ -15,12 +15,12 @@ class BgService extends System.ServiceDelegate {
     }
 
     (:debug)
-    function log(msg as String) as Void {
-        System.println(msg);
+    function log(code as Number, r) as Void {
+        System.println("fetch " + code + " -> " + r);
     }
 
     (:release)
-    function log(msg as String) as Void {
+    function log(code as Number, r) as Void {
     }
 
     function onTemporalEvent() as Void {
@@ -37,7 +37,7 @@ class BgService extends System.ServiceDelegate {
 
     function onReceive(code as Number, data as Dictionary or String or PersistedContent.Iterator or Null) as Void {
         var r = Bg.parse(code, data, Time.now().value());
-        log("fetch " + code + " -> " + r);
+        log(code, r);
         Background.exit(r);
     }
 }

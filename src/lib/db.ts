@@ -58,7 +58,7 @@ export function db(): MeanwhileDB {
 // Schema version bumps trigger one-shot, non-destructive migrations.
 const CURRENT_SCHEMA = 5;
 
-// v5: glucose comes only from the Eversense Bridge, on port 17590. Port 17580 is
+// v5: glucose comes only from EverBridge, on port 17590. Port 17580 is
 // xDrip+'s local web service, which is never read, so a URL on it moves to 17590.
 export function bridgeUrl(url: string | undefined): string | undefined {
   if (url === undefined) return DEFAULT_PROFILE.xdrip_url;

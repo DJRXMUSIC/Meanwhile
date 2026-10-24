@@ -46,7 +46,7 @@ fi
 cd "$GARMIN"
 echo "=== build"
 for d in $DEVICES; do
-  monkeyc -f monkey.jungle -d "$d" -y "$KEY" -r -w -o "$OUT/meanwhile-$d.prg" || fail "release build for $d"
+  monkeyc -f monkey.jungle -d "$d" -y "$KEY" -r -w -o "$OUT/everbridge-$d.prg" || fail "release build for $d"
   monkeyc -f monkey.jungle -d "$d" -y "$KEY" -o "/tmp/debug-$d.prg" || fail "debug build for $d"
   monkeyc -f monkey.jungle -d "$d" -y "$KEY" -t -o "/tmp/test-$d.prg" || fail "test build for $d"
 done

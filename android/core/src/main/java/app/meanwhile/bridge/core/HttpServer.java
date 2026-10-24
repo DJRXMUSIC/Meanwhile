@@ -74,6 +74,12 @@ public final class HttpServer {
 
     private static final int MAX_HEADER_LINES = 100;
     private static final int SOCKET_TIMEOUT_MS = 5_000;
+    /**
+     * Requests are served in parallel, so a client that connects and sends nothing (browsers
+     * open spare connections) can't hold up the watch's or the app's request for the
+     * {@link #SOCKET_TIMEOUT_MS read timeout}.
+     */
+    private static final int WORKERS = 4;
 
     private final Handler handler;
     private final Object lock = new Object();
@@ -112,11 +118,14 @@ public final class HttpServer {
                 this.port = -1;
                 return false;
             }
-            workers = new ThreadPoolExecutor(1, 4, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(32), r -> {
-                final Thread t = new Thread(r, "bridge-http-worker");
-                t.setDaemon(true);
-                return t;
-            });
+            final ThreadPoolExecutor tp = new ThreadPoolExecutor(WORKERS, WORKERS, 30, TimeUnit.SECONDS,
+                    new LinkedBlockingQueue<>(32), r -> {
+                        final Thread t = new Thread(r, "bridge-http-worker");
+                        t.setDaemon(true);
+                        return t;
+                    });
+            tp.allowCoreThreadTimeOut(true); // no idle threads between requests
+            workers = tp;
             final ServerSocket ss = serverSocket;
             final ExecutorService pool = workers;
             acceptThread = new Thread(() -> acceptLoop(ss, pool), "bridge-http-accept");
@@ -186,6 +195,7 @@ public final class HttpServer {
     private void serve(Socket s) {
         try {
             s.setSoTimeout(SOCKET_TIMEOUT_MS);
+            s.setTcpNoDelay(true);
             final Request req = readRequest(s);
             if (req == null) return;
             final Response response = respond(req);
@@ -279,9 +289,15 @@ public final class HttpServer {
         h.append("Access-Control-Allow-Private-Network: true\r\n");
         h.append("Access-Control-Max-Age: 600\r\n");
         h.append("Connection: close\r\n\r\n");
+        // Headers and body in one write: as two small writes, the body can wait on the
+        // client's delayed ACK of the headers (about 40 ms).
+        final byte[] head = h.toString().getBytes(StandardCharsets.ISO_8859_1);
+        final boolean withBody = req == null || !req.method.equals("HEAD");
+        final byte[] all = new byte[head.length + (withBody ? body.length : 0)];
+        System.arraycopy(head, 0, all, 0, head.length);
+        if (withBody) System.arraycopy(body, 0, all, head.length, body.length);
         final OutputStream out = s.getOutputStream();
-        out.write(h.toString().getBytes(StandardCharsets.ISO_8859_1));
-        if (req == null || !req.method.equals("HEAD")) out.write(body);
+        out.write(all);
         out.flush();
     }
 

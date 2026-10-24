@@ -37,6 +37,8 @@ public class BridgeService extends Service {
     static final long STALE_REALERT_MS = 30 * 60_000L;
 
     private static volatile boolean running;
+    /** Title and text of the status notification as last posted, to skip identical reposts. */
+    private static volatile String postedStatus;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable watchdog = new Runnable() {
@@ -66,8 +68,18 @@ public class BridgeService extends Service {
     /** Updates the status notification after a new reading (no-op if not running). */
     static void refresh(Context context) {
         if (!running) return;
+        postStatus(context);
+    }
+
+    /** Posts the status notification if what it says has changed. */
+    private static void postStatus(Context context) {
+        final String[] t = statusTexts(Bridge.get(context));
+        final String key = t[0] + "\n" + t[1];
+        if (key.equals(postedStatus)) return;
         final NotificationManager nm = context.getSystemService(NotificationManager.class);
-        if (nm != null) nm.notify(STATUS_ID, buildStatus(context));
+        if (nm == null) return;
+        nm.notify(STATUS_ID, buildStatus(context, t));
+        postedStatus = key;
     }
 
     static boolean isRunning() {
@@ -95,6 +107,7 @@ public class BridgeService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        postedStatus = null;
         handler.removeCallbacks(watchdog);
         EventLog.log(this, "SERVICE", "keep-alive service stopped");
         super.onDestroy();
@@ -106,7 +119,9 @@ public class BridgeService extends Service {
     }
 
     private void goForeground() {
-        final Notification n = buildStatus(this);
+        final String[] t = statusTexts(Bridge.get(this));
+        final Notification n = buildStatus(this, t);
+        postedStatus = t[0] + "\n" + t[1];
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(STATUS_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
@@ -142,11 +157,11 @@ public class BridgeService extends Service {
             nm.cancel(STALE_ID);
             lastStaleAlert = 0;
         }
-        nm.notify(STATUS_ID, buildStatus(this));
+        postStatus(this);
     }
 
     private static String staleHint(Bridge bridge) {
-        if (!bridge.hasNotificationAccess()) return "Notification access is off for Eversense Bridge";
+        if (!bridge.hasNotificationAccess()) return "Notification access is off for EverBridge";
         if (!bridge.isListenerConnected()) return "Notification listener disconnected; open the app";
         if (bridge.installedEversensePackage() == null) return "Eversense app not found";
         return "Check the Eversense app and transmitter";
@@ -163,8 +178,8 @@ public class BridgeService extends Service {
         nm.createNotificationChannel(stale);
     }
 
-    static Notification buildStatus(Context context) {
-        final Bridge bridge = Bridge.get(context);
+    /** {title, text} of the status notification. */
+    private static String[] statusTexts(Bridge bridge) {
         final Reading last = bridge.latest();
         final String title;
         if (last == null) {
@@ -177,10 +192,14 @@ public class BridgeService extends Service {
                 ? "Serving 127.0.0.1:" + bridge.server.port() + (bridge.server.isLan() ? " + LAN" : "")
                 : "Endpoint down: " + bridge.server.lastError();
         final String listener = bridge.isListenerConnected() ? "listening" : "listener NOT connected";
+        return new String[]{title, server + " · " + listener};
+    }
+
+    private static Notification buildStatus(Context context, String[] texts) {
         return new Notification.Builder(context, CHANNEL_STATUS)
                 .setSmallIcon(R.drawable.ic_stat_bridge)
-                .setContentTitle(title)
-                .setContentText(server + " · " + listener)
+                .setContentTitle(texts[0])
+                .setContentText(texts[1])
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)

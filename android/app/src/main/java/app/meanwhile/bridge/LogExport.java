@@ -22,7 +22,7 @@ import java.util.Locale;
 /** Saves the diagnostics report as a .txt file the user can download/share. */
 final class LogExport {
 
-    static final String FOLDER = "EversenseBridge";
+    static final String FOLDER = "EverBridge";
 
     static final class Saved {
         /** Shareable content URI (Downloads), or null when saved to app storage. */
@@ -45,7 +45,7 @@ final class LogExport {
     static Saved save(Context context) throws IOException {
         final Context app = context.getApplicationContext();
         final byte[] data = DiagnosticsReport.build(app).getBytes(StandardCharsets.UTF_8);
-        final String name = "eversense-bridge-log-"
+        final String name = "everbridge-log-"
                 + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".txt";
 
         Saved saved = null;
@@ -93,7 +93,7 @@ final class LogExport {
     static Intent shareIntent(Context context, Saved saved) {
         final Intent send = new Intent(Intent.ACTION_SEND)
                 .setType("text/plain")
-                .putExtra(Intent.EXTRA_SUBJECT, "Eversense Bridge log");
+                .putExtra(Intent.EXTRA_SUBJECT, "EverBridge log");
         if (saved.uri != null) {
             send.putExtra(Intent.EXTRA_STREAM, saved.uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             send.setClipData(ClipData.newRawUri("log", saved.uri));

@@ -49,7 +49,7 @@ final class DiagnosticsReport {
         final StringBuilder sb = new StringBuilder(64 * 1024);
         final long now = System.currentTimeMillis();
 
-        sb.append("===== Eversense Bridge diagnostics =====\n");
+        sb.append("===== EverBridge diagnostics =====\n");
         kv(sb, "generated", full(now) + " (" + TimeZone.getDefault().getID() + ")");
         kv(sb, "app", appVersion(app, app.getPackageName()));
         kv(sb, "device", Build.MANUFACTURER + " " + Build.MODEL + " (" + Build.DEVICE + ")");

@@ -13,7 +13,7 @@ export function StatTiles({
 }: {
   bg?: BgReading;
   iob: number;
-  /** Omitted when no Eversense Bridge URL is configured — nothing to refresh from. */
+  /** Omitted when no EverBridge URL is configured — nothing to refresh from. */
   onRefresh?: () => void;
   syncing?: boolean;
   refreshNote?: string | null;
@@ -36,8 +36,8 @@ export function StatTiles({
             <button
               onClick={onRefresh}
               disabled={syncing}
-              aria-label="Refresh glucose from the Eversense Bridge"
-              title="Refresh from the Eversense Bridge"
+              aria-label="Refresh glucose from EverBridge"
+              title="Refresh from EverBridge"
               className="-mt-1.5 -mr-1.5 size-8 shrink-0 grid place-items-center rounded-full text-muted hover:text-ink active:scale-90 transition disabled:opacity-40"
             >
               <span className={`text-base leading-none ${syncing ? "motion-safe:animate-spin" : ""}`}>⟳</span>

@@ -184,7 +184,7 @@ export interface Profile {
     updated_ts?: number;
   };
   units: "mgdl";
-  xdrip_url?: string;     // Eversense Bridge URL (field name dates from when this read xDrip+)
+  xdrip_url?: string;     // EverBridge URL (field name dates from when this read xDrip+)
   ai_provider?: "anthropic" | "openai" | "google" | "auto";
   mode?: "decide" | "learn"; // persistent operating mode
   theme?: ThemeName;         // legacy preset (light + accent combined)

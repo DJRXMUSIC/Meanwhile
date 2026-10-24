@@ -1,4 +1,4 @@
-# Meanwhile watch face (Garmin Instinct E)
+# EverBridge watch face (Garmin Instinct E)
 
 A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the watch's own "Instinct" face:
 
@@ -11,24 +11,24 @@ A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
 ```
-Eversense app ─▶ Eversense Bridge (127.0.0.1:17590/pebble on the phone)
+Eversense app ─▶ EverBridge (127.0.0.1:17590/pebble on the phone)
              ─▶ Garmin Connect app ─Bluetooth─▶ watch face background fetch ─▶ screen
 ```
 
 ## Install
 
 1. Download the file for your watch from the **watchface-latest** release:
-   * 40 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/meanwhile-instincte40mm.prg
-   * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/meanwhile-instincte45mm.prg
+   * 40 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte40mm.prg
+   * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte45mm.prg
 2. Connect the watch to a computer with its charging cable. It shows up as a drive (on a Mac, use Garmin Express or Android File Transfer).
 3. Copy the `.prg` into the watch's `GARMIN/APPS` folder, then unplug it.
-4. On the watch, hold **MENU** → **Watch Face**, and pick **Meanwhile BG**.
+4. On the watch, hold **MENU** → **Watch Face**, and pick **EverBridge**.
 
 To update, copy the new `.prg` over the old one.
 
 ## Phone setup
 
-* **Eversense Bridge** (`android/`) must be installed and running; the face reads only its `/pebble` endpoint on port 17590. To check it, open `http://127.0.0.1:17590/pebble` in Chrome on the phone: it should show your latest reading.
+* **EverBridge** (`android/`) must be installed and running; the face reads only its `/pebble` endpoint on port 17590. To check it, open `http://127.0.0.1:17590/pebble` in Chrome on the phone: it should show your latest reading.
 * **xDrip+** can stay installed with its web service on. It uses port 17580, and nothing here reads it.
 * **Garmin Connect:** the face's fetch goes through it, so keep it running and exempt it from battery optimisation (Android Settings → Apps → Garmin Connect → Battery → Unrestricted).
 
@@ -57,9 +57,9 @@ Locally, with the Connect IQ SDK installed:
 
 ```bash
 cd garmin
-monkeyc -f monkey.jungle -d instincte40mm -y <developer_key.der> -o bin/meanwhile.prg
+monkeyc -f monkey.jungle -d instincte40mm -y <developer_key.der> -o bin/everbridge.prg
 python3 tools/fake_pebble.py 123 Flat 2 &   # pretend bridge on :17590
-monkeydo bin/meanwhile.prg instincte40mm      # untick Settings > Use Device HTTPS Requirements first
+monkeydo bin/everbridge.prg instincte40mm      # untick Settings > Use Device HTTPS Requirements first
 ```
 
 Builds are signed with a throwaway key unless the repository secret `GARMIN_DEVELOPER_KEY_B64` (base64 of a `.der` developer key) is set. Any key works for sideloading.

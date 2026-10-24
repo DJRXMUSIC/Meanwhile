@@ -34,7 +34,7 @@ const DESIGN = 166;
 // arrow and the minutes since the reading on the row below, in place of its arrow.
 //
 // Coordinates are designed on the 40 mm screen (166 px) and scaled to the 45 mm.
-class MeanwhileView extends WatchUi.WatchFace {
+class EverBridgeView extends WatchUi.WatchFace {
 
     private var _w as Number = 0;
     private var _h as Number = 0;
@@ -42,6 +42,14 @@ class MeanwhileView extends WatchUi.WatchFace {
     private var _sy as Number = 0;
     private var _sw as Number = 0;
     private var _sh as Number = 0;
+
+    // Vertical offsets that centre each font's glyphs on a y, and the time's glyph
+    // height: worked out once here rather than on every redraw.
+    private var _dyNum as Number = 0;   // FONT_NUMBER_MEDIUM (glucose)
+    private var _dyTime as Number = 0;  // FONT_NUMBER_THAI_HOT (time)
+    private var _dySmall as Number = 0; // FONT_SMALL
+    private var _dyMed as Number = 0;   // FONT_MEDIUM
+    private var _gTime as Number = 0;
 
     function initialize() {
         WatchFace.initialize();
@@ -65,6 +73,11 @@ class MeanwhileView extends WatchUi.WatchFace {
             _sw = p(52);
             _sh = p(52);
         }
+        _dyNum = dy(Graphics.FONT_NUMBER_MEDIUM, NUM_GLYPH);
+        _dyTime = dy(Graphics.FONT_NUMBER_THAI_HOT, NUM_GLYPH);
+        _dySmall = dy(Graphics.FONT_SMALL, TEXT_GLYPH);
+        _dyMed = dy(Graphics.FONT_MEDIUM, TEXT_GLYPH);
+        _gTime = glyph(Graphics.FONT_NUMBER_THAI_HOT, NUM_GLYPH);
         logLayout();
     }
 
@@ -131,15 +144,16 @@ class MeanwhileView extends WatchUi.WatchFace {
     // Glucose in the top-left panel; arrow and minutes since the reading below it.
     private function drawGlucose(dc as Graphics.Dc, nowSec as Number) as Void {
         var cx = p(62);
-        var sgv = Application.Storage.getValue(Bg.K_SGV);
-        var at = Application.Storage.getValue(Bg.K_AT);
+        var r = Sched.reading();
+        var sgv = (r == null) ? null : r[Bg.K_SGV];
+        var at = (r == null) ? null : r[Bg.K_AT];
         if (!(sgv instanceof String) || !(at instanceof Number)) {
-            text(dc, cx, p(28), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_CENTER);
+            text(dc, cx, p(28), Graphics.FONT_MEDIUM, _dyMed, "---", Graphics.TEXT_JUSTIFY_CENTER);
             return;
         }
-        text(dc, cx, p(28), Graphics.FONT_NUMBER_MEDIUM, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_CENTER);
+        text(dc, cx, p(28), Graphics.FONT_NUMBER_MEDIUM, _dyNum, sgv, Graphics.TEXT_JUSTIFY_CENTER);
 
-        var dir = Application.Storage.getValue(Bg.K_DIR);
+        var dir = r[Bg.K_DIR];
         var minStr = minutesSince(at, nowSec).format("%d");
         var font = Graphics.FONT_SMALL;
         var size = p(15);
@@ -149,7 +163,7 @@ class MeanwhileView extends WatchUi.WatchFace {
         var x = cx - total / 2;
         var y = p(47);
         drawArrow(dc, x + arrowW / 2, y, size, dir);
-        text(dc, x + arrowW + gap, y, font, TEXT_GLYPH, minStr, Graphics.TEXT_JUSTIFY_LEFT);
+        text(dc, x + arrowW + gap, y, font, _dySmall, minStr, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // "15 00": hours solid, minutes striped, as on the Instinct face.
@@ -169,12 +183,12 @@ class MeanwhileView extends WatchUi.WatchFace {
         var mw = dc.getTextWidthInPixels(mStr, font);
         var x = p(66) - (hw + gap + mw) / 2;
         var y = p(90);
-        text(dc, x, y, font, NUM_GLYPH, hStr, Graphics.TEXT_JUSTIFY_LEFT);
+        text(dc, x, y, font, _dyTime, hStr, Graphics.TEXT_JUSTIFY_LEFT);
         var mx = x + hw + gap;
-        text(dc, mx, y, font, NUM_GLYPH, mStr, Graphics.TEXT_JUSTIFY_LEFT);
+        text(dc, mx, y, font, _dyTime, mStr, Graphics.TEXT_JUSTIFY_LEFT);
 
         // Stripe the minutes: blank every other row of their glyphs.
-        var g = glyph(font, NUM_GLYPH);
+        var g = _gTime;
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
         for (var row = y - g / 2 + 1; row < y + g / 2; row += 2) {
             dc.drawLine(mx, row, mx + mw, row);
@@ -182,7 +196,7 @@ class MeanwhileView extends WatchUi.WatchFace {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
 
         // date
-        text(dc, _w / 2, p(132), Graphics.FONT_SMALL, TEXT_GLYPH,
+        text(dc, _w / 2, p(132), Graphics.FONT_SMALL, _dySmall,
             info.day.format("%d") + " " + info.month.toString().toUpper(), Graphics.TEXT_JUSTIFY_CENTER);
     }
 
@@ -192,7 +206,7 @@ class MeanwhileView extends WatchUi.WatchFace {
         var cx = _sx + _sw / 2;
         var cy = _sy + _sh / 2;
         drawFootprints(dc, cx, cy - _sh / 5, _sh / 11);
-        text(dc, cx, cy + _sh / 6, Graphics.FONT_SMALL, TEXT_GLYPH,
+        text(dc, cx, cy + _sh / 6, Graphics.FONT_SMALL, _dySmall,
             steps == null ? "--" : steps.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
     }
 
@@ -201,7 +215,7 @@ class MeanwhileView extends WatchUi.WatchFace {
         var hr = heartRate();
         var cx = p(140);
         drawHeart(dc, cx, p(80), p(5));
-        text(dc, cx, p(100), Graphics.FONT_SMALL, TEXT_GLYPH, hr == null ? "--" : hr.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
+        text(dc, cx, p(100), Graphics.FONT_SMALL, _dySmall, hr == null ? "--" : hr.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     // ---------------------------------------------------------------- text
@@ -211,9 +225,14 @@ class MeanwhileView extends WatchUi.WatchFace {
         return Graphics.getFontAscent(font) * pct / 100;
     }
 
-    // Draws text so its glyphs (not its font box) are centred on y.
-    private function text(dc as Graphics.Dc, x as Number, y as Number, font, pct as Number, str as String, justify as Number) as Void {
-        dc.drawText(x, y + glyph(font, pct) / 2 - Graphics.getFontAscent(font), font, str, justify);
+    // Offset from a glyph centre line to where drawText puts the font's top.
+    private function dy(font, pct as Number) as Number {
+        return glyph(font, pct) / 2 - Graphics.getFontAscent(font);
+    }
+
+    // Draws text with its glyphs (not its font box) centred on y; dy from dy().
+    private function text(dc as Graphics.Dc, x as Number, y as Number, font, off as Number, str as String, justify as Number) as Void {
+        dc.drawText(x, y + off, font, str, justify);
     }
 
     // ---------------------------------------------------------------- arrows

@@ -171,7 +171,7 @@ public final class Bridge {
         final boolean fresh = last != null && now - last.timestamp < staleThresholdMs();
         final Json j = new Json().beginObject()
                 .field("ok", fresh && listenerConnected)
-                .field("app", "meanwhile-eversense-bridge")
+                .field("app", "everbridge")
                 .field("version", versionName())
                 .field("now", now)
                 .field("listener_connected", listenerConnected)

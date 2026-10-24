@@ -76,43 +76,65 @@ module Sched {
         return lag;
     }
 
+    // The newest reading {sgv, dir, dt, at} and the lag, kept in memory so the face's
+    // once-a-minute redraw doesn't read storage. Storage holds one entry for each.
+    const K_READING = "r";
+    var _reading = null;
+    var _lag = null;
+
+    function reading() as Dictionary? {
+        if (_reading == null) {
+            var v = Application.Storage.getValue(K_READING);
+            _reading = (v instanceof Dictionary) ? v : {};
+        }
+        return _reading.size() == 0 ? null : _reading;
+    }
+
     function currentLag() as Number {
-        var v = Application.Storage.getValue(Bg.K_LAG);
-        return (v instanceof Number) ? v : LAG_MIN;
+        if (_lag == null) {
+            var v = Application.Storage.getValue(Bg.K_LAG);
+            _lag = (v instanceof Number) ? v : LAG_MIN;
+        }
+        return _lag;
     }
 
     // Stores the background's result and sets the next fetch.
     function onData(data) as Void {
-        log("onData " + data);
-        var lag = currentLag();
+        logData(data);
         if (data instanceof Dictionary) {
-            var prevDt = Application.Storage.getValue(Bg.K_DT);
-            var prevAt = Application.Storage.getValue(Bg.K_AT);
+            var prev = reading();
+            var prevAt = (prev == null) ? null : prev[Bg.K_AT];
             var dt = data[Bg.K_DT];
-            var isNew = prevDt == null || dt > prevDt;
-            lag = nextLag(lag, isNew, data[Bg.K_AT], prevAt, data[Bg.K_F]);
+            var isNew = prev == null || dt > prev[Bg.K_DT];
+            var lag = nextLag(currentLag(), isNew, data[Bg.K_AT], prevAt, data[Bg.K_F]);
             if (isNew) {
-                Application.Storage.setValue(Bg.K_SGV, data[Bg.K_SGV]);
-                Application.Storage.setValue(Bg.K_DIR, data[Bg.K_DIR]);
-                Application.Storage.setValue(Bg.K_DT, dt);
-                Application.Storage.setValue(Bg.K_AT, data[Bg.K_AT]);
+                _reading = {
+                    Bg.K_SGV => data[Bg.K_SGV],
+                    Bg.K_DIR => data[Bg.K_DIR],
+                    Bg.K_DT => dt,
+                    Bg.K_AT => data[Bg.K_AT]
+                };
+                Application.Storage.setValue(K_READING, _reading);
+            }
+            if (lag != _lag) {
+                _lag = lag;
+                Application.Storage.setValue(Bg.K_LAG, lag);
             }
         }
-        Application.Storage.setValue(Bg.K_LAG, lag);
         arm();
     }
 
     function arm() as Void {
         var now = Time.now().value();
         var last = Background.getLastTemporalEventTime();
-        var at = Application.Storage.getValue(Bg.K_AT);
+        var r = reading();
         var t = nextFetch(
-            (at instanceof Number) ? at : null,
+            (r == null) ? null : r[Bg.K_AT],
             (last == null) ? null : last.value(),
             now,
             currentLag()
         );
-        log("arm: now " + now + " next fetch in " + (t - now) + " s (lag " + currentLag() + ")");
+        logArm(now, t);
         try {
             Background.registerForTemporalEvent(new Time.Moment(t));
         } catch (e) {
@@ -121,13 +143,23 @@ module Sched {
         }
     }
 
+    // Debug builds log to the simulator console; release builds don't even build the text.
     (:debug)
-    function log(msg as String) as Void {
-        System.println(msg);
+    function logData(data) as Void {
+        System.println("onData " + data);
     }
 
     (:release)
-    function log(msg as String) as Void {
+    function logData(data) as Void {
+    }
+
+    (:debug)
+    function logArm(now as Number, t as Number) as Void {
+        System.println("arm: now " + now + " next fetch in " + (t - now) + " s (lag " + currentLag() + ")");
+    }
+
+    (:release)
+    function logArm(now as Number, t as Number) as Void {
     }
 
     // Called once a minute by the face: re-arms if the one-shot timer is gone.

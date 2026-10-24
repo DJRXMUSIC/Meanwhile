@@ -164,7 +164,7 @@ export default function SettingsPage() {
         </p>
       </Section>
 
-      <Section title="Eversense Bridge URL">
+      <Section title="EverBridge URL">
         <input
           type="url"
           placeholder="http://127.0.0.1:17590"
@@ -185,7 +185,7 @@ export default function SettingsPage() {
                   : `Bridge: connected ✓ (no new readings since last sync)`;
                 setStatus(msg);
               } catch (e) {
-                setStatus(`Bridge error: ${(e as Error).message}. Check the Eversense Bridge app is running (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
+                setStatus(`Bridge error: ${(e as Error).message}. Check the EverBridge app is running (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
               }
             }}
             className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
@@ -208,7 +208,7 @@ export default function SettingsPage() {
           </button>
         </div>
         <p className="text-[11px] text-muted mt-2">
-          Readings come from the <b>Eversense Bridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
+          Readings come from the <b>EverBridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
         </p>
       </Section>
 

@@ -440,7 +440,7 @@ public class MainActivity extends Activity {
 
         final LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(text("Eversense Bridge", 20, true),
+        header.addView(text("EverBridge", 20, true),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         final TextView version = text("v" + bridge.versionName(), 12, false);
         version.setAlpha(0.6f);
@@ -525,8 +525,6 @@ public class MainActivity extends Activity {
         a.addView(captures);
         a.addView(button("Open sgv.json in browser", v -> openUrl(
                 "http://127.0.0.1:" + bridge.server.port() + "/sgv.json?count=12")));
-        a.addView(button("Open /pebble (what the watch face reads)", v -> openUrl(
-                "http://127.0.0.1:" + bridge.server.port() + "/pebble")));
         a.addView(button("Get latest app version", v -> openUrl(RELEASE_PAGE)));
 
         a.addView(header("Settings"));

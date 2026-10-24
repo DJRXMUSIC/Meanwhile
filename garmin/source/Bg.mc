@@ -5,12 +5,12 @@ import Toybox.Lang;
 // the storage keys and the parser.
 (:background)
 module Bg {
-    // The Eversense Bridge app on the phone (its own port; xDrip+, which may also be
+    // EverBridge app on the phone (its own port; xDrip+, which may also be
     // installed, uses 17580 and is never read). /pebble rather than /sgv.json because
     // Connect IQ rejects a JSON reply whose top level is an array.
     const URL = "http://127.0.0.1:17590/pebble";
 
-    // Keys of the reading in Application.Storage (and in the background's result).
+    // Keys of the background's result, and of the stored reading (see Sched).
     const K_SGV = "sgv"; // String, in the user's units, as shown
     const K_DIR = "dir"; // Nightscout direction name
     const K_DT = "dt";   // reading time on the phone's clock, ms (identifies the reading)

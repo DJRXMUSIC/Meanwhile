@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end test on a running emulator:
 #   fake Eversense app (same package name as Eversense 365) posts a glucose notification
-#   -> Eversense Bridge captures it -> http://127.0.0.1:17590/sgv.json serves it.
+#   -> EverBridge captures it -> http://127.0.0.1:17590/sgv.json serves it.
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot.
 #
@@ -164,11 +164,11 @@ ok "self-test PASS: $(selftest_line | sed 's/.*SELFTEST: //' | cut -c1-200)"
 
 # ------------------------------------------------------------------ log file export
 adb shell am start -W -n "$APP/.MainActivity" --es action export_log >/dev/null
-log_saved() { adb shell ls /sdcard/Download/EversenseBridge/ 2>/dev/null | grep -q "eversense-bridge-log-"; }
-wait_until 60 log_saved || fail "log file not saved to Downloads/EversenseBridge"
+log_saved() { adb shell ls /sdcard/Download/EverBridge/ 2>/dev/null | grep -q "everbridge-log-"; }
+wait_until 60 log_saved || fail "log file not saved to Downloads/EverBridge"
 mkdir -p e2e-out
-LOGFILE=$(adb shell ls /sdcard/Download/EversenseBridge/ | tr -d '\r' | grep eversense-bridge-log- | tail -1)
-adb pull "/sdcard/Download/EversenseBridge/$LOGFILE" e2e-out/ >/dev/null
+LOGFILE=$(adb shell ls /sdcard/Download/EverBridge/ | tr -d '\r' | grep everbridge-log- | tail -1)
+adb pull "/sdcard/Download/EverBridge/$LOGFILE" e2e-out/ >/dev/null
 L="e2e-out/$LOGFILE"
 for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag: $FAKE" \
     "parse result: 155 mg/dL" "[CAPTURE] STORED 155 mg/dL" "[LISTENER] connected" "[BOOT]" \

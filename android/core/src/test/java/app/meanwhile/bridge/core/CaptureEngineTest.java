@@ -110,6 +110,68 @@ public class CaptureEngineTest {
     }
 
     @Test
+    public void captureStateIsSavedInOneWriteAfterTheReading() {
+        final List<String> writes = new ArrayList<>();
+        final KeyValueStore counting = new KeyValueStore() {
+            final MemoryKeyValueStore m = new MemoryKeyValueStore();
+
+            @Override
+            public long getLong(String key, long defaultValue) {
+                return m.getLong(key, defaultValue);
+            }
+
+            @Override
+            public void putLong(String key, long value) {
+                writes.add("single " + key);
+                m.putLong(key, value);
+            }
+
+            @Override
+            public void putLongs(java.util.Map<String, Long> values) {
+                writes.add("batch " + values.size() + " stored=" + store.size());
+                for (java.util.Map.Entry<String, Long> e : values.entrySet()) m.putLong(e.getKey(), e.getValue());
+            }
+        };
+        final CaptureEngine e = new CaptureEngine(store, counting, new CaptureLog(10));
+        assertEquals(STORED, e.process(view(T, T + 900, "140")).outcome);
+        // one write, made after the reading was in the store
+        assertEquals(Collections.singletonList("batch 4 stored=1"), writes);
+        assertEquals(REPOST, e.process(view(T, T + 900, "140")).outcome);
+        assertEquals(1, writes.size()); // a repost changes nothing
+    }
+
+    @Test
+    public void failedSaveDoesNotMarkTheReadingAsSeen() {
+        final AtomicInteger inserts = new AtomicInteger();
+        final ReadingStore flaky = new ReadingStore() {
+            @Override
+            public boolean existsWithin(long timestamp, long windowMs) {
+                return store.existsWithin(timestamp, windowMs);
+            }
+
+            @Override
+            public void insert(Reading reading) {
+                if (inserts.getAndIncrement() == 0) throw new IllegalStateException("disk full");
+                store.insert(reading);
+            }
+
+            @Override
+            public List<Reading> latest(int count) {
+                return store.latest(count);
+            }
+        };
+        final CaptureEngine e = new CaptureEngine(flaky, state, new CaptureLog(10));
+        try {
+            e.process(view(T, T + 900, "140"));
+        } catch (IllegalStateException expected) {
+            // the listener logs it and carries on
+        }
+        // the same notification seen again (listener reconnect) is stored, not a "repost"
+        assertEquals(STORED, e.process(view(T, T + 900, "140")).outcome);
+        assertEquals(1, store.size());
+    }
+
+    @Test
     public void jammedSourceIsRejected() {
         for (int i = 0; i <= ReadingGate.JAM_THRESHOLD; i++) {
             assertEquals(STORED, engine.process(view(0, T + i * 5 * MIN, "150")).outcome);

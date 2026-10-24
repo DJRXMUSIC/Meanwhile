@@ -1,10 +1,10 @@
-# Eversense Bridge (Android)
+# EverBridge (Android)
 
 A small Android app for the Pixel 9a. It captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17590/sgv.json`, in the same JSON format as xDrip+'s local web service. It is the only glucose source for Meanwhile and its watch face. xDrip+ can stay installed with its own web service on 17580; the bridge neither needs nor reads it.
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
-  Eversense Bridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
+  EverBridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
 ```
 
 ## Why it reads the notification instead of Bluetooth
@@ -52,15 +52,15 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 ## Install on the Pixel 9a
 
 **Download link (always the newest build that passed every test):**
-https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense-bridge.apk
+https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk
 
 1. Open that link in Chrome on the phone and open the downloaded file. If asked, allow Chrome to install apps. Updates install the same way, on top of the old version, and keep your history.
-2. Open **Eversense Bridge**. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
-   * **Turn on: Notification access** → enable Eversense Bridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → Eversense Bridge → ⋮ → **Allow restricted settings**, then try again.
+2. Open **EverBridge**. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
+   * **Turn on: Notification access** → enable EverBridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → EverBridge → ⋮ → **Allow restricted settings**, then try again.
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
 4. Tap **Run self-test**: it should say PASS.
-5. In Meanwhile → Settings, the **Eversense Bridge URL** should be `http://127.0.0.1:17590`. Tap **Test connection**.
+5. In Meanwhile → Settings, the **EverBridge URL** should be `http://127.0.0.1:17590`. Tap **Test connection**.
 
 The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 
@@ -74,7 +74,7 @@ The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in a
 
 ## When something isn't working: the log file
 
-Tap **Save log file**. It writes `Downloads/EversenseBridge/eversense-bridge-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
+Tap **Save log file**. It writes `Downloads/EverBridge/everbridge-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
 
 * **App and device:** app version, device, Android version, and process uptime.
 * **Health:** notification access and enabled listeners, listener state, keep-alive service, battery optimisation, power-save/doze, app standby bucket, notification permission, and endpoint state.

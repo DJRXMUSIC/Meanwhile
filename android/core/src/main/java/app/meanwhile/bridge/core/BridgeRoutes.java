@@ -43,7 +43,7 @@ public final class BridgeRoutes implements HttpServer.Handler {
             case "/status.json":
                 return HttpServer.Response.json(status.statusJson());
             case "/":
-                return HttpServer.Response.text(200, "Meanwhile Eversense bridge: GET /sgv.json?count=N, /pebble or /status.json\n");
+                return HttpServer.Response.text(200, "EverBridge: GET /sgv.json?count=N, /pebble or /status.json\n");
             default:
                 return null;
         }

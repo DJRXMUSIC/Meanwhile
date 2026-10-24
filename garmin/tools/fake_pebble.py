@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for the Eversense Bridge on 127.0.0.1:17590, for the simulator.
+"""Stand-in for EverBridge on 127.0.0.1:17590, for the simulator.
 
 usage: fake_pebble.py SGV DIRECTION AGE_MINUTES [PORT]
 
