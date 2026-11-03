@@ -247,7 +247,7 @@ export default function SettingsPage() {
           <NumberField
             label="Peak (min)"
             step={5}
-            value={profile.peak_min ?? 75}
+            value={profile.peak_min ?? 64}
             onCommit={(v) => update({ peak_min: v })}
           />
           <NumberField
@@ -258,7 +258,7 @@ export default function SettingsPage() {
           />
         </div>
         <p className="text-[11px] text-muted mt-2">
-          IOB uses the Loop / OpenAPS exponential model with an oref0-style absorption delay. Defaults: DIA <b>6h</b>, peak <b>75 min</b>, delay <b>15 min</b> (insulin stays at 100% IOB during the lag, then decays). Long-acting basal is excluded from this calculation.
+          IOB uses the Loop / OpenAPS exponential model with an oref0-style absorption delay. Defaults: DIA <b>5.5h</b>, peak <b>64 min</b>, delay <b>15 min</b> (insulin stays at 100% IOB during the lag, then decays). Long-acting basal is excluded from this calculation.
         </p>
       </Section>
 

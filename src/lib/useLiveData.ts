@@ -49,8 +49,8 @@ export function useLiveData() {
   ) ?? [];
 
   const bg = bgList[bgList.length - 1];
-  const dia = profile?.dia_hours ?? 6;
-  const peak = profile?.peak_min ?? 75;
+  const dia = profile?.dia_hours ?? 5.5;
+  const peak = profile?.peak_min ?? 64;
   const delay = profile?.delay_min ?? 15;
   // `now` is the *dependency* — it is what makes this recompute as time
   // passes — but the evaluation instant is the real clock. A quantized now

@@ -173,7 +173,7 @@ export interface Profile {
   isf: number;            // mg/dL drop per 1U
   basal_u_per_hr: number;
   dia_hours: number;      // duration of insulin action
-  peak_min?: number;      // time-to-peak in minutes (Loop default 75)
+  peak_min?: number;      // time-to-peak in minutes (default 64)
   delay_min?: number;     // pre-action lag where IOB stays at 100% (default 15)
   target_bg: number;
   tir_low?: number;       // time-in-range lower bound (default 70)
@@ -207,8 +207,8 @@ export const DEFAULT_PROFILE: Profile = {
   id: "current",
   isf: 40,
   basal_u_per_hr: 0.7,
-  dia_hours: 6,            // Loop default for rapid-acting analogs
-  peak_min: 75,
+  dia_hours: 5.5,          // fitted to this user's correction-dose CGM response
+  peak_min: 64,
   delay_min: 15,
   target_bg: 110,
   tir_low: 70,
@@ -225,6 +225,6 @@ export const DEFAULT_PROFILE: Profile = {
   daily_basal_time: "18:30",
   daily_basal_tz: "America/New_York",
   sync_auto: true,
-  schema_version: 4,
+  schema_version: 5,
   updated_ts: Date.now(),
 };
