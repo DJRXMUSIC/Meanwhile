@@ -36,7 +36,8 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * **Units.** mg/dL vs mmol/L is auto-detected (integer vs decimal); you can also force it in settings.
 * **Styled titles.** Titles that are styled `CharSequence`s are read correctly; xDrip's `getString()` misses them.
 * **Duplicated values.** A value shown twice in the same view isn't treated as ambiguous.
-* **Trend gaps.** No trend is reported across a gap longer than 20 minutes.
+* **Delta.** `delta` (and `/pebble`'s `bgdelta`) is the plain change since the previous reading in mg/dL, e.g. `6`. xDrip+ scales the change to a 5-minute rate, so a 10 mg/dL rise over 5:06 shows as 9.8. The arrow is that same change divided by the real time between the two readings, against xDrip+'s thresholds.
+* **Trend gaps.** No trend or delta is reported across a gap longer than 20 minutes.
 
 ## Reliability features
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StatTiles } from "@/components/StatTiles";
 import { Chart5h, type WindowHours } from "@/components/Chart5h";
 import { ChartControls } from "@/components/ChartControls";
@@ -22,6 +22,12 @@ import type { Decision } from "@/lib/types";
 export default function HomePage() {
   const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
   const xdrip = useXdripPolling(profile);
+  // The newest EverBridge reading (not a BG typed in by hand): the tile's
+  // countdown to the next reading runs from it.
+  const lastBridgeTs = useMemo(() => {
+    for (let i = bgList.length - 1; i >= 0; i--) if (bgList[i].source === "xdrip") return bgList[i].ts;
+    return undefined;
+  }, [bgList]);
   useAutoSync(profile);
   const [mode] = useMode();
   const {
@@ -103,6 +109,7 @@ export default function HomePage() {
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles
         bg={bg}
+        lastBridgeTs={lastBridgeTs}
         iob={iob}
         onRefresh={xdrip.configured ? xdrip.refresh : undefined}
         syncing={xdrip.syncing}

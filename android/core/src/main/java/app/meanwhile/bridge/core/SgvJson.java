@@ -26,6 +26,7 @@ public final class SgvJson {
             final Reading r = newestFirst.get(i);
             final Reading prev = i + 1 < newestFirst.size() ? newestFirst.get(i + 1) : null;
             final double slope = Trend.slope(r, prev);
+            final Integer change = Trend.change(r, prev);
             j.beginObject()
                     .field("_id", "ev-" + r.timestamp)
                     .field("device", DEVICE)
@@ -33,7 +34,7 @@ public final class SgvJson {
                     .field("sysTime", Json.isoUtc(r.timestamp))
                     .field("date", r.timestamp)
                     .field("sgv", r.mgdl)
-                    .field("delta", Trend.delta5min(slope))
+                    .field("delta", change == null ? Double.NaN : change)
                     .field("direction", Trend.direction(slope))
                     .field("noise", 1)
                     .field("type", "sgv")

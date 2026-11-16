@@ -1,13 +1,15 @@
 "use client";
 
-import { db, latestBg } from "./db";
+import { db } from "./db";
+import { nextReading, READING_INTERVAL_MS } from "./nextReading";
 import type { BgReading, Trend } from "./types";
 
 // Glucose from the EverBridge app on the phone (http://127.0.0.1:17590), which
 // serves Nightscout-style JSON. (The names here date from when this read xDrip+; xDrip+
 // itself, on port 17580, is never read.)
 // Endpoint convention used here: GET {base}/sgv.json?count=N
-// Each entry: { date: ms, sgv: mg/dL, direction: Trend, delta: number }
+// Each entry: { date: ms, sgv: mg/dL, direction: Trend, delta: mg/dL change since the
+// previous reading }
 
 export interface XdripEntry {
   date: number;
@@ -16,14 +18,26 @@ export interface XdripEntry {
   delta?: number;
 }
 
-// Default fetch sized to cover overnight gaps without hammering the bridge:
-// 144 entries at 5-min intervals = 12 hours of history. We over-fetch
-// vs the typical 1-min poll interval so we survive long sleeps / closed
-// app gaps as long as the bridge is still recording on the phone.
+// Used by "Test connection": 144 entries at 5-min intervals = 12 hours.
 const DEFAULT_COUNT = 144;
-// First poll after start: pull a much larger window so first-open after
+// First poll after start, and a manual refresh: ~30 hours, so first-open after
 // a long absence backfills cleanly.
-const CATCHUP_COUNT = 360; // ~30 hours
+const CATCHUP_COUNT = 360;
+// Every other poll asks for just the readings since the last one we hold
+// (plus a margin), not a fixed 12 hours: a few hundred bytes instead of ~40 KB.
+const MIN_COUNT = 3;
+
+// The newest reading that came from the bridge. Not just the newest reading:
+// a BG typed in by hand must not hide bridge readings timestamped before it.
+export async function latestBridgeBg(): Promise<BgReading | undefined> {
+  return db().bg.orderBy("ts").reverse().filter((r) => r.source === "xdrip").first();
+}
+
+export function countSince(lastTs: number | undefined, now: number): number {
+  if (lastTs == null) return CATCHUP_COUNT;
+  const n = Math.ceil((now - lastTs) / READING_INTERVAL_MS) + 2;
+  return Math.min(CATCHUP_COUNT, Math.max(MIN_COUNT, n));
+}
 
 export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<XdripEntry[]> {
   if (!base) return [];
@@ -54,7 +68,7 @@ export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<X
 export async function syncXdripOnce(base: string, count = DEFAULT_COUNT): Promise<number> {
   const entries = await fetchXdrip(base, count);
   if (!entries.length) return 0;
-  const last = await latestBg();
+  const last = await latestBridgeBg();
   const cutoff = last?.ts ?? 0;
   // Build the full set of new readings first, then bulkAdd in a single
   // transaction so the Dexie live query fires once instead of N times —
@@ -68,7 +82,7 @@ export async function syncXdripOnce(base: string, count = DEFAULT_COUNT): Promis
       ts: e.date,
       mgdl: Math.round(e.sgv),
       trend: (e.direction ?? "None") as Trend,
-      delta: typeof e.delta === "number" ? Math.round(e.delta * 10) / 10 : undefined,
+      delta: typeof e.delta === "number" ? Math.round(e.delta) : undefined,
       source: "xdrip",
       raw: e,
     });
@@ -78,8 +92,29 @@ export async function syncXdripOnce(base: string, count = DEFAULT_COUNT): Promis
   return fresh.length;
 }
 
+// Check this long after a reading is due: the Eversense app posts about a
+// second after the reading time, and the bridge stores it straight away.
+const DUE_GRACE_MS = 2_000;
+// While a reading is due, check this often until it arrives.
+const DUE_RETRY_MS = 5_000;
+// Stop the quick checks once the last reading is this old (sensor off, phone
+// away); the normal interval carries on.
+const QUICK_CHECKS_FOR_MS = 30 * 60_000;
+
+// How long to wait before the next poll. Polls land just after each reading
+// is due and repeat every few seconds until it arrives, so a new reading shows
+// within seconds; otherwise every `intervalMs`.
+export function nextPollDelay(lastTs: number | undefined, now: number, intervalMs: number): number {
+  if (lastTs == null || now - lastTs > QUICK_CHECKS_FOR_MS) return intervalMs;
+  const t = now - DUE_GRACE_MS; // the bridge has had DUE_GRACE_MS to store it
+  const next = nextReading(lastTs, t);
+  if (next.due) return Math.min(intervalMs, DUE_RETRY_MS);
+  return Math.max(DUE_RETRY_MS / 5, Math.min(intervalMs, next.at - t));
+}
+
 export class XdripPoller {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
   private inFlight = false;
   private firstRun = true;
   constructor(
@@ -89,12 +124,13 @@ export class XdripPoller {
   ) {}
 
   start() {
-    if (this.timer) return;
+    if (this.running) return;
+    this.running = true;
     this.poll();
-    this.timer = setInterval(() => this.poll(), this.intervalMs);
   }
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
   setBase(base: string) {
@@ -105,8 +141,8 @@ export class XdripPoller {
 
   // Background poll. Soft-fails: the bridge is routinely unreachable (phone off
   // the network, app closed) and that is not worth interrupting anyone over.
-  // Also called on foreground wake, where the interval may have been
-  // throttled or suspended while the PWA was backgrounded.
+  // Also called on foreground wake, where timers may have been throttled or
+  // suspended while the PWA was backgrounded.
   async poll(): Promise<void> {
     try {
       await this.run();
@@ -126,18 +162,32 @@ export class XdripPoller {
   private async run(forceCount?: number): Promise<number> {
     if (this.inFlight || !this.base) return 0;
     this.inFlight = true;
+    let lastTs: number | undefined;
     try {
-      // First fetch after start (or after URL change) pulls ~30h to
-      // backfill anything missed while the app was closed; subsequent
-      // ticks fall back to the 12-hour rolling window.
-      const count = forceCount ?? (this.firstRun ? CATCHUP_COUNT : DEFAULT_COUNT);
+      // First fetch after start (or after URL change) pulls ~30h to backfill
+      // anything missed while the app was closed; after that, only what's new.
+      const before = await latestBridgeBg();
+      lastTs = before?.ts; // kept if the fetch fails, so a due reading is still checked for
+      const count = forceCount ?? (this.firstRun ? CATCHUP_COUNT : countSince(before?.ts, Date.now()));
       const added = await syncXdripOnce(this.base, count);
       this.firstRun = false;
-      if (added > 0) this.onUpdate?.(added);
+      if (added > 0) {
+        lastTs = (await latestBridgeBg())?.ts;
+        this.onUpdate?.(added);
+      }
       return added;
     } finally {
       this.inFlight = false;
+      this.schedule(lastTs);
     }
+  }
+
+  // One timer at a time: every run replaces whatever was scheduled.
+  private schedule(lastTs: number | undefined) {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    if (!this.running) return;
+    this.timer = setTimeout(() => this.poll(), nextPollDelay(lastTs, Date.now(), this.intervalMs));
   }
 }
 

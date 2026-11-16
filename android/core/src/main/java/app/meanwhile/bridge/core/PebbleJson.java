@@ -34,19 +34,19 @@ public final class PebbleJson {
             final Reading prev = newestFirst.size() > 1 ? newestFirst.get(1) : null;
             final double slope = Trend.slope(r, prev);
             final String direction = Trend.direction(slope);
-            final double delta = Trend.delta5min(slope);
+            final Integer change = Trend.change(r, prev);
             final boolean mmol = "mmol".equals(unitsHint);
             j.beginObject()
                     .field("sgv", mmol ? mmol(r.mgdl) : String.valueOf(r.mgdl))
                     .field("trend", ordinal(direction))
                     .field("direction", direction)
                     .field("datetime", r.timestamp);
-            if (Double.isNaN(delta)) {
+            if (change == null) {
                 j.name("bgdelta").value((String) null);
             } else if (mmol) {
-                j.field("bgdelta", mmol(delta));
+                j.field("bgdelta", mmol(change));
             } else {
-                j.field("bgdelta", Math.round(delta));
+                j.field("bgdelta", (long) change);
             }
             j.field("ts_source", r.timestampSource).endObject();
         }
