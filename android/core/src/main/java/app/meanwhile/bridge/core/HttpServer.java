@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -80,6 +81,8 @@ public final class HttpServer {
      * {@link #SOCKET_TIMEOUT_MS read timeout}.
      */
     private static final int WORKERS = 4;
+    /** How long a (re)start keeps trying to bind while the old socket is still being released. */
+    private static final long BIND_RETRY_MS = 2_000;
 
     private final Handler handler;
     private final Object lock = new Object();
@@ -106,10 +109,7 @@ public final class HttpServer {
             this.lan = lan;
             this.apiSecretSha1 = apiSecret == null || apiSecret.isEmpty() ? null : Hashes.sha1Hex(apiSecret);
             try {
-                final ServerSocket ss = new ServerSocket();
-                ss.setReuseAddress(true);
-                final InetAddress bindAddr = lan ? null : InetAddress.getByName("127.0.0.1");
-                ss.bind(new InetSocketAddress(bindAddr, port), 16);
+                final ServerSocket ss = bind(port, lan);
                 serverSocket = ss;
                 this.port = ss.getLocalPort();
                 lastError = null;
@@ -135,6 +135,36 @@ public final class HttpServer {
         }
     }
 
+    /**
+     * Binds, retrying for up to {@link #BIND_RETRY_MS} on "address in use": a port this
+     * server just closed can stay taken for a moment (see {@link #stop()}). Another app
+     * holding the port still fails, just after that wait.
+     */
+    private static ServerSocket bind(int port, boolean lan) throws IOException {
+        final InetAddress bindAddr = lan ? null : InetAddress.getByName("127.0.0.1");
+        final long deadline = System.nanoTime() + BIND_RETRY_MS * 1_000_000;
+        while (true) {
+            final ServerSocket ss = new ServerSocket();
+            try {
+                ss.setReuseAddress(true);
+                ss.bind(new InetSocketAddress(bindAddr, port), 16);
+                return ss;
+            } catch (BindException e) {
+                ss.close();
+                if (System.nanoTime() > deadline) throw e;
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            } catch (IOException e) {
+                ss.close();
+                throw e;
+            }
+        }
+    }
+
     public void stop() {
         synchronized (lock) {
             if (serverSocket != null) {
@@ -148,7 +178,17 @@ public final class HttpServer {
                 workers.shutdownNow();
                 workers = null;
             }
+            // The port is only released once the accept thread has left accept(), so wait
+            // for it (briefly) and an immediate restart can bind again.
+            final Thread t = acceptThread;
             acceptThread = null;
+            if (t != null && t != Thread.currentThread()) {
+                try {
+                    t.join(1_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             port = -1;
         }
     }

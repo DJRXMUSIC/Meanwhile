@@ -125,6 +125,17 @@ public class HttpServerTest {
     }
 
     @Test
+    public void restartOnTheSamePortSucceedsImmediately() {
+        // the watchdog and a settings change both stop and start straight away
+        final int port = server.port();
+        for (int i = 0; i < 200; i++) {
+            server.stop();
+            assertTrue("restart " + i + ": " + server.lastError(), server.start(port, false, null));
+            assertTrue(server.isRunning());
+        }
+    }
+
+    @Test
     public void statusAndRootAnd404() throws Exception {
         assertTrue(new JSONObject(body(get("/status.json"))).getBoolean("ok"));
         assertTrue(body(get("/")).contains("sgv.json"));
