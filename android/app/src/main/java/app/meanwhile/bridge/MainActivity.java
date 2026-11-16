@@ -196,16 +196,17 @@ public class MainActivity extends Activity {
             detail.setText("Open the Eversense app once everything below shows a green dot.");
         } else {
             final Reading r = recent.get(0);
-            final double slope = Trend.slope(r, recent.size() > 1 ? recent.get(1) : null);
+            final Reading prev = recent.size() > 1 ? recent.get(1) : null;
+            final double slope = Trend.slope(r, prev);
             final long ageMs = now - r.timestamp;
             final int color = ageMs <= 6 * 60_000L ? GREEN : ageMs <= 15 * 60_000L ? AMBER : RED;
             value.setText(r.mgdl + " " + Trend.arrow(Trend.direction(slope)));
             value.setTextColor(color);
             age.setText(ago(ageMs) + "  ·  " + new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(r.timestamp)));
             age.setTextColor(color);
-            final double d = Trend.delta5min(slope);
+            final Integer d = Trend.change(r, prev);
             detail.setText("mg/dL"
-                    + (Double.isNaN(d) ? "" : String.format(Locale.ROOT, "  ·  %+.0f per 5 min", d))
+                    + (d == null ? "" : String.format(Locale.ROOT, "  ·  %+d since last reading", d))
                     + "  ·  time from " + (r.timestampSource.equals("notification_when") ? "Eversense" : "notification post")
                     + "\n" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date(r.timestamp)));
         }
