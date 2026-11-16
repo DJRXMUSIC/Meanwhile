@@ -60,7 +60,7 @@ Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **targe
 
 ### Garmin Instinct E watch face
 
-`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and minutes since the reading. It reads EverBridge on the phone through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
+`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and a countdown to the next reading. It reads EverBridge on the phone through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
 
 ## Insulin math
 

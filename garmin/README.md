@@ -2,7 +2,7 @@
 
 A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the watch's own "Instinct" face:
 
-* **top-left panel** (where that face says INSTINCT): your glucose, and under it the trend arrow and the number of minutes since the reading was taken
+* **top-left panel** (where that face says INSTINCT): your glucose, and under it the trend arrow and a countdown, in minutes, to the watch's next reading
 * **subscreen:** today's steps
 * **centre:** the time, hours solid and minutes striped
 * **right panel:** heart rate
@@ -42,14 +42,14 @@ Instead each fetch is a one-shot timer set for 15 seconds after the next reading
 
 Simulated over two days of readings, a reading typically reaches the watch about a minute after it reaches the phone. The number on the watch averages 3.3–3.6 minutes old, against 5.1 with a plain timer (2.5 is the floor with 5-minute readings). How punctual the watch's timer really is decides where in that range you land.
 
-The minutes number counts from when the sensor reading was taken, measured on the phone's clock, so it is right even if the watch and phone clocks differ.
+The number next to the arrow counts down the minutes until the watch fetches its next reading (rounded up, so 2½ minutes shows 3). The watch sets that time itself, so the countdown is exact; it reads 0 while the fetch is under way, and the new number usually appears within seconds. If a fetch finds no new reading yet (a late Eversense reading, or the phone out of range), the countdown restarts from the next fetch.
 
 ## Build and test
 
 CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-tester`, a public image with the Connect IQ SDK, device files and simulator. It:
 
 * builds release, debug and test versions for both sizes (debug builds log each fetch and schedule to the simulator console)
-* runs the unit tests (`source/Tests.mc`: reply parsing, minutes, scheduler) in the simulator
+* runs the unit tests (`source/Tests.mc`: reply parsing, countdown, scheduler) in the simulator
 * runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
 * if all of that passes, replaces the **watchface-latest** release
 

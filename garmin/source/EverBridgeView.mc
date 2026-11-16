@@ -31,7 +31,7 @@ const DESIGN = 166;
 //         24 OCT
 //
 // Glucose sits in the top-left panel where that face says INSTINCT, with the trend
-// arrow and the minutes since the reading on the row below, in place of its arrow.
+// arrow and the countdown to the next reading on the row below, in place of its arrow.
 //
 // Coordinates are designed on the 40 mm screen (166 px) and scaled to the 45 mm.
 class EverBridgeView extends WatchUi.WatchFace {
@@ -141,7 +141,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         }
     }
 
-    // Glucose in the top-left panel; arrow and minutes since the reading below it.
+    // Glucose in the top-left panel; arrow and countdown to the next reading below it.
     private function drawGlucose(dc as Graphics.Dc, nowSec as Number) as Void {
         var cx = p(62);
         var r = Sched.reading();
@@ -154,7 +154,8 @@ class EverBridgeView extends WatchUi.WatchFace {
         text(dc, cx, p(28), Graphics.FONT_NUMBER_MEDIUM, _dyNum, sgv, Graphics.TEXT_JUSTIFY_CENTER);
 
         var dir = r[Bg.K_DIR];
-        var minStr = minutesSince(at, nowSec).format("%d");
+        var next = Sched.nextFetchAt();
+        var minStr = (next == null) ? "-" : minutesUntil(next, nowSec).format("%d");
         var font = Graphics.FONT_SMALL;
         var size = p(15);
         var arrowW = arrowWidth(dir, size);
@@ -346,11 +347,13 @@ class EverBridgeView extends WatchUi.WatchFace {
     }
 }
 
-// Whole minutes since the reading, 0-999.
-function minutesSince(at as Number, nowSec as Number) as Number {
-    var m = (nowSec - at) / 60;
-    if (m < 0) {
+// Whole minutes until the next fetch, rounded up (2:30 to go shows 3), 0-99. Shows 0
+// while the fetch is due and its reply is on the way.
+function minutesUntil(next as Number, nowSec as Number) as Number {
+    var s = next - nowSec;
+    if (s <= 0) {
         return 0;
     }
-    return m > 999 ? 999 : m;
+    var m = (s + 59) / 60;
+    return m > 99 ? 99 : m;
 }

@@ -41,13 +41,15 @@ function parseRejectsErrorsAndEmptyReplies(logger as Test.Logger) as Boolean {
 }
 
 (:test)
-function minutesSinceIsWholeMinutes(logger as Test.Logger) as Boolean {
-    Test.assertEqual(minutesSince(T0, T0), 0);
-    Test.assertEqual(minutesSince(T0, T0 + 59), 0);
-    Test.assertEqual(minutesSince(T0, T0 + 60), 1);
-    Test.assertEqual(minutesSince(T0, T0 + 12 * 60 + 30), 12);
-    Test.assertEqual(minutesSince(T0, T0 - 30), 0);
-    Test.assertEqual(minutesSince(T0, T0 + 100000), 999);
+function minutesUntilCountsDownRoundingUp(logger as Test.Logger) as Boolean {
+    Test.assertEqual(minutesUntil(T0 + 300, T0), 5);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 1), 5);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 150), 3);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 240), 1);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 299), 1);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 300), 0);
+    Test.assertEqual(minutesUntil(T0 + 300, T0 + 400), 0);
+    Test.assertEqual(minutesUntil(T0 + 100000, T0), 99);
     return true;
 }
 

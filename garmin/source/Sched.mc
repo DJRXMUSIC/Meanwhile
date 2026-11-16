@@ -81,6 +81,8 @@ module Sched {
     const K_READING = "r";
     var _reading = null;
     var _lag = null;
+    // When the next fetch is set for (watch clock, s): the face counts down to it.
+    var _next = null;
 
     function reading() as Dictionary? {
         if (_reading == null) {
@@ -137,10 +139,17 @@ module Sched {
         logArm(now, t);
         try {
             Background.registerForTemporalEvent(new Time.Moment(t));
+            _next = t;
         } catch (e) {
             // Fall back to a plain 5-minute timer rather than stop fetching.
             Background.registerForTemporalEvent(new Time.Duration(PERIOD));
+            _next = now + PERIOD;
         }
+    }
+
+    // When the watch next fetches a reading, s since epoch, or null if not set yet.
+    function nextFetchAt() {
+        return _next;
     }
 
     // Debug builds log to the simulator console; release builds don't even build the text.
