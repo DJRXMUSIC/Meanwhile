@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_API = "api";
     /** The only buttons automation may press: both harmless to press any time. */
     static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
-            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts"));
+            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts", "Restore from file"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
@@ -365,6 +365,13 @@ public class MainActivity extends Activity {
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
+            final File staged = automationPick;
+            automationPick = null;
+            if (staged != null) {
+                // the emulator test: the file adb staged, instead of the picker it can't operate
+                callback.onReceiveValue(new Uri[]{Uri.fromFile(staged)});
+                return true;
+            }
             fileCallback = callback;
             final Intent pick = new Intent(Intent.ACTION_GET_CONTENT)
                     .addCategory(Intent.CATEGORY_OPENABLE)
@@ -592,8 +599,17 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ automation
 
+    /** The emulator test: a file to give the page's next file picker (adb only). */
+    private File automationPick;
+
     private void handleAutomation(Intent intent) {
         if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return;
+        final String pick = intent.getStringExtra("pick");
+        if (pick != null) {
+            automationPick = Automation.fromAdb(this, intent.getStringExtra("token")) ? Automation.stagedFile(this, pick) : null;
+            EventLog.log(this, "WEB", automationPick != null ? "automation: next file picked is " + pick
+                    : "automation: file " + pick + " refused");
+        }
         final String api = automationApi(intent);
         if (api != null) apiOverride = api;
         final String page = automationPage(intent);

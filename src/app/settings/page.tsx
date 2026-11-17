@@ -26,6 +26,8 @@ export default function SettingsPage() {
   const [lastSyncSummary, setLastSyncSummary] = useState("");
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // the restore's outcome, shown under its button (the page's status line is far below)
+  const [restoreMsg, setRestoreMsg] = useState("");
   // True inside the EverBridge app. Set after mount so the server-rendered
   // page and the first client render agree.
   const [inApp, setInApp] = useState(false);
@@ -490,17 +492,26 @@ export default function SettingsPage() {
               accept="application/json"
               className="hidden"
               onChange={async (e) => {
-                const f = e.target.files?.[0];
+                const input = e.target;
+                const f = input.files?.[0];
+                // let the same file be picked again next time
+                input.value = "";
                 if (!f) return;
+                setRestoreMsg(`Restoring ${f.name}…`);
                 try {
                   const applied = await importAll(f);
-                  setStatus(`Restored ${applied} rows from ${f.name} ✓`);
+                  const msg = `Restored ${applied} rows from ${f.name} ✓`;
+                  setRestoreMsg(msg);
+                  setStatus(msg);
                 } catch (err) {
-                  setStatus(`Restore error: ${(err as Error).message}`);
+                  const msg = `Restore error: ${(err as Error).message}. Pick a Meanwhile backup (.json) file.`;
+                  setRestoreMsg(msg);
+                  setStatus(msg);
                 }
               }}
             />
           </div>
+          {restoreMsg && <p className="text-xs mt-2" role="status">{restoreMsg}</p>}
         </div>
       </Section>
 

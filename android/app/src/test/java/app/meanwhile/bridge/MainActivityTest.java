@@ -592,7 +592,7 @@ public class MainActivityTest {
         assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
         assertSame(a, controller.get());
         // only harmless buttons can be pressed
-        assertEquals(new java.util.HashSet<>(Arrays.asList("Download backup", "Sync now", "Open glucose alerts")), MainActivity.CLICKABLE);
+        assertEquals(new java.util.HashSet<>(Arrays.asList("Download backup", "Sync now", "Open glucose alerts", "Restore from file")), MainActivity.CLICKABLE);
     }
 
     @Test

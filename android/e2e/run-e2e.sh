@@ -231,6 +231,20 @@ print("backup:", len(d["bg"]), "readings", sgvs)
 PYB
 ok "backup file saved to Downloads/Meanwhile/$BK with the readings and profile"
 
+# restore: Settings > Restore from file reads it back (adb hands the page's file picker the backup)
+# actions only adb may trigger need a token that only adb can put in the app's folder
+mkdir -p e2e-out
+TOKEN=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+printf '%s' "$TOKEN" > e2e-out/automation-token
+adb shell mkdir -p "/sdcard/Android/data/$APP/files"
+adb push e2e-out/automation-token "/sdcard/Android/data/$APP/files/automation-token" >/dev/null
+adb push "e2e-out/$BK" "/sdcard/Android/data/$APP/files/restore.json" >/dev/null
+adb logcat -c
+webcheck --es page settings/ --es click "Restore from file" --es pick restore.json --es token "$TOKEN" --es until "Restored "
+wait_until 60 reported || fail "the restore never reported"
+webcheck_line | grep -Eq "Restored [0-9]+ rows from restore.json" || fail "restore from file failed: $(webcheck_line | grep -o 'match=[^|]*' | head -c 300) :: $(adb logcat -d -s EversenseBridge:I | grep 'automation:' | tail -2)"
+ok "restore from file: $(webcheck_line | grep -Eo 'Restored [0-9]+ rows from restore.json')"
+
 # Settings starts with the way into the glucose alerts: pressing it opens the alerts screen
 alerts_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity|ResumedActivity" | grep -q "AlertsActivity"; }
 adb logcat -c
@@ -296,13 +310,9 @@ plays() { alert_log | grep -c "PLAY low" || true; }
 alert_shown() { adb shell cmd notification list 2>/dev/null | tr -d '\r' | grep -q "|$APP|3|"; }
 alert_gone() { ! alert_shown; }
 
-# automation on the alerts screen needs a token that only adb can put in the app's folder
-TOKEN=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
-printf '%s' "$TOKEN" > e2e-out/automation-token
 adb logcat -c
 adb shell mkdir -p "/sdcard/Android/data/$APP/files"
 adb push e2e-out/xdrip-import.xml "/sdcard/Android/data/$APP/files/xdrip-import.xml" >/dev/null
-adb push e2e-out/automation-token "/sdcard/Android/data/$APP/files/automation-token" >/dev/null
 adb shell am start -W -n "$APP/.AlertsActivity" --es action snooze --es token wrong-token-0123456789 >/dev/null
 wait_until 10 has_log "ignored automation 'snooze'" || fail "automation with a wrong token was not refused: $(alert_log)"
 adb shell am start -W -n "$APP/.AlertsActivity" --es action import_file --es token "$TOKEN" >/dev/null

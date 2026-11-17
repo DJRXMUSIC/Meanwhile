@@ -6,6 +6,8 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.Build;
@@ -35,6 +37,8 @@ final class AlertSound implements Alerts.Noise {
 
     private final Handler handler;
     private MediaPlayer player;
+    /** A phone sound this app can't open itself, played by Android for it. */
+    private Ringtone ringtone;
     private AudioFocusRequest focus;
     private int stream = AudioManager.STREAM_ALARM;
     private int volumeBefore = -1;
@@ -102,6 +106,12 @@ final class AlertSound implements Alerts.Noise {
 
     private void play(Context c, String uri, float volume, boolean forceSpeaker, boolean overrideSilent) {
         release(c);
+        // A phone sound (ringtones, notifications, alarms) may be one this app can't read;
+        // Android then plays it for the app.
+        if (isPhoneSound(uri) && !AlertsActivity.canOpen(c, uri)
+                && playRingtone(c, uri, volume, forceSpeaker, overrideSilent)) {
+            return;
+        }
         final AudioManager am = c.getSystemService(AudioManager.class);
         stream = forceSpeaker ? AudioManager.STREAM_ALARM : AudioManager.STREAM_MUSIC;
         final AudioAttributes attrs = attributes(forceSpeaker);
@@ -194,7 +204,60 @@ final class AlertSound implements Alerts.Noise {
         }
     }
 
+    /** A sound from Android's own list (the ringtone picker), not a file. */
+    static boolean isPhoneSound(String uri) {
+        return uri != null && (uri.startsWith("content://media/") || uri.startsWith("content://settings/"));
+    }
+
+    private boolean playRingtone(Context c, String uri, float volume, boolean forceSpeaker, boolean overrideSilent) {
+        final Ringtone r;
+        try {
+            r = RingtoneManager.getRingtone(c, Uri.parse(uri));
+        } catch (RuntimeException e) {
+            return false;
+        }
+        if (r == null) return false;
+        stream = forceSpeaker ? AudioManager.STREAM_ALARM : AudioManager.STREAM_MUSIC;
+        final AudioManager am = c.getSystemService(AudioManager.class);
+        try {
+            r.setAudioAttributes(attributes(forceSpeaker));
+            final float gain = am != null ? adjustVolume(am, volume, overrideSilent) : 1f;
+            if (Build.VERSION.SDK_INT >= 28) {
+                r.setVolume(gain);
+                r.setLooping(false);
+            }
+            r.play();
+        } catch (RuntimeException e) {
+            if (am != null) revertVolume(am);
+            EventLog.log(c, "SOUND", "phone sound " + uri + " failed: " + e);
+            return false;
+        }
+        ringtone = r;
+        EventLog.log(c, "SOUND", "playing the phone sound " + uri + " at " + Math.round(volume * 100) + "% on the "
+                + (stream == AudioManager.STREAM_ALARM ? "alarm" : "media") + " volume");
+        watchRingtone(c, r);
+        return true;
+    }
+
+    /** Puts the volume back when the phone sound has finished. */
+    private void watchRingtone(Context c, Ringtone r) {
+        handler.postDelayed(() -> {
+            if (ringtone != r) return;
+            if (r.isPlaying()) watchRingtone(c, r);
+            else release(c);
+        }, 500);
+    }
+
     private void release(Context c) {
+        final Ringtone rt = ringtone;
+        ringtone = null;
+        if (rt != null) {
+            try {
+                rt.stop();
+            } catch (RuntimeException ignored) {
+                // already stopped
+            }
+        }
         final MediaPlayer mp = player;
         player = null;
         if (mp != null) {

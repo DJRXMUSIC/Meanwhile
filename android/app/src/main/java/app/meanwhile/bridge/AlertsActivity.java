@@ -17,6 +17,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.text.InputType;
@@ -65,9 +67,10 @@ public class AlertsActivity extends Activity {
 
     static final String EXTRA_FROM_ALERT = "from_alert";
     static final String IMPORT_FILE = "xdrip-import.xml";
-    static final String AUTOMATION_TOKEN = "automation-token";
+    static final String AUTOMATION_TOKEN = Automation.TOKEN_FILE;
     private static final int REQ_IMPORT = 1;
     private static final int REQ_SOUND = 2;
+    private static final int REQ_PHONE_SOUND = 3;
     private static final long REFRESH_MS = 5_000L;
     private static final int RED = Color.rgb(211, 47, 47);
     private static final int AMBER = Color.rgb(239, 152, 0);
@@ -154,13 +157,7 @@ public class AlertsActivity extends Activity {
 
     /** The token matches the one adb put in this app's own folder. */
     private boolean fromAdb(String token) {
-        if (Build.VERSION.SDK_INT < 30 || token == null || token.length() < 16) return false;
-        final File f = new File(getExternalFilesDir(null), AUTOMATION_TOKEN);
-        try (InputStream in = new FileInputStream(f)) {
-            return token.equals(new String(readAll(in), java.nio.charset.StandardCharsets.UTF_8).trim());
-        } catch (IOException e) {
-            return false;
-        }
+        return Automation.fromAdb(this, token);
     }
 
     // ---------------------------------------------------------------- rendering
@@ -524,7 +521,8 @@ public class AlertsActivity extends Activity {
         final Context app = getApplicationContext();
         new Thread(() -> {
             final String name = soundName(app, uri);
-            final boolean opens = canOpen(app, uri);
+            // a phone sound plays even if this app can't open it: Android plays it for the app
+            final boolean opens = AlertSound.isPhoneSound(uri) || canOpen(app, uri);
             handler.post(() -> {
                 if (opens) {
                     into.setText("Alert Tone: " + name);
@@ -554,6 +552,15 @@ public class AlertsActivity extends Activity {
             if (title != null && !title.isEmpty()) return title;
         } catch (UnsupportedOperationException ignored) {
             // not hierarchical
+        }
+        if (AlertSound.isPhoneSound(uri)) {
+            try {
+                final Ringtone r = RingtoneManager.getRingtone(c, u);
+                final String t = r != null ? r.getTitle(c) : null;
+                if (t != null && !t.isEmpty()) return t + " (phone sound)";
+            } catch (RuntimeException ignored) {
+                // fall through
+            }
         }
         try (Cursor cur = c.getContentResolver().query(u, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (cur != null && cur.moveToFirst() && !cur.isNull(0)) return cur.getString(0);
@@ -756,13 +763,23 @@ public class AlertsActivity extends Activity {
     private void chooseSound(Draft d) {
         new AlertDialog.Builder(this)
                 .setTitle("Alert Tone")
-                .setItems(new String[]{"Beep (built in)", "Vibration sound (built in)", "Choose your own sound file…",
-                        "The phone's alarm sound"}, (q, which) -> {
+                .setItems(new String[]{"Phone sounds (ringtones, notifications, alarms)…", "Beep (built in)",
+                        "Vibration sound (built in)", "Choose your own sound file…", "The phone's alarm sound"}, (q, which) -> {
                     if (which == 0) {
-                        setDraftSound(d, AlertConfig.SOUND_BEEP);
+                        final Intent i = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Alert Tone")
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
+                        if (AlertSound.isPhoneSound(d.sound)) {
+                            i.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(d.sound));
+                        }
+                        startForResult(i, REQ_PHONE_SOUND);
                     } else if (which == 1) {
-                        setDraftSound(d, AlertConfig.SOUND_VIBRATION);
+                        setDraftSound(d, AlertConfig.SOUND_BEEP);
                     } else if (which == 2) {
+                        setDraftSound(d, AlertConfig.SOUND_VIBRATION);
+                    } else if (which == 3) {
                         final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
                                 .addCategory(Intent.CATEGORY_OPENABLE)
                                 .setType("audio/*");
@@ -772,6 +789,12 @@ public class AlertsActivity extends Activity {
                     }
                 })
                 .show();
+    }
+
+    @SuppressWarnings("deprecation")
+    private static Uri pickedRingtone(Intent data) {
+        if (Build.VERSION.SDK_INT >= 33) return data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri.class);
+        return data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
     }
 
     private void setDraftSound(Draft d, String uri) {
@@ -820,6 +843,13 @@ public class AlertsActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         final Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        if (requestCode == REQ_PHONE_SOUND) {
+            final Uri picked = resultCode == RESULT_OK && data != null ? pickedRingtone(data) : null;
+            if (picked == null) return;
+            if (draft != null) setDraftSound(draft, picked.toString());
+            else Toast.makeText(this, "Open the alert again and choose the sound", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (requestCode == REQ_SOUND) {
             if (uri == null) return;
             try {
