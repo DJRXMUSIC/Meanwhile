@@ -82,6 +82,10 @@ function newSyncKey(): string {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 }
 
+export function profileNeedsMigration(p: Profile): boolean {
+  return (p.schema_version ?? 1) < CURRENT_SCHEMA || !p.theme_mode || !p.theme_accent;
+}
+
 export async function getProfile(): Promise<Profile> {
   const existing = await db().profile.get("current");
   if (!existing) {

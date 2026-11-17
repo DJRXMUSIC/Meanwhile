@@ -3,13 +3,19 @@
 #   fake Eversense app (same package name as Eversense 365) posts a glucose notification
 #   -> EverBridge captures it -> http://127.0.0.1:17590/sgv.json serves it.
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
-# killed, and recovery after a reboot.
+# killed, and recovery after a reboot. Then the app as it is used: Meanwhile inside
+# the app's window shows the captured reading, read straight from the bridge, and
+# shows the next one when it arrives.
 #
-# usage: run-e2e.sh <bridge.apk> <fake-eversense.apk>
+# usage: run-e2e.sh <bridge.apk> <fake-eversense.apk> <meanwhile url>
+#   <meanwhile url> is the Meanwhile site served on the machine running adb, e.g.
+#   http://localhost:3000 (next start); the device reaches it through adb reverse.
 set -euo pipefail
 
 APP_APK=$1
 FAKE_APK=$2
+WEB_URL=$3
+WEB_PORT=$(echo "$WEB_URL" | sed -E 's|.*:([0-9]+)/?$|\1|')
 APP=app.meanwhile.bridge
 FAKE=com.senseonics.eversense365.us
 PORT=17590
@@ -31,7 +37,8 @@ dump() {
   adb shell cmd notification list 2>/dev/null | head -20 || true
   adb logcat -d -s EversenseBridge:V FakeEversense:V AndroidRuntime:E ActivityManager:W | tail -120 || true
 }
-fail() { echo "FAIL: $*"; dump; exit 1; }
+shot() { mkdir -p e2e-out; adb exec-out screencap -p > "e2e-out/$1.png" 2>/dev/null || true; }
+fail() { echo "FAIL: $*"; shot failure; dump; exit 1; }
 ok() { PASSED=$((PASSED + 1)); echo "ok $PASSED - $*"; }
 
 # wait_until <seconds> <command...>: retry the command once a second
@@ -61,6 +68,7 @@ adb install -r -g "$APP_APK" >/dev/null
 adb install -r -g "$FAKE_APK" >/dev/null
 adb shell cmd notification allow_listener "$APP/$APP.EversenseListenerService"
 adb shell dumpsys deviceidle whitelist +$APP >/dev/null
+# the app icon: with no Meanwhile address yet it asks for one, and brings the bridge up
 adb shell am start -W -n "$APP/.MainActivity" >/dev/null
 adb forward tcp:$PORT tcp:$PORT >/dev/null
 
@@ -154,8 +162,38 @@ wait_until 20 count_is 6 || fail "no capture after reboot"
 [ "$(newest date)" = "$(last_fake_when)" ] || fail "timestamp mismatch after reboot"
 ok "after reboot: endpoint + listener back by themselves, history kept, capture works"
 
+# ------------------------------------------------------------------ Meanwhile inside the app
+curl -fsS --max-time 10 -o /dev/null "$WEB_URL" || fail "Meanwhile isn't being served at $WEB_URL"
+adb reverse "tcp:$WEB_PORT" "tcp:$WEB_PORT" >/dev/null
+webcheck() { adb shell am start -W -n "$APP/.MainActivity" --es action web_check --es url "$WEB_URL" >/dev/null; }
+webcheck_line() { adb logcat -d -s EversenseBridge:I | grep "WEBCHECK:" | tail -1; }
+# page_shows <text>: ask the app what the page shows until it contains <text>
+page_shows() { webcheck; sleep 2; webcheck_line | grep -qF -- "$1"; }
+
+webcheck
+wait_until 150 sh -c 'adb logcat -d -s EversenseBridge:I | grep -q "WEBCHECK:"' || fail "the Meanwhile page never reported"
+W=$(webcheck_line)
+echo "$W" | grep -q "url=$WEB_URL" || fail "wrong page: $W"
+echo "$W" | grep -Eq "native_reads=[1-9]" || fail "the page did not read from the bridge directly: $W"
+echo "$W" | grep -q "155" || fail "the page does not show the newest reading (155): $W"
+echo "$W" | grep -Eq "next in [0-9]+:[0-9]{2}|due now" || fail "no countdown on the page: $W"
+shot meanwhile-in-app
+ok "Meanwhile in the app shows 155 with a countdown, read straight from the bridge ($(echo "$W" | grep -o 'native_reads=[0-9]*'))"
+
+# a new reading arrives while the page is open: it shows up by itself
+sleep 11
+post --es value 162 --el when_offset_ms 1000
+wait_until 20 count_is 7 || fail "reading 162 not captured"
+wait_until 45 page_shows "162" || fail "the open page never showed the new reading: $(webcheck_line)"
+webcheck_line | grep -q "+7" || fail "the page does not show the change since the last reading (+7): $(webcheck_line)"
+ok "a new reading (162, +7) appeared on the open page by itself"
+
+# the endpoint for everything else (the watch) is still up alongside
+[ "$(newest sgv)" = 162 ] || fail "endpoint newest $(newest sgv) != 162"
+ok "endpoint still serving on :$PORT with the app open"
+
 # ------------------------------------------------------------------ self-test button
-adb shell am start -W -n "$APP/.MainActivity" --es action self_test >/dev/null
+adb shell am start -W -n "$APP/.StatusActivity" --es action self_test >/dev/null
 selftest_line() { adb logcat -d -s EversenseBridge:I | grep "SELFTEST:" | tail -1; }
 selftest_done() { [ -n "$(selftest_line)" ]; }
 wait_until 30 selftest_done || fail "self-test did not finish"
@@ -163,7 +201,7 @@ selftest_line | grep -q "SELFTEST: PASS" || fail "self-test reported problems: $
 ok "self-test PASS: $(selftest_line | sed 's/.*SELFTEST: //' | cut -c1-200)"
 
 # ------------------------------------------------------------------ log file export
-adb shell am start -W -n "$APP/.MainActivity" --es action export_log >/dev/null
+adb shell am start -W -n "$APP/.StatusActivity" --es action export_log >/dev/null
 log_saved() { adb shell ls /sdcard/Download/EverBridge/ 2>/dev/null | grep -q "everbridge-log-"; }
 wait_until 60 log_saved || fail "log file not saved to Downloads/EverBridge"
 mkdir -p e2e-out
@@ -171,12 +209,12 @@ LOGFILE=$(adb shell ls /sdcard/Download/EverBridge/ | tr -d '\r' | grep everbrid
 adb pull "/sdcard/Download/EverBridge/$LOGFILE" e2e-out/ >/dev/null
 L="e2e-out/$LOGFILE"
 for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag: $FAKE" \
-    "parse result: 155 mg/dL" "[CAPTURE] STORED 155 mg/dL" "[LISTENER] connected" "[BOOT]" \
+    "parse result: 162 mg/dL" "[CAPTURE] STORED 155 mg/dL" "[CAPTURE] STORED 162 mg/dL" "[LISTENER] connected" "[BOOT]" \
     "[SELFTEST] PASS" "===== Logcat" "===== end ====="; do
   grep -qF "$needle" "$L" || { echo "--- saved log ---"; cat "$L"; fail "saved log is missing: $needle"; }
 done
 ok "log file saved to Downloads ($(wc -c < "$L") bytes) with raw Eversense notification, events, self-test PASS and logcat"
 
 echo "all $PASSED end-to-end checks passed"
-get "/sgv.json?count=6"
+get "/sgv.json?count=7"
 echo

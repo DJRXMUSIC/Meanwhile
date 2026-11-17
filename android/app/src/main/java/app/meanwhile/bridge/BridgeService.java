@@ -150,7 +150,7 @@ public class BridgeService extends Service {
                     .setSmallIcon(R.drawable.ic_stat_bridge)
                     .setContentTitle("No Eversense reading for " + ((now - last.timestamp) / 60_000) + " min")
                     .setContentText(staleHint(bridge))
-                    .setContentIntent(openApp(this))
+                    .setContentIntent(openStatus(this))
                     .setAutoCancel(true)
                     .build());
         } else if (!stale) {
@@ -205,6 +205,12 @@ public class BridgeService extends Service {
                 .setShowWhen(false)
                 .setContentIntent(openApp(context))
                 .build();
+    }
+
+    /** The bridge's status screen, where a problem can be fixed. */
+    private static PendingIntent openStatus(Context context) {
+        return PendingIntent.getActivity(context, 1, new Intent(context, StatusActivity.class),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private static PendingIntent openApp(Context context) {

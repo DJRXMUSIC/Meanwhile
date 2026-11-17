@@ -1,6 +1,7 @@
 "use client";
 
 import { db } from "./db";
+import { everBridge } from "./native";
 import { nextReading, READING_INTERVAL_MS } from "./nextReading";
 import type { BgReading, Trend } from "./types";
 
@@ -41,6 +42,22 @@ export function countSince(lastTs: number | undefined, now: number): number {
 
 export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<XdripEntry[]> {
   if (!base) return [];
+
+  // 0) Inside the EverBridge app: read the bridge's store directly. Same JSON
+  //    as /sgv.json, with no network request to fail or be blocked.
+  const native = everBridge();
+  if (native) {
+    try {
+      const raw = native.sgv(count);
+      if (raw) {
+        const json = JSON.parse(raw) as XdripEntry[];
+        if (Array.isArray(json)) return json;
+      }
+    } catch {
+      // fall through to the HTTP endpoint
+    }
+  }
+
   const direct = `${base.replace(/\/$/, "")}/sgv.json?count=${count}`;
 
   // 1) Try direct fetch from the browser. Works when the page is on the
@@ -74,10 +91,10 @@ export async function syncXdripOnce(base: string, count = DEFAULT_COUNT): Promis
   // transaction so the Dexie live query fires once instead of N times —
   // that's what was causing the chart and BG tile to "flicker" while
   // backfilling many readings at once.
-  const sorted = [...entries].sort((a, b) => a.date - b.date);
+  const sorted = entries.filter((e) => e && e.date && e.sgv).sort((a, b) => a.date - b.date);
   const fresh: Omit<BgReading, "id">[] = [];
   for (const e of sorted) {
-    if (!e?.date || !e?.sgv || e.date <= cutoff) continue;
+    if (e.date <= cutoff) continue;
     fresh.push({
       ts: e.date,
       mgdl: Math.round(e.sgv),

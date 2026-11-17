@@ -14,6 +14,7 @@ import {
 import { NumberField } from "@/components/NumberField";
 import { formatBytes, requestPersistentStorage, type PersistState } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
+import { copyTextNatively, everBridge, saveTextNatively } from "@/lib/native";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -25,11 +26,15 @@ export default function SettingsPage() {
   const [lastSyncSummary, setLastSyncSummary] = useState("");
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // True inside the EverBridge app. Set after mount so the server-rendered
+  // page and the first client render agree.
+  const [inApp, setInApp] = useState(false);
 
   useEffect(() => {
     getProfile().then(setProfile);
     requestPersistentStorage().then(setPersist);
     refreshSyncMeta();
+    setInApp(!!everBridge());
   }, []);
 
   const refreshSyncMeta = () => {
@@ -61,10 +66,18 @@ export default function SettingsPage() {
 
   const downloadBackup = async () => {
     const blob = await exportAll();
+    const name = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
+    // Inside the EverBridge app there is no browser download; the app saves the file.
+    const saved = saveTextNatively(name, await blob.text());
+    if (saved !== undefined) {
+      refreshSyncMeta();
+      setStatus(saved ? `Backup saved to ${saved} ✓` : "Backup could not be saved");
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
     refreshSyncMeta();
@@ -172,7 +185,7 @@ export default function SettingsPage() {
           onChange={(e) => update({ xdrip_url: e.target.value })}
           className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
         />
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 flex-wrap">
           <button
             onClick={async () => {
               const url = (profile.xdrip_url || "").trim();
@@ -206,8 +219,17 @@ export default function SettingsPage() {
           >
             Test via server proxy
           </button>
+          {inApp && (
+            <button
+              onClick={() => everBridge()?.openStatus?.()}
+              className="rounded-xl bg-surface2 px-3 py-2 text-sm"
+            >
+              EverBridge status &amp; setup
+            </button>
+          )}
         </div>
         <p className="text-[11px] text-muted mt-2">
+          {inApp && <>You are inside the EverBridge app: readings come straight from the bridge, and this address is only a fallback. </>}
           Readings come from the <b>EverBridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
         </p>
       </Section>
@@ -453,7 +475,7 @@ export default function SettingsPage() {
               onClick={async () => {
                 if (!profile.sync_key) return;
                 try { await navigator.clipboard.writeText(profile.sync_key); setStatus("Sync key copied ✓"); }
-                catch { setStatus("Copy failed"); }
+                catch { setStatus(copyTextNatively(profile.sync_key) ? "Sync key copied ✓" : "Copy failed"); }
               }}
               className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
             >

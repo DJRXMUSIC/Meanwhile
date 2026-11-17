@@ -1,6 +1,10 @@
 "use client";
 
-// Minimal wrapper around the Web Speech API. Falls back gracefully when unavailable.
+// Voice input. Inside the EverBridge app this is the phone's own voice dialog
+// (an Android WebView has no Web Speech API); in a browser it is a minimal
+// wrapper around the Web Speech API. Falls back gracefully when neither exists.
+
+import { everBridge, type EverBridgeNative } from "./native";
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -28,8 +32,13 @@ function getCtor(): RecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
+function nativeSpeech(): EverBridgeNative | null {
+  const n = everBridge();
+  return n && typeof n.startSpeech === "function" ? n : null;
+}
+
 export function speechSupported(): boolean {
-  return !!getCtor();
+  return !!nativeSpeech() || !!getCtor();
 }
 
 export interface DictationHandle {
@@ -43,6 +52,29 @@ export function createDictation(handlers: {
   onError?: (msg: string) => void;
   onEnd?: () => void;
 }): DictationHandle | null {
+  const native = nativeSpeech();
+  if (native) {
+    // One result per start: what was heard, an error, or neither (cancelled).
+    // The phone's dialog shows the words as they come, so there are no partials.
+    return {
+      start: () => {
+        (window as unknown as { __everbridgeSpeech?: (text: string | null, error: string | null) => void })
+          .__everbridgeSpeech = (text, error) => {
+            if (error) handlers.onError?.(error);
+            else if (text) handlers.onFinal?.(text);
+            handlers.onEnd?.();
+          };
+        try {
+          native.startSpeech!();
+        } catch {
+          handlers.onError?.("speech error");
+          handlers.onEnd?.();
+        }
+      },
+      stop: () => { /* the phone's dialog closes itself */ },
+    };
+  }
+
   const Ctor = getCtor();
   if (!Ctor) return null;
   const rec = new Ctor();

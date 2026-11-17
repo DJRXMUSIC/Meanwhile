@@ -30,6 +30,7 @@ final class Settings {
     private static final String KEY_STALE_ALERT = "stale_alert";
     private static final String KEY_STALE_MINUTES = "stale_minutes";
     static final String KEY_PORT_MOVED = "port_moved_off_xdrip";
+    private static final String KEY_WEB_URL = "web_url";
 
     private final SharedPreferences p;
 
@@ -47,6 +48,15 @@ final class Settings {
         final SharedPreferences.Editor e = p.edit().putBoolean(KEY_PORT_MOVED, true);
         if (p.getInt(KEY_PORT, DEFAULT_PORT) == OLD_DEFAULT_PORT) e.putInt(KEY_PORT, DEFAULT_PORT);
         e.commit();
+    }
+
+    /** Address of the Meanwhile site the app shows; "" until it has been entered. */
+    String webUrl() {
+        return p.getString(KEY_WEB_URL, "");
+    }
+
+    void setWebUrl(String url) {
+        p.edit().putString(KEY_WEB_URL, url == null ? "" : url).commit();
     }
 
     int port() {

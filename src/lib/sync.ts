@@ -135,8 +135,56 @@ export async function exportAll(): Promise<Blob> {
   });
 }
 
+// Restoring a backup file. Rows carry the ids they had in the app that made
+// the backup, and this app may already hold different rows under those same
+// ids (readings it has fetched from the bridge, a dose logged before the
+// restore). Putting the backup's rows in place would silently replace them,
+// so those local rows are set aside first and added back under new ids.
+// All in one transaction: a restore either happens completely or not at all.
+const AUTO_ID_TABLES = ["bg", "insulin", "decisions", "context"] as const;
+
 export async function importAll(file: File): Promise<number> {
   const txt = await file.text();
   const json = JSON.parse(txt) as Partial<Record<TableName, unknown[]>>;
-  return applyPull(json);
+  const d = db();
+  return d.transaction("rw", [d.bg, d.insulin, d.decisions, d.context, d.profile], async () => {
+    const displaced: { table: (typeof AUTO_ID_TABLES)[number]; row: Record<string, unknown> }[] = [];
+    for (const t of AUTO_ID_TABLES) {
+      const rows = json[t];
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      const incoming = new Map<unknown, unknown>(); // id -> ts
+      for (const r of rows as ({ id?: unknown; ts?: unknown } | null)[]) {
+        if (r && r.id != null) incoming.set(r.id, r.ts);
+      }
+      await d.table(t).each((local: Record<string, unknown>) => {
+        if (incoming.has(local.id) && incoming.get(local.id) !== local.ts) displaced.push({ table: t, row: local });
+      });
+    }
+    const applied = await applyPull(json);
+    for (const { table, row } of displaced) {
+      const { id: _oldId, ...rest } = row;
+      await d.table(table).add(rest);
+    }
+    await dropDuplicateBridgeReadings();
+    return applied;
+  });
+}
+
+// A backup restored into an app that has already fetched readings from the
+// bridge can bring in the same reading twice: once from the file, once
+// fetched, under different row ids. Keeps one of each (same time, same value,
+// both from the bridge) so the chart and statistics don't count it double.
+// Returns how many rows were removed.
+export async function dropDuplicateBridgeReadings(): Promise<number> {
+  const d = db();
+  const seen = new Set<string>();
+  const dups: number[] = [];
+  await d.bg.orderBy("ts").each((r) => {
+    if (r.source !== "xdrip" || r.id == null) return;
+    const key = `${r.ts}|${r.mgdl}`;
+    if (seen.has(key)) dups.push(r.id);
+    else seen.add(key);
+  });
+  if (dups.length) await d.bg.bulkDelete(dups);
+  return dups.length;
 }

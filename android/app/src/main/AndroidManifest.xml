@@ -25,15 +25,27 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- Meanwhile, shown in a WebView. Handles its own configuration changes so a
+             rotation or dark-mode switch doesn't reload the page. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:theme="@style/WebTheme"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The bridge's status and setup screen. Exported so the emulator test can run
+             its self-test and log export. -->
+        <activity
+            android:name=".StatusActivity"
+            android:exported="true"
+            android:launchMode="singleTop" />
 
         <!-- Same mechanism as xDrip+ "Companion App" mode (services/UiBasedCollector) -->
         <service

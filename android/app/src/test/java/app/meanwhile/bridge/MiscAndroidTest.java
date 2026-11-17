@@ -111,12 +111,12 @@ public class MiscAndroidTest {
     }
 
     @Test
-    public void mainActivityShowsLastReadingStatusAndSetupSteps() {
+    public void statusScreenShowsLastReadingStatusAndSetupSteps() {
         final long now = System.currentTimeMillis();
         Bridge.get(app).store.insert(new Reading(now - 300_000, 124, TimestampSource.POST_TIME, 0, now, now, EV365, ""));
         Bridge.get(app).store.insert(new Reading(now - 1_000, 131, TimestampSource.NOTIFICATION_WHEN, now - 1_000, now, now, EV365, ""));
 
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class).setup();
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
         assertTrue(all, all.contains("LAST READING"));
@@ -132,8 +132,8 @@ public class MiscAndroidTest {
     }
 
     @Test
-    public void mainActivityWithNoReadingsSaysWaiting() {
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
+    public void statusScreenWithNoReadingsSaysWaiting() {
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class).setup();
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
         assertTrue(all, all.contains("Waiting for the first reading"));
@@ -143,8 +143,8 @@ public class MiscAndroidTest {
 
     @Test
     public void exportLogAutomationIntentSavesAFile() throws Exception {
-        final Intent i = new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "export_log");
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class, i).setup();
+        final Intent i = new Intent(app, StatusActivity.class).putExtra(StatusActivity.EXTRA_ACTION, "export_log");
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class, i).setup();
         final long deadline = System.currentTimeMillis() + 10_000;
         while (!EventLog.readAll(app).contains("[EXPORT] saved") && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);
