@@ -4,4 +4,10 @@
         <item name="android:colorAccent">#2E7D6B</item>
         <item name="android:colorPrimary">#2E7D6B</item>
     </style>
+    <!-- Meanwhile's own background (#0a0a0c) behind the page and the system bars. -->
+    <style name="WebTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/web_background</item>
+        <item name="android:colorAccent">#2E7D6B</item>
+    </style>
+    <color name="web_background">#0A0A0C</color>
 </resources>

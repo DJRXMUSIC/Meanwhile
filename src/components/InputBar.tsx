@@ -13,7 +13,11 @@ export function InputBar({
   const [text, setText] = useState("");
   const [partial, setPartial] = useState("");
   const [listening, setListening] = useState(false);
-  const [supported] = useState<boolean>(() => typeof window !== "undefined" && speechSupported());
+  // Decided after mounting, not during the first render: the pre-rendered page
+  // can't know, and deciding while hydrating made the mic button differ from
+  // the HTML (React error #418, and the home screen re-rendered from scratch).
+  const [supported, setSupported] = useState<boolean | null>(null); // null: not known yet
+  useEffect(() => setSupported(speechSupported()), []);
   const dictRef = useRef<DictationHandle | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -90,7 +94,7 @@ export function InputBar({
           {disabled ? "…" : "Ask"}
         </button>
       </div>
-      {!supported && (
+      {supported === false && (
         <div className="text-[11px] text-muted text-center mt-2">Voice dictation isn't supported on this browser — type instead.</div>
       )}
     </div>

@@ -11,3 +11,5 @@ dist/
 .vercel
 .idea
 .vscode
+.test-dist/
+android/app/src/main/assets/web/

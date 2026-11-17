@@ -100,6 +100,7 @@ public final class CaptureEngine {
     }
 
     private final ReadingStore store;
+    private final StagedKeyValueStore state;
     private final ReadingGate gate;
     private final TimestampResolver resolver;
     private final CaptureLog log;
@@ -109,8 +110,9 @@ public final class CaptureEngine {
 
     public CaptureEngine(ReadingStore store, KeyValueStore state, CaptureLog log) {
         this.store = store;
-        this.gate = new ReadingGate(store, state);
-        this.resolver = new TimestampResolver(state);
+        this.state = new StagedKeyValueStore(state);
+        this.gate = new ReadingGate(store, this.state);
+        this.resolver = new TimestampResolver(this.state);
         this.log = log;
     }
 
@@ -149,7 +151,13 @@ public final class CaptureEngine {
         }
         final Result result;
         synchronized (this) {
-            result = processLocked(in);
+            try {
+                result = processLocked(in);
+                // after the reading is stored, in one write
+                state.commit();
+            } finally {
+                state.discard(); // nothing to drop unless processing threw
+            }
         }
         log.add(result);
         final Listener l = listener;

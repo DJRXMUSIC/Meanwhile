@@ -90,7 +90,7 @@ public class DiagnosticsTest {
         listener.get().onNotificationPosted(TestNotifications.sbn(EV365,
                 TestNotifications.customView(app, "142", "mg/dL", now - 700), now));
         final String r = DiagnosticsReport.build(app);
-        for (String section : new String[]{"===== Eversense Bridge diagnostics", "===== Health", "===== Settings",
+        for (String section : new String[]{"===== EverBridge diagnostics", "===== Health", "===== Settings",
                 "===== Eversense app", "===== Active notifications (raw)", "===== Readings", "===== Capture log",
                 "===== status.json", "===== Event log (persistent)", "===== Logcat", "===== end"}) {
             assertTrue("missing " + section, r.contains(section));
@@ -121,7 +121,7 @@ public class DiagnosticsTest {
         final LogExport.Saved saved = LogExport.save(app);
         assertNotNull(saved.where);
         assertTrue(saved.bytes > 1000);
-        assertTrue(saved.where.contains("eversense-bridge-log-"));
+        assertTrue(saved.where.contains("everbridge-log-"));
         assertTrue(EventLog.readAll(app).contains("[EXPORT] saved"));
         assertNotNull(LogExport.shareIntent(app, saved));
     }

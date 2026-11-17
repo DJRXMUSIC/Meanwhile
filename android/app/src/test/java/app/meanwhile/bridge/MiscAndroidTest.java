@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Looper;
 import android.widget.TextView;
@@ -59,14 +60,14 @@ public class MiscAndroidTest {
     @Test
     public void settingsDefaultsAndValidation() {
         final Settings s = new Settings(app);
-        assertEquals(17580, s.port());
+        assertEquals(17590, s.port());
         assertEquals(false, s.lan());
         assertEquals(NotificationParser.Units.AUTO, s.units());
         assertEquals(new LinkedHashSet<>(CaptureEngine.DEFAULT_PACKAGES), s.packages());
         assertEquals(20, s.staleMinutes());
 
         s.save(80, true, " pw ", "mmol", "com.senseonics.eversense365.eu, not a package,, com.x.y", false, 1);
-        assertEquals(17580, s.port()); // privileged port rejected
+        assertEquals(17590, s.port()); // privileged port rejected
         assertEquals(true, s.lan());
         assertEquals("pw", s.apiSecret());
         assertEquals(NotificationParser.Units.MMOL, s.units());
@@ -77,8 +78,26 @@ public class MiscAndroidTest {
     }
 
     @Test
+    public void portSavedAsXdripsMovesOffItOnce() {
+        // saved by an earlier version, when 17580 was the default (and before the move existed)
+        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("port", 17580).remove(Settings.KEY_PORT_MOVED).commit();
+        assertEquals(17590, new Settings(app).port());
+        // chosen deliberately afterwards: kept
+        new Settings(app).save(17580, false, "", "auto", "", true, 20);
+        assertEquals(17580, new Settings(app).port());
+    }
+
+    @Test
+    public void otherSavedPortIsKept() {
+        app.getSharedPreferences(Settings.PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("port", 18000).remove(Settings.KEY_PORT_MOVED).commit();
+        assertEquals(18000, new Settings(app).port());
+    }
+
+    @Test
     public void appliedSettingsReachTheEngine() {
-        new Settings(app).save(17580, false, "", "mgdl", "com.senseonics.eversense365.eu", true, 20);
+        new Settings(app).save(17590, false, "", "mgdl", "com.senseonics.eversense365.eu", true, 20);
         final Bridge b = Bridge.get(app);
         assertTrue(b.engine.isMonitored("com.senseonics.eversense365.eu"));
         assertEquals(false, b.engine.isMonitored(EV365));
@@ -92,12 +111,12 @@ public class MiscAndroidTest {
     }
 
     @Test
-    public void mainActivityShowsLastReadingStatusAndSetupSteps() {
+    public void statusScreenShowsLastReadingStatusAndSetupSteps() {
         final long now = System.currentTimeMillis();
         Bridge.get(app).store.insert(new Reading(now - 300_000, 124, TimestampSource.POST_TIME, 0, now, now, EV365, ""));
         Bridge.get(app).store.insert(new Reading(now - 1_000, 131, TimestampSource.NOTIFICATION_WHEN, now - 1_000, now, now, EV365, ""));
 
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class).setup();
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
         assertTrue(all, all.contains("LAST READING"));
@@ -113,8 +132,8 @@ public class MiscAndroidTest {
     }
 
     @Test
-    public void mainActivityWithNoReadingsSaysWaiting() {
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class).setup();
+    public void statusScreenWithNoReadingsSaysWaiting() {
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class).setup();
         shadowOf(Looper.getMainLooper()).idle();
         final String all = allText(c.get().findViewById(android.R.id.content));
         assertTrue(all, all.contains("Waiting for the first reading"));
@@ -124,8 +143,8 @@ public class MiscAndroidTest {
 
     @Test
     public void exportLogAutomationIntentSavesAFile() throws Exception {
-        final Intent i = new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "export_log");
-        final ActivityController<MainActivity> c = Robolectric.buildActivity(MainActivity.class, i).setup();
+        final Intent i = new Intent(app, StatusActivity.class).putExtra(StatusActivity.EXTRA_ACTION, "export_log");
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class, i).setup();
         final long deadline = System.currentTimeMillis() + 10_000;
         while (!EventLog.readAll(app).contains("[EXPORT] saved") && System.currentTimeMillis() < deadline) {
             Thread.sleep(50);

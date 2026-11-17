@@ -50,6 +50,13 @@ android {
         }
     }
 
+    // Android leaves asset folders whose names start with "_" out of the APK by default
+    // (the "<dir>_*" entry in aapt's default ignore list). Meanwhile's scripts and styles
+    // are all under assets/web/_next, so that entry is dropped here; the rest is aapt's default.
+    androidResources {
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
@@ -70,6 +77,37 @@ android {
     lint {
         abortOnError true
         checkDependencies true
+    }
+}
+
+// Meanwhile's pages (assets/web) are built from this repository's web app into every APK,
+// so the APK and the pages always come from the same commit. Needs Node and `npm ci` at
+// the repository root. -PskipWebBuild uses whatever is in assets/web already.
+def repoRoot = rootProject.projectDir.parentFile
+def webAssets = file('src/main/assets/web')
+def buildAppWeb = tasks.register('buildAppWeb', Exec) {
+    description = "Builds Meanwhile's pages into assets/web (npm run build:app)"
+    workingDir repoRoot
+    commandLine 'npm', 'run', 'build:app'
+    inputs.dir(new File(repoRoot, 'src'))
+    inputs.dir(new File(repoRoot, 'public'))
+    inputs.files(new File(repoRoot, 'package.json'), new File(repoRoot, 'package-lock.json'),
+            new File(repoRoot, 'next.config.ts'), new File(repoRoot, 'tsconfig.json'),
+            new File(repoRoot, 'tailwind.config.ts'), new File(repoRoot, 'postcss.config.mjs'),
+            new File(repoRoot, 'scripts/build-app-web.mjs'))
+    outputs.dir(webAssets)
+    doFirst {
+        if (!new File(repoRoot, 'node_modules').isDirectory()) {
+            throw new GradleException("Run `npm ci` in ${repoRoot} first: the APK includes Meanwhile's pages")
+        }
+    }
+}
+tasks.named('preBuild') {
+    if (!project.hasProperty('skipWebBuild')) dependsOn buildAppWeb
+    doFirst {
+        if (!new File(webAssets, 'index.html').isFile()) {
+            throw new GradleException("assets/web has no Meanwhile pages: run `npm run build:app` at the repository root")
+        }
     }
 }
 

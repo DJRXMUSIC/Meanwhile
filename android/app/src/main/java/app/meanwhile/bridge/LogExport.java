@@ -22,7 +22,7 @@ import java.util.Locale;
 /** Saves the diagnostics report as a .txt file the user can download/share. */
 final class LogExport {
 
-    static final String FOLDER = "EversenseBridge";
+    static final String FOLDER = "EverBridge";
 
     static final class Saved {
         /** Shareable content URI (Downloads), or null when saved to app storage. */
@@ -45,46 +45,84 @@ final class LogExport {
     static Saved save(Context context) throws IOException {
         final Context app = context.getApplicationContext();
         final byte[] data = DiagnosticsReport.build(app).getBytes(StandardCharsets.UTF_8);
-        final String name = "eversense-bridge-log-"
+        final String name = "everbridge-log-"
                 + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".txt";
+        return saveBytes(app, name, "text/plain", data);
+    }
 
+    /** A safe file name: letters, digits, dot, dash and underscore only, at most 80 characters. */
+    static String safeName(String name) {
+        String n = name == null ? "" : name.replaceAll("[^A-Za-z0-9._-]", "_")
+                .replaceAll("\\.{2,}", "_").replaceAll("^\\.+", "");
+        if (n.length() > 80) n = n.substring(n.length() - 80);
+        return n.isEmpty() ? "file" : n;
+    }
+
+    /** Something that can write itself out, so a large file is never held in memory whole. */
+    interface Content {
+        void writeTo(OutputStream out) throws IOException;
+    }
+
+    /** Saves a file to Downloads/EverBridge (app storage if Downloads isn't available). */
+    static Saved saveBytes(Context context, String fileName, String mime, byte[] data) throws IOException {
+        return save(context, fileName, mime, data.length, out -> out.write(data));
+    }
+
+    /** Copies {@code source} to Downloads/EverBridge under {@code fileName}. */
+    static Saved saveFile(Context context, String fileName, String mime, File source) throws IOException {
+        return save(context, fileName, mime, (int) Math.min(Integer.MAX_VALUE, source.length()),
+                out -> java.nio.file.Files.copy(source.toPath(), out));
+    }
+
+    private static Saved save(Context context, String fileName, String mime, int bytes, Content content)
+            throws IOException {
+        final Context app = context.getApplicationContext();
+        final String name = safeName(fileName);
         Saved saved = null;
-        if (Build.VERSION.SDK_INT >= 29) saved = saveToDownloads(app, name, data);
+        if (Build.VERSION.SDK_INT >= 29) saved = saveToDownloads(app, name, mime, bytes, content);
         if (saved == null) {
             File dir = app.getExternalFilesDir(null);
             if (dir == null) dir = app.getFilesDir();
             final File f = new File(dir, name);
             try (OutputStream out = new FileOutputStream(f)) {
-                out.write(data);
+                content.writeTo(out);
             }
-            saved = new Saved(null, f.getAbsolutePath(), data.length);
+            saved = new Saved(null, f.getAbsolutePath(), bytes);
         }
         EventLog.log(app, "EXPORT", "saved " + saved.where + " (" + saved.bytes / 1024 + " KB)");
         return saved;
     }
 
     @android.annotation.TargetApi(29)
-    private static Saved saveToDownloads(Context app, String name, byte[] data) {
+    private static Saved saveToDownloads(Context app, String name, String mime, int bytes, Content content) {
         if (Build.VERSION.SDK_INT < 29) return null;
         final ContentResolver cr = app.getContentResolver();
         final ContentValues v = new ContentValues();
         v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-        v.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+        v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
         v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER);
         v.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        Uri uri = null;
         try {
-            final Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
             if (uri == null) return null;
             try (OutputStream out = cr.openOutputStream(uri)) {
                 if (out == null) return null;
-                out.write(data);
+                content.writeTo(out);
             }
             final ContentValues done = new ContentValues();
             done.put(MediaStore.MediaColumns.IS_PENDING, 0);
             cr.update(uri, done, null, null);
-            return new Saved(uri, "Downloads/" + FOLDER + "/" + name, data.length);
+            return new Saved(uri, "Downloads/" + FOLDER + "/" + name, bytes);
         } catch (IOException | RuntimeException e) {
             EventLog.log(app, "EXPORT", "Downloads unavailable, using app storage: " + e);
+            // don't leave a half-written, still-pending entry behind
+            if (uri != null) {
+                try {
+                    cr.delete(uri, null, null);
+                } catch (RuntimeException ignored) {
+                }
+            }
             return null;
         }
     }
@@ -93,7 +131,7 @@ final class LogExport {
     static Intent shareIntent(Context context, Saved saved) {
         final Intent send = new Intent(Intent.ACTION_SEND)
                 .setType("text/plain")
-                .putExtra(Intent.EXTRA_SUBJECT, "Eversense Bridge log");
+                .putExtra(Intent.EXTRA_SUBJECT, "EverBridge log");
         if (saved.uri != null) {
             send.putExtra(Intent.EXTRA_STREAM, saved.uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             send.setClipData(ClipData.newRawUri("log", saved.uri));

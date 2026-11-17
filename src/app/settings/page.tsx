@@ -14,6 +14,7 @@ import {
 import { NumberField } from "@/components/NumberField";
 import { formatBytes, requestPersistentStorage, type PersistState } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
+import { copyTextNatively, everBridge, IN_APP_BUILD, saveTextNatively } from "@/lib/native";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -25,12 +26,27 @@ export default function SettingsPage() {
   const [lastSyncSummary, setLastSyncSummary] = useState("");
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // True inside the EverBridge app. Set after mount so the server-rendered
+  // page and the first client render agree.
+  const [inApp, setInApp] = useState(false);
+  const [server, setServer] = useState("");
 
   useEffect(() => {
     getProfile().then(setProfile);
     requestPersistentStorage().then(setPersist);
     refreshSyncMeta();
+    setInApp(!!everBridge());
+    try { setServer(everBridge()?.apiBase?.() ?? ""); } catch { /* older app */ }
   }, []);
+
+  const saveServer = () => {
+    const n = everBridge();
+    if (!n?.setApiBase) { setStatus("This version of the app can't save a server address"); return; }
+    const saved = n.setApiBase(server.trim());
+    if (saved == null) { setStatus("That isn't a usable address. It should look like https://your-site.netlify.app"); return; }
+    setServer(saved);
+    setStatus(saved ? "Server address saved ✓" : "Server address cleared");
+  };
 
   const refreshSyncMeta = () => {
     setLastSyncTs(readLastSync());
@@ -61,10 +77,18 @@ export default function SettingsPage() {
 
   const downloadBackup = async () => {
     const blob = await exportAll();
+    const name = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
+    // Inside the EverBridge app there is no browser download; the app saves the file.
+    const saved = saveTextNatively(name, await blob.text());
+    if (saved !== undefined) {
+      refreshSyncMeta();
+      setStatus(saved ? `Backup saved to ${saved} ✓` : "Backup could not be saved");
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
     refreshSyncMeta();
@@ -137,6 +161,27 @@ export default function SettingsPage() {
         </p>
       </Section>
 
+      {IN_APP_BUILD && (
+        <Section title="Meanwhile server">
+          <input
+            type="url"
+            placeholder="https://your-site.netlify.app"
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
+          />
+          <div className="flex gap-2 mt-2">
+            <button onClick={saveServer} className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium">
+              Save
+            </button>
+          </div>
+          <p className="text-[11px] text-muted mt-2">
+            The address you used to open Meanwhile in Chrome. The app needs it for AI advice and cloud backup;
+            everything else (readings, doses, the chart) works without it.
+          </p>
+        </Section>
+      )}
+
       <Section title="App mode">
         <div className="grid grid-cols-2 gap-2">
           {(["decide", "learn"] as const).map((m) => {
@@ -164,35 +209,35 @@ export default function SettingsPage() {
         </p>
       </Section>
 
-      <Section title="xDrip+ local URL">
+      <Section title="EverBridge URL">
         <input
           type="url"
-          placeholder="http://192.168.x.x:17580"
+          placeholder="http://127.0.0.1:17590"
           value={profile.xdrip_url ?? ""}
           onChange={(e) => update({ xdrip_url: e.target.value })}
           className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
         />
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 flex-wrap">
           <button
             onClick={async () => {
               const url = (profile.xdrip_url || "").trim();
-              if (!url) { setStatus("xDrip: enter a URL first"); return; }
-              setStatus("xDrip: testing…");
+              if (!url) { setStatus("Bridge: enter a URL first"); return; }
+              setStatus("Bridge: testing…");
               try {
                 const n = await syncXdripOnce(url);
                 const msg = n > 0
-                  ? `xDrip: pulled ${n} new readings ✓`
-                  : `xDrip: connected ✓ (no new readings since last sync)`;
+                  ? `Bridge: pulled ${n} new readings ✓`
+                  : `Bridge: connected ✓ (no new readings since last sync)`;
                 setStatus(msg);
               } catch (e) {
-                setStatus(`xDrip error: ${(e as Error).message}. Tip: when this app is on a different device than xDrip+, use the phone's LAN IP (not 127.0.0.1) and make sure both are on the same WiFi.`);
+                setStatus(`Bridge error: ${(e as Error).message}. Check the EverBridge app is running (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
               }
             }}
             className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
           >
             Test connection
           </button>
-          <button
+          {!IN_APP_BUILD && <button
             onClick={async () => {
               const url = (profile.xdrip_url || "").trim();
               if (!url) return;
@@ -205,10 +250,19 @@ export default function SettingsPage() {
             className="rounded-xl bg-surface2 px-3 py-2 text-sm"
           >
             Test via server proxy
-          </button>
+          </button>}
+          {inApp && (
+            <button
+              onClick={() => everBridge()?.openStatus?.()}
+              className="rounded-xl bg-surface2 px-3 py-2 text-sm"
+            >
+              EverBridge status &amp; setup
+            </button>
+          )}
         </div>
         <p className="text-[11px] text-muted mt-2">
-          xDrip+ → Settings → Inter-app settings → enable <b>Local web service</b>. Direct browser fetches work only if this page is HTTP and on the same device. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
+          {inApp && <>You are inside the EverBridge app: readings come straight from the bridge, and this address is only a fallback. </>}
+          Readings come from the <b>EverBridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
         </p>
       </Section>
 
@@ -453,7 +507,7 @@ export default function SettingsPage() {
               onClick={async () => {
                 if (!profile.sync_key) return;
                 try { await navigator.clipboard.writeText(profile.sync_key); setStatus("Sync key copied ✓"); }
-                catch { setStatus("Copy failed"); }
+                catch { setStatus(copyTextNatively(profile.sync_key) ? "Sync key copied ✓" : "Copy failed"); }
               }}
               className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
             >

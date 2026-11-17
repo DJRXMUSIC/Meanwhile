@@ -1,13 +1,29 @@
-name: Eversense Bridge (Android)
+name: EverBridge (Android)
 
 on:
   push:
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'package*.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/**'
       - '.github/workflows/android-bridge.yml'
   pull_request:
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'package*.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/**'
       - '.github/workflows/android-bridge.yml'
   workflow_dispatch:
 
@@ -32,6 +48,16 @@ jobs:
           java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
+
+      # The APK includes Meanwhile's pages, which the Gradle build builds from this commit.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the web app's packages
+        working-directory: .
+        run: npm ci
 
       - name: Signing key (optional secret)
         env:
@@ -72,7 +98,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: eversense-bridge-apk
+          name: everbridge-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
@@ -100,13 +126,28 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: eversense-bridge-apk
+          name: everbridge-apk
           path: apks
 
       - uses: actions/download-artifact@v4
         with:
           name: fake-eversense-test-double-apk
           path: apks
+
+      # The emulator test backs up to a Meanwhile server: this commit's website version,
+      # built and served here, reached from the emulator through adb reverse.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build and serve Meanwhile
+        run: |
+          npm ci
+          npm run build
+          nohup npm start -- --port 3000 > web.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS -o /dev/null http://localhost:3000 && break; sleep 1; done
+          curl -fsS -o /dev/null http://localhost:3000 || { cat web.log; exit 1; }
 
       - name: Enable KVM
         run: |
@@ -123,13 +164,15 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           disable-animations: true
-          script: bash android/e2e/run-e2e.sh apks/app-release.apk apks/fake-eversense-debug.apk
+          script: bash android/e2e/run-e2e.sh apks/app-release.apk apks/fake-eversense-debug.apk http://localhost:3000
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: e2e-saved-log-file
-          path: e2e-out/
+          path: |
+            e2e-out/
+            web.log
           if-no-files-found: ignore
 
   release:
@@ -143,7 +186,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: eversense-bridge-apk
+          name: everbridge-apk
           path: apks
 
       - name: Replace the bridge-latest release
@@ -151,13 +194,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cp apks/app-release.apk eversense-bridge.apk
+          cp apks/app-release.apk everbridge.apk
           gh release delete bridge-latest --cleanup-tag --yes || true
-          gh release create bridge-latest eversense-bridge.apk \
+          gh release create bridge-latest everbridge.apk \
             --target "$GITHUB_SHA" \
-            --title "Eversense Bridge (build ${{ github.run_number }})" \
-            --notes "Tap **eversense-bridge.apk** below on your phone to download, then open it to install or update.
+            --title "EverBridge (build ${{ github.run_number }})" \
+            --notes "Tap **everbridge.apk** below on your phone to download, then open it to install or update.
 
           Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed all unit, Robolectric, lint and Android 15 emulator end-to-end tests.
 
-          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/eversense-bridge.apk"
+          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/everbridge.apk"

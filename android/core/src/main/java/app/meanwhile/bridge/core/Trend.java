@@ -3,10 +3,12 @@ package app.meanwhile.bridge.core;
 /**
  * Rate of change and Nightscout direction names.
  *
- * Slope is xDrip+ {@code BgReading.calculateSlope} (two-point), delta is xDrip's web
- * service convention (slope x 5 minutes) and the direction thresholds (mg/dL per minute) are
- * xDrip+ {@code Dex_Constants.TREND_ARROW_VALUES.getTrend}. Unlike xDrip, no slope is
- * reported across a gap longer than {@link #MAX_GAP_MS}.
+ * Both come from the reading and the one before it. The delta is the plain change between
+ * them in mg/dL (xDrip+ instead scales the slope to 5 minutes, which turns a 10 mg/dL rise
+ * over 5:06 into 9.8). The arrow is that change divided by the time between the readings,
+ * against the xDrip+ / Dexcom thresholds in mg/dL per minute
+ * ({@code Dex_Constants.TREND_ARROW_VALUES.getTrend}). Neither is reported across a gap
+ * longer than {@link #MAX_GAP_MS}.
  */
 public final class Trend {
 
@@ -25,10 +27,15 @@ public final class Trend {
         return (double) (current.mgdl - previous.mgdl) / dt;
     }
 
-    /** Change per 5 minutes, rounded to 3 decimals (xDrip's {@code delta}); NaN if unknown. */
-    public static double delta5min(double slopePerMs) {
-        if (Double.isNaN(slopePerMs)) return Double.NaN;
-        return Math.round(slopePerMs * 5 * 60_000 * 1000) / 1000.0;
+    /**
+     * Change since the previous reading, mg/dL; null if there is no usable previous reading
+     * (none, or more than {@link #MAX_GAP_MS} before).
+     */
+    public static Integer change(Reading current, Reading previous) {
+        if (previous == null) return null;
+        final long dt = current.timestamp - previous.timestamp;
+        if (dt <= 0 || dt > MAX_GAP_MS) return null;
+        return current.mgdl - previous.mgdl;
     }
 
     /** Nightscout direction for a slope in mg/dL per ms. */

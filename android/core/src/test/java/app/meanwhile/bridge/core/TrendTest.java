@@ -44,11 +44,11 @@ public class TrendTest {
     public void slopeAndDelta() {
         double s = Trend.slope(r(T + 5 * MIN, 110), r(T, 100));
         assertEquals(2.0, s * MIN, 1e-9);
-        assertEquals(10.0, Trend.delta5min(s), 1e-9);
+        assertEquals(Integer.valueOf(10), Trend.change(r(T + 5 * MIN, 110), r(T, 100)));
         assertEquals("FortyFiveUp", Trend.direction(s));
 
         double down = Trend.slope(r(T + 5 * MIN, 85), r(T, 100));
-        assertEquals(-15.0, Trend.delta5min(down), 1e-9);
+        assertEquals(Integer.valueOf(-15), Trend.change(r(T + 5 * MIN, 85), r(T, 100)));
         assertEquals("SingleDown", Trend.direction(down));
 
         assertEquals(0.0, Trend.slope(r(T + 5 * MIN, 100), r(T, 100)), 0);
@@ -60,7 +60,24 @@ public class TrendTest {
         assertTrue(Double.isNaN(Trend.slope(r(T + Trend.MAX_GAP_MS + 1, 100), r(T, 90))));
         assertTrue(Double.isNaN(Trend.slope(r(T, 100), r(T, 90))));
         assertEquals(1.0, Trend.slope(r(T + Trend.MAX_GAP_MS, 120), r(T, 100)) * Trend.MAX_GAP_MS / 20, 1e-9);
-        assertTrue(Double.isNaN(Trend.delta5min(Double.NaN)));
+        assertEquals(null, Trend.change(r(T, 100), null));
+        assertEquals(null, Trend.change(r(T + Trend.MAX_GAP_MS + 1, 100), r(T, 90)));
+        assertEquals(Integer.valueOf(20), Trend.change(r(T + Trend.MAX_GAP_MS, 120), r(T, 100)));
+    }
+
+    @Test
+    public void deltaIsTheChangeSinceTheLastReadingNotA5MinuteRate() {
+        // +10 over 5:06: xDrip+'s 5-minute-rate delta would say 9.8
+        final Reading prev = r(T, 100);
+        final Reading cur = r(T + 5 * MIN + 6_000, 110);
+        assertEquals(Integer.valueOf(10), Trend.change(cur, prev));
+        // the arrow uses the same change over the real time between them (1.96/min)
+        assertEquals("FortyFiveUp", Trend.direction(Trend.slope(cur, prev)));
+        // a missed reading: the change over 10 minutes, and the arrow uses 10 minutes
+        final Reading later = r(T + 10 * MIN, 112);
+        assertEquals(Integer.valueOf(12), Trend.change(later, prev));
+        assertEquals("FortyFiveUp", Trend.direction(Trend.slope(later, prev))); // 1.2/min
+        assertEquals("Flat", Trend.direction(Trend.slope(r(T + 5 * MIN, 105), prev))); // +5 = 1.0/min
     }
 
     @Test

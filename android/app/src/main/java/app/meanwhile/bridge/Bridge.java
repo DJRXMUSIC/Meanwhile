@@ -54,6 +54,7 @@ public final class Bridge {
     final Settings settings;
     final SqliteReadingStore store;
     final CaptureEngine engine;
+    final BridgeRoutes routes;
     final HttpServer server;
 
     private volatile boolean listenerConnected;
@@ -66,7 +67,7 @@ public final class Bridge {
         this.settings = new Settings(app);
         this.store = new SqliteReadingStore(app);
         this.engine = new CaptureEngine(store, new PrefsKeyValueStore(app), new CaptureLog(200));
-        this.server = new HttpServer(new BridgeRoutes(store, new BridgeRoutes.Status() {
+        this.routes = new BridgeRoutes(store, new BridgeRoutes.Status() {
             @Override
             public String statusJson() {
                 return Bridge.this.statusJson();
@@ -76,7 +77,8 @@ public final class Bridge {
             public String unitsHint() {
                 return settings.units() == NotificationParser.Units.MMOL ? "mmol" : "mgdl";
             }
-        }));
+        });
+        this.server = new HttpServer(routes);
         engine.setListener(reading -> BridgeService.refresh(app));
         applySettings();
     }
@@ -171,7 +173,7 @@ public final class Bridge {
         final boolean fresh = last != null && now - last.timestamp < staleThresholdMs();
         final Json j = new Json().beginObject()
                 .field("ok", fresh && listenerConnected)
-                .field("app", "meanwhile-eversense-bridge")
+                .field("app", "everbridge")
                 .field("version", versionName())
                 .field("now", now)
                 .field("listener_connected", listenerConnected)

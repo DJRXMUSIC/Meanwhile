@@ -1,10 +1,12 @@
-# Eversense Bridge (Android)
+# EverBridge (Android)
 
-A small Android app for the Pixel 9a. It captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17580/sgv.json`, the same endpoint and JSON format as xDrip+'s local web service. Meanwhile reads it with no changes; you don't need to install xDrip+.
+One Android app for the Pixel 9a: **Meanwhile**, with the Eversense bridge built in. The app icon opens Meanwhile; its pages are packaged inside the APK (built from this repository's web app), so it opens instantly and works with no internet. Underneath, the bridge runs whether Meanwhile is open or not.
+
+The bridge captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17590/sgv.json`, in the same JSON format as xDrip+'s local web service. It is the only glucose source for Meanwhile and its watch face. xDrip+ can stay installed with its own web service on 17580; the bridge neither needs nor reads it.
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
-  Eversense Bridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17580/sgv.json ──▶ Meanwhile
+  EverBridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
 ```
 
 ## Why it reads the notification instead of Bluetooth
@@ -24,7 +26,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 | `services/UiBasedCollector` – package list (`com.senseonics.eversense365.us`, `…gen12androidapp`, `…androidapp`), `processRemote`/`getTextViews`, `filterString`, `arrowFilterString`, `basicFilterString`, `filterUnicodeRange`, `isValidMmol`, `tryExtractString` | `core/NotificationParser`, `app/NotificationTexts` | Same filters and the "exactly one number" rule |
 | `UiBasedCollector.handleNewValue`, `isDifferentToLast`, `isJammed`, `jamThreshold`; `DexCollectionType.getCurrentDeduplicationPeriod` | `core/ReadingGate` | 40–405 mg/dL, 10 s / 250 s dedupe, jam after 6 repeats |
 | `BgReading.calculateSlope`, `Dex_Constants.TREND_ARROW_VALUES` thresholds | `core/Trend` | Same direction names and thresholds |
-| `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17580, loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
+| `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17590 (xDrip+ keeps 17580), loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
 | `UiBasedCollectorTest` | `core/…/NotificationParserTest`, `ReadingGateTest` | Ported test-for-test |
 
 **Left out:** everything else, including every other collector (Dexcom, Libre, Medtronic, …), calibration, alarms, Nightscout upload, graphs, watch integration, and xDrip's ActiveAndroid database, `Pref`/`PersistentStore` and dagger plumbing. Because of those transitive dependencies, `UiBasedCollector` can't simply be copied out of xDrip. The bridge is about 2,600 lines of Java and has no third-party runtime dependencies.
@@ -36,7 +38,8 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * **Units.** mg/dL vs mmol/L is auto-detected (integer vs decimal); you can also force it in settings.
 * **Styled titles.** Titles that are styled `CharSequence`s are read correctly; xDrip's `getString()` misses them.
 * **Duplicated values.** A value shown twice in the same view isn't treated as ambiguous.
-* **Trend gaps.** No trend is reported across a gap longer than 20 minutes.
+* **Delta.** `delta` (and `/pebble`'s `bgdelta`) is the plain change since the previous reading in mg/dL, e.g. `6`. xDrip+ scales the change to a 5-minute rate, so a 10 mg/dL rise over 5:06 shows as 9.8. The arrow is that same change divided by the real time between the two readings, against xDrip+'s thresholds.
+* **Trend gaps.** No trend or delta is reported across a gap longer than 20 minutes.
 
 ## Reliability features
 
@@ -46,22 +49,42 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * Readings are written to SQLite (WAL) and dedupe state is committed synchronously, so nothing is lost or duplicated across restarts. History is kept for 120 days.
 * After reboot and after app updates, `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED` restart everything.
 * A **missing readings** alert fires if nothing arrives for 20 minutes (configurable). It tells you whether notification access, the listener or the Eversense app is the problem.
+* `GET /pebble` returns the newest reading as one JSON object (the Nightscout `/pebble` shape). The Garmin watch face (`garmin/`) reads it, because Connect IQ can't read `sgv.json`'s top-level array.
 * `GET /status.json` reports health (`ok`, listener state, last reading and its age, last capture outcome). The app's screen shows a setup checklist and a capture log, and **Copy diagnostics** puts everything, including raw notification texts, on the clipboard.
+
+## Meanwhile inside the app
+
+* **Pages:** built by `npm run build:app` (a static export of the web app) into `app/src/main/assets/web`, which the Gradle build does by itself, and served from `https://appassets.androidplatform.net/`, an address Android reserves for exactly this. Links anywhere else open in the browser.
+* **Readings:** the page reads the bridge's store directly (`window.EverBridgeNative.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
+* **Data:** Meanwhile's database lives in the app's own storage, separate from Chrome's. To move it, see *Moving from the Chrome version* below.
+* **AI advice and cloud backup** go to your Meanwhile server (the website version, e.g. on Netlify), whose address you enter once in Meanwhile → Settings → **Meanwhile server**. Everything else works without it. The server's `/api/sync` and `/api/ai/decide` accept requests from the app's address and no other site.
+* **Backup file:** Settings → **Download backup** saves `Downloads/EverBridge/meanwhile-<date>.json`; **Restore from file** opens the phone's file picker.
+* **Voice:** the mic button uses the phone's voice input.
+* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **EverBridge status & setup**. It also opens by itself until notification access is on.
+* **Safety:** if the page's renderer crashes, the app replaces it instead of going down, so capture never stops because of the page.
 
 ## Install on the Pixel 9a
 
 **Download link (always the newest build that passed every test):**
-https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/eversense-bridge.apk
+https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk
 
 1. Open that link in Chrome on the phone and open the downloaded file. If asked, allow Chrome to install apps. Updates install the same way, on top of the old version, and keep your history.
-2. Open **Eversense Bridge**. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
-   * **Turn on: Notification access** → enable Eversense Bridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → Eversense Bridge → ⋮ → **Allow restricted settings**, then try again.
+2. Open **EverBridge**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
+   * **Turn on: Notification access** → enable EverBridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → EverBridge → ⋮ → **Allow restricted settings**, then try again.
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
-4. Tap **Run self-test**: it should say PASS.
-5. In Meanwhile → Settings, set the xDrip+ URL to `http://127.0.0.1:17580` and tap **Test connection**.
+4. Tap **Run self-test**: it should say PASS. Press Back to get to Meanwhile.
+5. In Meanwhile → Settings → **Meanwhile server**, enter the address you used to open Meanwhile in Chrome (e.g. `https://your-site.netlify.app`) and tap **Save**. That turns on AI advice and cloud backup.
 
-If xDrip+ is also installed with its local web service on, it already holds port 17580. Turn its web service off, or pick another port under **Advanced**.
+### Moving from the Chrome version
+
+Your history in Chrome stays in Chrome until you bring it over:
+
+1. In Chrome, open Meanwhile → Settings → **Download backup**. Keep this file somewhere safe.
+2. In the app, Meanwhile → Settings → **Restore from file**, and pick that file. Readings the app has already collected are kept, and nothing is counted twice.
+3. Your cloud sync key comes across with the backup, so cloud backup carries on where it was once the server address is set.
+
+The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 
 ## The screen
 
@@ -73,7 +96,7 @@ If xDrip+ is also installed with its local web service on, it already holds port
 
 ## When something isn't working: the log file
 
-Tap **Save log file**. It writes `Downloads/EversenseBridge/eversense-bridge-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
+Tap **Save log file**. It writes `Downloads/EverBridge/everbridge-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
 
 * **App and device:** app version, device, Android version, and process uptime.
 * **Health:** notification access and enabled listeners, listener state, keep-alive service, battery optimisation, power-save/doze, app standby bucket, notification permission, and endpoint state.

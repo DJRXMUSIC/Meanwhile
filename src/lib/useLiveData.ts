@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getProfile } from "./db";
+import { db, getProfile, profileNeedsMigration } from "./db";
 import { totalIOB } from "./insulin";
 import type { Profile } from "./types";
 import { bucket, useNow } from "./useNow";
@@ -12,7 +12,10 @@ export function useProfile(): Profile | null {
   const [profile, setProfile] = useState<Profile | null>(null);
   const live = useLiveQuery(() => db().profile.get("current"), []);
   useEffect(() => {
-    if (live) setProfile(live);
+    // getProfile() seeds a missing profile and migrates an old one (which
+    // then comes back through the live query). An old one can turn up at any
+    // time: after an app update, a restore from a backup file, or a sync.
+    if (live && !profileNeedsMigration(live)) setProfile(live);
     else getProfile().then(setProfile);
   }, [live]);
   return profile;
@@ -126,7 +129,7 @@ export function useXdripPolling(profile: Profile | null): XdripControl {
   const refresh = useCallback(async () => {
     const poller = pollerRef.current;
     if (!poller) {
-      flashNote("No xDrip+ URL set");
+      flashNote("No EverBridge URL set");
       return;
     }
     setSyncing(true);

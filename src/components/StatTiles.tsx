@@ -3,17 +3,21 @@
 import type { BgReading } from "@/lib/types";
 import { bgClass } from "@/lib/insulin";
 import { TrendArrow } from "./BGTrend";
+import { NextReading } from "./NextReading";
 
 export function StatTiles({
   bg,
+  lastBridgeTs,
   iob,
   onRefresh,
   syncing = false,
   refreshNote,
 }: {
   bg?: BgReading;
+  /** Time of the newest EverBridge reading; the countdown runs from it. */
+  lastBridgeTs?: number;
   iob: number;
-  /** Omitted when no xDrip+ URL is configured — nothing to refresh from. */
+  /** Omitted when no EverBridge URL is configured — nothing to refresh from. */
   onRefresh?: () => void;
   syncing?: boolean;
   refreshNote?: string | null;
@@ -24,8 +28,7 @@ export function StatTiles({
     cls === "high" ? "text-warn" :
     cls === "very-high" ? "text-bad" : "text-good";
 
-  const ageMin = bg ? Math.floor((Date.now() - bg.ts) / 60_000) : null;
-  const stale = ageMin != null && ageMin > 10;
+  const stale = bg != null && Date.now() - bg.ts > 10 * 60_000;
 
   return (
     <div className="grid grid-cols-3 gap-2 px-3">
@@ -36,8 +39,8 @@ export function StatTiles({
             <button
               onClick={onRefresh}
               disabled={syncing}
-              aria-label="Refresh glucose from xDrip+"
-              title="Refresh from xDrip+"
+              aria-label="Refresh glucose from EverBridge"
+              title="Refresh from EverBridge"
               className="-mt-1.5 -mr-1.5 size-8 shrink-0 grid place-items-center rounded-full text-muted hover:text-ink active:scale-90 transition disabled:opacity-40"
             >
               <span className={`text-base leading-none ${syncing ? "motion-safe:animate-spin" : ""}`}>⟳</span>
@@ -48,11 +51,13 @@ export function StatTiles({
           <div className={`num text-5xl font-semibold ${color}`}>{bg ? bg.mgdl : "—"}</div>
           <div className="text-2xl text-muted"><TrendArrow trend={bg?.trend} /></div>
           {bg?.delta != null && (
-            <div className="num text-sm text-muted">{bg.delta > 0 ? "+" : ""}{bg.delta}</div>
+            <div className="num text-sm text-muted" title="Change since the previous reading">
+              {bg.delta > 0 ? "+" : ""}{Math.round(bg.delta)}
+            </div>
           )}
         </div>
         <div className="mt-1 text-xs text-muted">
-          mg/dL {ageMin != null ? `· ${ageMin}m ago` : ""} {stale ? "· stale" : ""}
+          mg/dL {lastBridgeTs != null && <>· <NextReading lastTs={lastBridgeTs} /> </>}{stale ? "· stale" : ""}
           {syncing ? " · checking…" : refreshNote ? ` · ${refreshNote}` : ""}
         </div>
       </div>

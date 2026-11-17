@@ -29,7 +29,7 @@ public class SgvJsonTest {
         final JSONObject first = a.getJSONObject(0);
         assertEquals(T + 10 * MIN, first.getLong("date"));
         assertEquals(130, first.getInt("sgv"));
-        assertEquals(10.0, first.getDouble("delta"), 1e-9);
+        assertEquals(10, first.getInt("delta"));
         assertEquals("FortyFiveUp", first.getString("direction"));
         assertEquals("sgv", first.getString("type"));
         assertEquals(Json.isoUtc(T + 10 * MIN), first.getString("dateString"));
@@ -39,7 +39,7 @@ public class SgvJsonTest {
 
         final JSONObject second = a.getJSONObject(1);
         // the extra (third) reading supplies this entry's delta even though it is not output
-        assertEquals(8.0, second.getDouble("delta"), 1e-9);
+        assertEquals(8, second.getInt("delta"));
         assertEquals("FortyFiveUp", second.getString("direction"));
         assertFalse(second.has("units_hint"));
     }

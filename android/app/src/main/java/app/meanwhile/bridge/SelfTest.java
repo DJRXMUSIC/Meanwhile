@@ -126,7 +126,7 @@ final class SelfTest {
         nm.notify(NOTIFICATION_TAG, NOTIFICATION_ID, new Notification.Builder(app, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_bridge)
                 .setContentTitle(TEST_TEXT)
-                .setContentText("Eversense Bridge self-test (removed automatically)")
+                .setContentText("EverBridge self-test (removed automatically)")
                 .setTimeoutAfter(LISTENER_TIMEOUT_MS * 2)
                 .build());
         try {

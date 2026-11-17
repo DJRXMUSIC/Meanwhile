@@ -56,7 +56,14 @@ export function db(): MeanwhileDB {
 }
 
 // Schema version bumps trigger one-shot, non-destructive migrations.
-const CURRENT_SCHEMA = 5;
+const CURRENT_SCHEMA = 6;
+
+// v6: glucose comes only from EverBridge, on port 17590. Port 17580 is
+// xDrip+'s local web service, which is never read, so a URL on it moves to 17590.
+export function bridgeUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return DEFAULT_PROFILE.xdrip_url;
+  return url.replace(/:17580(?=\/|$)/, ":17590");
+}
 
 function newSyncKey(): string {
   // 32-char hex from a UUID — enough entropy to be unguessable, short
@@ -73,6 +80,10 @@ function newSyncKey(): string {
   // Last resort: Math.random — not cryptographically secure, but the
   // user can rotate any time from Settings.
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+}
+
+export function profileNeedsMigration(p: Profile): boolean {
+  return (p.schema_version ?? 1) < CURRENT_SCHEMA || !p.theme_mode || !p.theme_accent;
 }
 
 export async function getProfile(): Promise<Profile> {
@@ -119,6 +130,8 @@ export async function getProfile(): Promise<Profile> {
       (existing.peak_min ?? 75) === 75
         ? { dia_hours: 5.5, peak_min: 64 }
         : {}),
+      // v6: off xDrip+'s port
+      xdrip_url: bridgeUrl(existing.xdrip_url),
       // theme split
       theme_mode: migratedMode,
       theme_accent: migratedAccent,
