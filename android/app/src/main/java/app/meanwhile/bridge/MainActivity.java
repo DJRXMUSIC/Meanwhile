@@ -627,8 +627,17 @@ public class MainActivity extends Activity {
             final String t = text == null ? "" : text;
             final boolean done = until != null ? t.contains(until) : (t.contains("next in") || t.contains("due now"));
             if (done || attempt >= 90) {
+                // the line that matched first (it can be far down a long page), then the start of the page
+                String match = "";
+                if (until != null) {
+                    final int at = t.indexOf(until);
+                    if (at >= 0) {
+                        final int end = t.indexOf("\\n", at);
+                        match = " match=" + t.substring(at, end < 0 ? Math.min(t.length(), at + 200) : Math.min(end, at + 200));
+                    }
+                }
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
-                        + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
+                        + match + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
                 handler.postDelayed(() -> webCheck(click, until, attempt + 1), 1_000);
             }
