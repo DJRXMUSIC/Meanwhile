@@ -87,8 +87,8 @@ final class AlertSound implements Alerts.Noise {
     }
 
     @Override
-    public void test(Context c, AlertRule rule) {
-        play(c, rule.soundUri, 1f, rule.forceSpeaker, true);
+    public void test(Context c, AlertRule rule, float volume) {
+        play(c, rule.soundUri, volume, rule.forceSpeaker, true);
     }
 
     @Override
@@ -136,14 +136,16 @@ final class AlertSound implements Alerts.Noise {
         mp.setOnPreparedListener(m -> {
             if (m != player) return;
             if (am != null) {
-                adjustVolume(am, volume, overrideSilent);
+                final float gain = adjustVolume(am, volume, overrideSilent);
+                m.setVolume(gain, gain);
                 focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                         .setAudioAttributes(attrs).build();
                 am.requestAudioFocus(focus);
             }
             m.start();
             EventLog.log(c, "SOUND", "playing " + source + " at " + Math.round(volume * 100) + "% on the "
-                    + (stream == AudioManager.STREAM_ALARM ? "alarm" : "media") + " volume");
+                    + (stream == AudioManager.STREAM_ALARM ? "alarm" : "media") + " volume"
+                    + (am != null ? " (step " + am.getStreamVolume(stream) + " of " + am.getStreamMaxVolume(stream) + ")" : ""));
         });
         try {
             mp.prepareAsync();
@@ -212,14 +214,32 @@ final class AlertSound implements Alerts.Noise {
     }
 
     /** xDrip+ {@code adjustCurrentVolumeForAlert}. */
-    private void adjustVolume(AudioManager am, float volume, boolean overrideSilent) {
+    /**
+     * xDrip+ {@code adjustCurrentVolumeForAlert}, made finer: the stream goes to the step at
+     * or just above the alert's volume, and the returned player gain takes it down to that
+     * volume, so a 5% change is heard even on a stream with only a few steps. As in xDrip+,
+     * a stream at zero stays silent unless the alert overrides silent mode.
+     */
+    float adjustVolume(AudioManager am, float volume, boolean overrideSilent) {
         final int max = am.getStreamMaxVolume(stream);
         if (volumeBefore == -1) volumeBefore = am.getStreamVolume(stream);
-        volumeForAlert = (int) (max * volume);
-        if ((volumeForAlert != 0 && volumeBefore <= 0 && overrideSilent)
-                || (volumeBefore > 0 && volumeBefore != volumeForAlert)) {
+        final float target = max * volume;
+        volumeForAlert = gainStep(target);
+        if ((volumeBefore <= 0 && overrideSilent) || (volumeBefore > 0 && volumeBefore != volumeForAlert)) {
             setVolume(am, volumeForAlert);
         }
+        return gain(target, am.getStreamVolume(stream));
+    }
+
+    /** The stream step for a target in steps: the one at or above it, at least 1. */
+    static int gainStep(float target) {
+        return Math.max(1, (int) Math.ceil(target - 1e-4f));
+    }
+
+    /** Player gain that brings a stream at {@code step} down to {@code target}. */
+    static float gain(float target, int step) {
+        if (step <= 0) return 1f;
+        return Math.max(0.01f, Math.min(1f, target / step));
     }
 
     /** xDrip+ {@code revertCurrentVolume}: only if the user hasn't changed it meanwhile. */

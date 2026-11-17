@@ -330,6 +330,34 @@ public class AlertEngineTest {
     }
 
     @Test
+    public void volumeLevelScalesEveryProfile() {
+        // High at a 40% level plays at 40%; Medium at 70% of that; Ascending climbs to it
+        final AlertSettings high40 = highProfile().withVolume(40);
+        assertEquals(0.40f, AlertEngine.sound(LOW90, high40, 0).volume, 1e-6);
+        assertEquals(0.28f, AlertEngine.sound(LOW90, high40.withProfile(AlertSettings.MEDIUM), 0).volume, 1e-6);
+        final AlertSettings asc40 = AlertSettings.defaults().withVolume(40);
+        assertEquals(0f, AlertEngine.sound(LOW90, asc40, 2).volume, 1e-6);
+        assertEquals(0.40f / 3, AlertEngine.sound(LOW90, asc40, 3).volume, 1e-6);
+        assertEquals(0.40f, AlertEngine.sound(LOW90, asc40, 9).volume, 1e-6);
+        // vibration isn't affected
+        assertEquals(0f, AlertEngine.sound(LOW90, asc40.withProfile(AlertSettings.VIBRATE_ONLY), 9).volume, 1e-6);
+        assertEquals(0.4f, AlertEngine.testVolume(high40), 1e-6);
+    }
+
+    @Test
+    public void volumeLevelIsAFivePercentStepFromFiveToHundred() {
+        assertEquals(100, AlertSettings.defaults().volumePercent);
+        assertEquals(5, highProfile().withVolume(0).volumePercent);
+        assertEquals(5, highProfile().withVolume(-20).volumePercent);
+        assertEquals(100, highProfile().withVolume(250).volumePercent);
+        assertEquals(35, highProfile().withVolume(33).volumePercent);
+        assertEquals(45, highProfile().withVolume(43).volumePercent);
+        // other changes keep it
+        assertEquals(35, highProfile().withVolume(35).withProfile(AlertSettings.MEDIUM).withDisabledUntil(1, 2, 3)
+                .withOptions(true, true, false, 15, false, true, false, false).volumePercent);
+    }
+
+    @Test
     public void otherProfiles() {
         assertEquals(0.7f, AlertEngine.sound(LOW90, AlertSettings.defaults().withProfile(AlertSettings.MEDIUM), 0).volume, 1e-6);
         final AlertEngine.Sound vib = AlertEngine.sound(LOW90, AlertSettings.defaults().withProfile(AlertSettings.VIBRATE_ONLY), 9);

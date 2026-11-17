@@ -69,8 +69,8 @@ public class AlertsTest {
         }
 
         @Override
-        public void test(android.content.Context c, AlertRule rule) {
-            calls.add("test " + rule.uuid);
+        public void test(android.content.Context c, AlertRule rule, float volume) {
+            calls.add("test " + rule.uuid + " " + Math.round(volume * 100) + "%");
         }
 
         @Override
@@ -117,7 +117,8 @@ public class AlertsTest {
     public void builtInAlertsWorkWithoutAnyImport() {
         storeReading(System.currentTimeMillis(), 85);
         assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
-        assertEquals("alert 570e659e-467b-4990-94f7-b92425a11a3f volume 100%", noise.calls.get(noise.calls.size() - 1));
+        // High profile at the default Alert volume of 50%, not xDrip+'s 100%
+        assertEquals("alert 570e659e-467b-4990-94f7-b92425a11a3f volume 50%", noise.calls.get(noise.calls.size() - 1));
         final Notification n = nm.getNotification(Alerts.NOTIFICATION_ID);
         assertEquals("85 LOW WARNING", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString());
         assertEquals("Snooze 60 min", n.actions[0].title.toString());
@@ -167,7 +168,7 @@ public class AlertsTest {
         storeReading(now, 70);
         final AlertEngine.Result r = Alerts.checkNow(app, "test");
         assertEquals(AlertEngine.Action.PLAY, r.action);
-        assertEquals("alert low-90 volume 100%", noise.calls.get(noise.calls.size() - 1));
+        assertEquals("alert low-90 volume 50%", noise.calls.get(noise.calls.size() - 1));
 
         final Notification n = nm.getNotification(Alerts.NOTIFICATION_ID);
         assertNotNull(n);
@@ -296,14 +297,68 @@ public class AlertsTest {
         Alerts.checkNow(app, "test");
         final ActivityController<AlertsActivity> c = Robolectric.buildActivity(AlertsActivity.class).setup();
         final String all = texts(c.get().getWindow().getDecorView());
-        assertTrue(all, all.contains("LOW WARNING: 70 mg/dL"));
-        assertTrue(all, all.contains("Snooze 60 min"));
-        assertTrue(all, all.contains("Low: at or below 90 mg/dL · all day"));
-        assertTrue(all, all.contains("Repeats every 1 min · snooze 60 min"));
-        assertTrue(all, all.contains("High: at or above 180 mg/dL"));
-        assertTrue(all, all.contains("Sound: the phone's alarm sound"));
-        assertTrue(all, all.contains("High: full volume"));
+        // laid out like xDrip+: Snooze, Glucose Level Alerts List, Glucose Alerts Settings
+        for (String s : new String[]{"Snooze", "Active alert: LOW WARNING · 70 mg/dL", "for 1 hour ▾",
+                "Disable Low alerts", "Disable High alerts", "Disable All alerts",
+                "Glucose Level Alerts List", "Create low alert", "Create high alert", "LOW ALERTS", "HIGH ALERTS",
+                "≤ 90 mg/dL · all day", "Re-raise every 1 min · Default Snooze 60 min", "≥ 180 mg/dL",
+                "Alert Tone: the phone's alarm sound", "Glucose Alerts Settings", "Alert Volume Profile",
+                "Alert volume: 50%", "Smart Snoozing", "Smart Alerting", "Don't alarm during phone calls",
+                "Start Snoozed", "Suppress Alerts if missed readings", "Delay Ascending Volume", "Ascend to medium"}) {
+            assertTrue(s + " in:\n" + all, all.contains(s));
+        }
         c.pause().stop().destroy();
+    }
+
+    @Test
+    public void volumeLevelSetsHowLoudAlertsAndTestsAre() {
+        Alerts.update(app, Alerts.config(app).withSettings(Alerts.config(app).settings.withVolume(35)), "volume");
+        storeReading(System.currentTimeMillis(), 80);
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
+        assertEquals("alert 570e659e-467b-4990-94f7-b92425a11a3f volume 35%", noise.calls.get(noise.calls.size() - 1));
+        Alerts.test(app, Alerts.config(app).rules.get(0));
+        idleAlertThread();
+        assertEquals("test 570e659e-467b-4990-94f7-b92425a11a3f 35%", noise.calls.get(noise.calls.size() - 1));
+    }
+
+    @Test
+    public void snoozeAlertBeforeItFires() {
+        final String low = "570e659e-467b-4990-94f7-b92425a11a3f";
+        storeReading(System.currentTimeMillis() - 5 * 60_000L, 120);
+        Alerts.preSnooze(app, low, 30);
+        assertTrue(Alerts.active(app).snoozed);
+        storeReading(System.currentTimeMillis(), 80);
+        assertEquals(AlertEngine.Action.NONE, Alerts.checkNow(app, "test").action);
+        assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+    }
+
+    @Test
+    public void createdAndRemovedAlertsTakeEffect() {
+        final AlertRule urgent = new AlertRule("urgent", "Urgent low", true, false, 60, true, 0, 0, 1, 20, true, true, true,
+                AlertConfig.SOUND_BEEP);
+        Alerts.update(app, Alerts.config(app).withSaved(urgent), "add");
+        storeReading(System.currentTimeMillis(), 55);
+        Alerts.checkNow(app, "test");
+        assertEquals("urgent", Alerts.active(app).uuid);
+        Alerts.update(app, Alerts.config(app).without("urgent"), "remove");
+        assertEquals("570e659e-467b-4990-94f7-b92425a11a3f", Alerts.active(app).uuid);
+    }
+
+    @Test
+    public void playerGainMakesFiveStepsFine() {
+        // a 7-step alarm stream: 50% is 3.5 steps -> step 4, gain 0.875; 55% -> step 4, gain 0.9625
+        assertEquals(4, AlertSound.gainStep(3.5f));
+        assertEquals(0.875f, AlertSound.gain(3.5f, 4), 1e-6);
+        assertEquals(4, AlertSound.gainStep(7 * 0.55f));
+        assertEquals(0.9625f, AlertSound.gain(7 * 0.55f, 4), 1e-4);
+        // full volume: the top step, no reduction
+        assertEquals(7, AlertSound.gainStep(7f));
+        assertEquals(1f, AlertSound.gain(7f, 7), 1e-6);
+        // 5% of 7 steps: step 1, turned down
+        assertEquals(1, AlertSound.gainStep(0.35f));
+        assertEquals(0.35f, AlertSound.gain(0.35f, 1), 1e-6);
+        // stream left at a lower step (e.g. Do Not Disturb refused the change): no boost
+        assertEquals(1f, AlertSound.gain(5f, 3), 1e-6);
     }
 
     @Test

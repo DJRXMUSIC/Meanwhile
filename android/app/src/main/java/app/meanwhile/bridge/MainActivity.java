@@ -304,6 +304,11 @@ public class MainActivity extends Activity {
         }
 
         @Override
+        public void onPageFinished(WebView view, String url) {
+            pagesFinished++;
+        }
+
+        @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             return serve(request.getUrl().toString());
         }
@@ -592,10 +597,27 @@ public class MainActivity extends Activity {
         final String api = automationApi(intent);
         if (api != null) apiOverride = api;
         final String page = automationPage(intent);
-        if (web != null && !page.isEmpty()) open(AppPages.HOME + page);
+        final int loadsBefore = pagesFinished;
+        final boolean opening = web != null && !page.isEmpty();
+        if (opening) open(AppPages.HOME + page);
         final String click = intent.getStringExtra(EXTRA_CLICK);
         final String until = intent.getStringExtra(EXTRA_UNTIL);
-        webCheck(click != null && CLICKABLE.contains(click) ? click : null, until, 0, String.valueOf(System.nanoTime()));
+        final String c = click != null && CLICKABLE.contains(click) ? click : null;
+        final String id = String.valueOf(System.nanoTime());
+        // a page it opened: check that page once it has loaded, not the one it replaces
+        if (opening) afterLoad(loadsBefore, 0, () -> webCheck(c, until, 0, id));
+        else webCheck(c, until, 0, id);
+    }
+
+    /** Page loads finished so far (automation waits for the one it started). */
+    private int pagesFinished;
+
+    private void afterLoad(int loadsBefore, int waited, Runnable then) {
+        if (pagesFinished > loadsBefore || waited >= 60) {
+            then.run();
+            return;
+        }
+        handler.postDelayed(() -> afterLoad(loadsBefore, waited + 1, then), 1_000);
     }
 
     /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */

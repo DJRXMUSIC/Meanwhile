@@ -208,6 +208,9 @@ public class XdripAlertImportTest {
         // nothing stored, or damaged: the built-in setup, never no alerts
         assertEquals(AlertConfig.defaults().toJson(), AlertConfig.fromJson("garbage").toJson());
         assertEquals(AlertConfig.defaults().toJson(), AlertConfig.fromJson(null).toJson());
+        // stored before the volume level existed: the default level, not xDrip+'s maximum
+        assertEquals(AlertConfig.DEFAULT_VOLUME, AlertConfig.fromJson("{\"alerts\":[],\"settings\":{}}").settings.volumePercent);
+        assertEquals(35, AlertConfig.fromJson(c.withSettings(c.settings.withVolume(35)).toJson()).settings.volumePercent);
         // an explicitly empty list stays empty
         assertEquals(0, AlertConfig.fromJson(AlertConfig.empty().toJson()).rules.size());
 
@@ -243,10 +246,35 @@ public class XdripAlertImportTest {
         assertTrue(high.forceSpeaker);
         assertEquals(AlertConfig.SOUND_VIBRATION, high.soundUri);
         assertEquals(AlertSettings.HIGH, d.settings.profile);
+        assertEquals(AlertConfig.DEFAULT_VOLUME, d.settings.volumePercent);
         assertFalse(d.settings.smartSnoozing);
         assertFalse(d.settings.smartAlerting);
         assertTrue(d.settings.noAlarmsDuringCalls);
         assertEquals("mgdl", d.units);
+    }
+
+    @Test
+    public void importKeepsThisAppsSnoozesAndVolume() {
+        final AlertSettings here = AlertSettings.defaults().withVolume(30).withDisabledUntil(5, 6, 7);
+        final AlertSettings imported = XdripAlertImport.parse(EXPORT).settings.keepingLocalOf(here);
+        assertEquals(30, imported.volumePercent);
+        assertEquals(6, imported.lowDisabledUntil);
+        assertEquals(AlertSettings.HIGH, imported.profile);
+    }
+
+    @Test
+    public void addAndRemoveAlerts() {
+        final AlertConfig c = AlertConfig.defaults();
+        final AlertRule added = new AlertRule("new-1", "Urgent", true, false, 60, true, 0, 0, 5, 30, true, true, true, null);
+        final AlertConfig more = c.withSaved(added);
+        assertEquals(3, more.rules.size());
+        assertEquals("Urgent", more.rule("new-1").name);
+        final AlertConfig edited = more.withSaved(new AlertRule("new-1", "Urgent low", true, false, 65, true, 0, 0, 5, 30,
+                true, true, true, null));
+        assertEquals(3, edited.rules.size());
+        assertEquals(65, edited.rule("new-1").threshold, 0);
+        assertEquals(2, edited.without("new-1").rules.size());
+        assertNull(edited.without("new-1").rule("new-1"));
     }
 
     @Test

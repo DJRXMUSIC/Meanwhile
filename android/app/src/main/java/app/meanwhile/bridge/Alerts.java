@@ -60,7 +60,7 @@ final class Alerts {
         void alert(Context context, AlertRule rule, AlertSettings settings, AlertEngine.Sound sound);
 
         /** Plays the alert's sound once, loud, as a test. */
-        void test(Context context, AlertRule rule);
+        void test(Context context, AlertRule rule, float volume);
 
         void stop(Context context);
     }
@@ -345,7 +345,7 @@ final class Alerts {
     /** Replaces the alerts with xDrip+'s, keeping any "turned off for" times set here. */
     static synchronized void importFrom(Context c, XdripAlertImport.Result r) {
         final AlertConfig cur = config(c);
-        saveConfig(c, new AlertConfig(r.rules, r.settings.keepingDisabledUntilOf(cur.settings), r.units));
+        saveConfig(c, new AlertConfig(r.rules, r.settings.keepingLocalOf(cur.settings), r.units));
         final StringBuilder sb = new StringBuilder("imported " + r.rules.size() + " alerts from xDrip+ (profile "
                 + r.settings.profile + "):");
         for (AlertRule rule : r.rules) sb.append(" [").append(rule).append("]");
@@ -359,9 +359,25 @@ final class Alerts {
         checkNow(c, "settings changed");
     }
 
+    /** Plays the alert's sound once, as loud as alerts get with the current volume level. */
     static void test(Context c, AlertRule rule) {
         final Context app = c.getApplicationContext();
-        handler().post(() -> noise().test(app, rule));
+        final float volume = AlertEngine.testVolume(config(app).settings);
+        handler().post(() -> noise().test(app, rule, volume));
+    }
+
+    /** xDrip+ "Snooze alert before it fires": quiet for this alert until then. */
+    static synchronized void preSnooze(Context c, String uuid, int minutes) {
+        final long now = System.currentTimeMillis();
+        final ActiveAlert a = new ActiveAlert(uuid, true, now + minutes * 60_000L, now);
+        final ActiveAlert current = active(c);
+        if (current != null && !current.uuid.equals(uuid) && !current.ready(now)) {
+            EventLog.log(c, "ALERT", "pre-snooze not set: another alert is going on");
+            return;
+        }
+        saveActive(c, a);
+        EventLog.log(c, "ALERT", "pre-snoozed " + uuid + " for " + minutes + " min");
+        checkNow(c, "pre-snooze");
     }
 
     static void stopTest(Context c) {

@@ -34,10 +34,27 @@ public final class AlertSettings {
     public final long allDisabledUntil;
     public final long lowDisabledUntil;
     public final long highDisabledUntil;
+    /**
+     * How loud "full volume" is, percent of the stream's maximum, in 5% steps (this app's
+     * addition; xDrip+ always uses the maximum). High plays at it, Medium at 70% of it,
+     * Ascending climbs to it.
+     */
+    public final int volumePercent;
 
+    public static final int MIN_VOLUME = 5;
+
+    /** Full volume (100%), as xDrip+ has it. */
     public AlertSettings(String profile, boolean smartSnoozing, boolean smartAlerting, boolean disableStale,
                          int staleMinutes, boolean startSnoozed, boolean delayAscending3min, boolean ascendingToMedium,
                          boolean noAlarmsDuringCalls, long allDisabledUntil, long lowDisabledUntil, long highDisabledUntil) {
+        this(profile, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed, delayAscending3min,
+                ascendingToMedium, noAlarmsDuringCalls, allDisabledUntil, lowDisabledUntil, highDisabledUntil, 100);
+    }
+
+    public AlertSettings(String profile, boolean smartSnoozing, boolean smartAlerting, boolean disableStale,
+                         int staleMinutes, boolean startSnoozed, boolean delayAscending3min, boolean ascendingToMedium,
+                         boolean noAlarmsDuringCalls, long allDisabledUntil, long lowDisabledUntil, long highDisabledUntil,
+                         int volumePercent) {
         this.profile = normalizeProfile(profile);
         this.smartSnoozing = smartSnoozing;
         this.smartAlerting = smartAlerting;
@@ -50,6 +67,13 @@ public final class AlertSettings {
         this.allDisabledUntil = allDisabledUntil;
         this.lowDisabledUntil = lowDisabledUntil;
         this.highDisabledUntil = highDisabledUntil;
+        this.volumePercent = normalizeVolume(volumePercent);
+    }
+
+    /** 5–100, rounded to a 5% step. */
+    static int normalizeVolume(int v) {
+        final int r = Math.round(v / 5f) * 5;
+        return Math.max(MIN_VOLUME, Math.min(100, r));
     }
 
     public static AlertSettings defaults() {
@@ -64,16 +88,37 @@ public final class AlertSettings {
 
     public AlertSettings withDisabledUntil(long all, long low, long high) {
         return new AlertSettings(profile, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed,
-                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, all, low, high);
+                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, all, low, high, volumePercent);
     }
 
     public AlertSettings withProfile(String p) {
         return new AlertSettings(p, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed,
-                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, allDisabledUntil, lowDisabledUntil, highDisabledUntil);
+                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, allDisabledUntil, lowDisabledUntil,
+                highDisabledUntil, volumePercent);
     }
 
-    /** The same options with this app's alert snoozes kept (an import never brings those). */
-    public AlertSettings keepingDisabledUntilOf(AlertSettings current) {
-        return withDisabledUntil(current.allDisabledUntil, current.lowDisabledUntil, current.highDisabledUntil);
+    public AlertSettings withVolume(int percent) {
+        return new AlertSettings(profile, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed,
+                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, allDisabledUntil, lowDisabledUntil,
+                highDisabledUntil, percent);
+    }
+
+    /** The general options, by xDrip+ key. */
+    public AlertSettings withOptions(boolean smartSnoozing, boolean smartAlerting, boolean disableStale, int staleMinutes,
+                                     boolean startSnoozed, boolean delayAscending3min, boolean ascendingToMedium,
+                                     boolean noAlarmsDuringCalls) {
+        return new AlertSettings(profile, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed,
+                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, allDisabledUntil, lowDisabledUntil,
+                highDisabledUntil, volumePercent);
+    }
+
+    /**
+     * Imported options with what only this app has kept: its alert snoozes (an import never
+     * brings those) and its volume level (xDrip+ has none).
+     */
+    public AlertSettings keepingLocalOf(AlertSettings current) {
+        return new AlertSettings(profile, smartSnoozing, smartAlerting, disableStale, staleMinutes, startSnoozed,
+                delayAscending3min, ascendingToMedium, noAlarmsDuringCalls, current.allDisabledUntil,
+                current.lowDisabledUntil, current.highDisabledUntil, current.volumePercent);
     }
 }
