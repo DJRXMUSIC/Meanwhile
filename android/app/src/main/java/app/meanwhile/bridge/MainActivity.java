@@ -562,6 +562,16 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void alertsUnsnooze() {
+            if (trusted) AlertsBridge.unsnooze(MainActivity.this, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
+        public void alertsSetActive(String uuid, boolean on) {
+            if (trusted) AlertsBridge.setActive(MainActivity.this, uuid, on, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
         public void alertsDisable(String which, int minutes) {
             if (trusted) AlertsBridge.disable(MainActivity.this, which, minutes, MainActivity.this::alertsChanged);
         }

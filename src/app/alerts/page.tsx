@@ -65,6 +65,8 @@ export default function AlertsPage() {
   const rules = st.config.alerts;
   const activeRule = st.active ? rules.find((r) => r.uuid === st.active!.uuid) ?? null : null;
   const snoozedNow = !!st.active && st.active.snoozed && st.active.next_alert_at > st.now;
+  const offNow = ([["low", "Low", opts.low_alerts_disabled_until], ["high", "High", opts.high_alerts_disabled_until],
+    ["all", "All", opts.alerts_disabled_until]] as const).filter(([, , until]) => until > st.now);
 
   const openEditor = (r: AlertRule) => {
     setMsg("");
@@ -142,8 +144,19 @@ export default function AlertsPage() {
         </section>
       )}
       {activeRule && snoozedNow && (
-        <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 text-sm">
-          {activeRule.name} snoozed until {clock(st.active!.next_alert_at)}
+        <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 flex items-center justify-between gap-2">
+          <span className="text-sm">{activeRule.name} snoozed until {clock(st.active!.next_alert_at)}</span>
+          <button className={btnAccent} onClick={() => app.alertsUnsnooze?.()}>Unsnooze</button>
+        </section>
+      )}
+      {offNow.length > 0 && (
+        <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 space-y-2">
+          {offNow.map(([which, label, until]) => (
+            <div key={which} className="flex items-center justify-between gap-2">
+              <span className="text-sm">{label} alerts off until {clock(until)}</span>
+              <button className={btnAccent} onClick={() => app.alertsDisable?.(which, 0)}>Turn on</button>
+            </div>
+          ))}
         </section>
       )}
 
@@ -255,11 +268,15 @@ export default function AlertsPage() {
             <div key={String(above)} className="space-y-1.5">
               <div className="text-[11px] uppercase tracking-wider text-muted mt-2">{above ? "High" : "Low"}</div>
               {rules.filter((r) => r.above === above).map((r) => (
-                <button key={r.uuid} onClick={() => openEditor(r)}
-                  className={`w-full text-left rounded-xl px-3 py-2.5 bg-surface2/60 hover:bg-surface2 ${r.active ? "" : "opacity-50"}`}>
-                  <div className="text-sm font-medium">{r.name}{r.active ? "" : " (off)"}</div>
-                  <div className="num text-[12px] text-muted">{summary(r, units)} · {st.sounds[r.uuid]?.name ?? ""}</div>
-                </button>
+                <div key={r.uuid} className="flex items-center gap-2 rounded-xl bg-surface2/60 pr-3">
+                  <button onClick={() => openEditor(r)}
+                    className={`flex-1 min-w-0 text-left px-3 py-2.5 ${r.active ? "" : "opacity-50"}`}>
+                    <div className="text-sm font-medium">{r.name}{r.active ? "" : " (off)"}</div>
+                    <div className="num text-[12px] text-muted">{summary(r, units)} · {st.sounds[r.uuid]?.name ?? ""}</div>
+                  </button>
+                  <input type="checkbox" checked={r.active} aria-label={`${r.name} on`} className="size-6 accent-accent shrink-0"
+                    onChange={(e) => app.alertsSetActive?.(r.uuid, e.target.checked)} />
+                </div>
               ))}
             </div>
           ))}

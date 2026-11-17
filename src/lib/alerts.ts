@@ -67,6 +67,8 @@ export interface AlertsNative {
   alertsSaveSettings?(json: string): string | null;
   alertsSnooze?(minutes: number): void;
   alertsDisable?(which: string, minutes: number): void;
+  alertsUnsnooze?(): void;
+  alertsSetActive?(uuid: string, on: boolean): void;
   alertsPreSnooze?(uuid: string, minutes: number): void;
   alertsTest?(json: string): string | null;
   alertsStopTest?(): void;

@@ -497,6 +497,44 @@ public class AlertsTest {
         assertEquals(0, Alerts.config(app).settings.lowDisabledUntil);
     }
 
+    @Test
+    public void unsnoozeSoundsAgainIfStillOutOfRange() {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        AlertsBridge.snooze(app, 0, null);
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+        assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+
+        AlertsBridge.unsnooze(app, null);
+        idleAlertThread();
+        assertFalse(Alerts.active(app).snoozed);
+        assertNotNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+        assertEquals("alert low-90 volume 50%", noise.calls.get(noise.calls.size() - 1));
+
+        // a snooze set before it fired can be cancelled the same way
+        AlertsBridge.preSnooze(app, "high-180", 30, null);
+        idleAlertThread();
+        AlertsBridge.unsnooze(app, null);
+        idleAlertThread();
+        assertFalse(Alerts.active(app).snoozed);
+    }
+
+    @Test
+    public void eachAlertTurnsOffAndBackOnFromTheList() {
+        importExport();
+        AlertsBridge.setActive(app, "low-90", false, null);
+        idleAlertThread();
+        assertFalse(Alerts.config(app).rule("low-90").active);
+        storeReading(System.currentTimeMillis(), 80);
+        assertEquals(AlertEngine.Action.STOP, Alerts.checkNow(app, "test").action);
+        AlertsBridge.setActive(app, "low-90", true, null);
+        idleAlertThread();
+        assertTrue(Alerts.config(app).rule("low-90").active);
+        assertNotNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+    }
+
     // ---------------------------------------------------------------- adb only
 
     @Test
