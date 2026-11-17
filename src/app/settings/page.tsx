@@ -12,7 +12,7 @@ import {
   syncOnce,
 } from "@/lib/sync";
 import { NumberField } from "@/components/NumberField";
-import { formatBytes, requestPersistentStorage, type PersistState } from "@/lib/persistStorage";
+import { requestPersistentStorage } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
 import { copyTextNatively, everBridge, IN_APP_BUILD, saveTextNatively } from "@/lib/native";
 
@@ -20,7 +20,6 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [bg, setBg] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [persist, setPersist] = useState<PersistState | null>(null);
   const [lastSyncTs, setLastSyncTs] = useState(0);
   const [lastExportTs, setLastExportTs] = useState(0);
   const [lastSyncSummary, setLastSyncSummary] = useState("");
@@ -28,16 +27,13 @@ export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   // the restore's outcome, shown under its button (the page's status line is far below)
   const [restoreMsg, setRestoreMsg] = useState("");
-  // True inside the EverBridge app. Set after mount so the server-rendered
-  // page and the first client render agree.
-  const [inApp, setInApp] = useState(false);
   const [server, setServer] = useState("");
 
   useEffect(() => {
     getProfile().then(setProfile);
-    requestPersistentStorage().then(setPersist);
+    // keeps the browser from clearing the data under storage pressure (no settings needed)
+    void requestPersistentStorage();
     refreshSyncMeta();
-    setInApp(!!everBridge());
     try { setServer(everBridge()?.apiBase?.() ?? ""); } catch { /* older app */ }
   }, []);
 
@@ -71,12 +67,6 @@ export default function SettingsPage() {
     }
   };
 
-  const refreshPersist = async () => {
-    const p = await requestPersistentStorage();
-    setPersist(p);
-    setStatus(p.persisted ? "Persistent storage granted ✓" : "Persistent storage not granted (yet)");
-  };
-
   const downloadBackup = async () => {
     const blob = await exportAll();
     const name = `meanwhile-${new Date().toISOString().slice(0, 10)}.json`;
@@ -104,32 +94,14 @@ export default function SettingsPage() {
 
   if (!profile) return <div className="p-6 text-muted">Loading…</div>;
 
+  const accentIndex = Math.max(0, ACCENTS.findIndex((a) => a.id === (profile.theme_accent ?? "aurora")));
+  const accent = ACCENTS[accentIndex];
+
   return (
     <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Settings</h1>
 
-      {inApp && (
-        <Section title="Glucose alerts">
-          <button
-            onClick={() => {
-              // call each as a method of the app's object: Android refuses one taken off it
-              const app = everBridge();
-              if (app?.openAlerts) app.openAlerts();
-              else app?.openStatus?.();
-            }}
-            className="w-full rounded-xl bg-accent text-white px-3 py-2.5 text-sm font-medium"
-          >
-            Open glucose alerts
-          </button>
-          <p className="text-[11px] text-muted mt-2">
-            Low and high alerts with their sounds: change, test or snooze them, or turn them off for a while.
-            Also on the app icon: press and hold it, then tap <b>Glucose alerts</b>.
-          </p>
-        </Section>
-      )}
-
       <Section title="Theme">
-        <div className="text-xs text-muted mb-1">Base</div>
         <div className="grid grid-cols-2 gap-2">
           {(["dark", "light"] as const).map((m) => {
             const active = (profile.theme_mode ?? "dark") === m;
@@ -137,74 +109,36 @@ export default function SettingsPage() {
               <button
                 key={m}
                 onClick={() => update({ theme_mode: m as ThemeMode })}
-                className={`rounded-xl px-3 py-2.5 text-left transition ${
-                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
+                className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  active ? "bg-accent/15 ring-1 ring-accent/50 text-ink" : "bg-surface2/60 hover:bg-surface2 text-ink/80"
                 }`}
               >
-                <div className={`text-sm font-medium ${active ? "text-ink" : "text-ink/80"}`}>
-                  {m === "dark" ? "Dark" : "Light"}
-                </div>
-                <div className="text-[11px] text-muted">
-                  {m === "dark" ? "Near-black surfaces" : "White / cream surfaces"}
-                </div>
+                {m === "dark" ? "Dark" : "Light"}
               </button>
             );
           })}
         </div>
-
-        <div className="flex items-baseline justify-between mt-3 mb-1">
-          <span className="text-xs text-muted">Accent color</span>
-          <span className="text-[10px] text-muted">{ACCENTS.length} options, hue sorted</span>
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-muted">Color</span>
+          <span className="flex items-center gap-2 text-sm">
+            <span className="size-5 rounded-full ring-1 ring-white/10" style={{ backgroundColor: accent.swatch }} />
+            {accent.label}
+          </span>
         </div>
-        <div className="grid grid-cols-5 gap-1.5">
-          {ACCENTS.map((a) => {
-            const active = (profile.theme_accent ?? "aurora") === a.id;
-            return (
-              <button
-                key={a.id}
-                onClick={() => update({ theme_accent: a.id as AccentName })}
-                className={`rounded-xl p-1.5 transition flex flex-col items-center gap-1 ${
-                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
-                }`}
-                title={a.label}
-                aria-label={a.label}
-              >
-                <span
-                  className="size-7 rounded-full ring-1 ring-white/10 shrink-0"
-                  style={{ backgroundColor: a.swatch }}
-                />
-                <span className={`text-[10px] leading-tight truncate w-full text-center ${active ? "text-ink" : "text-ink/80"}`}>{a.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-[11px] text-muted mt-2">
-          Base mode chooses light or dark surfaces; the accent only colors highlights and primary buttons. Chart colors stay consistent across themes for analytical clarity.
-        </p>
+        <input
+          type="range"
+          min={0}
+          max={ACCENTS.length - 1}
+          step={1}
+          value={accentIndex}
+          aria-label="Color"
+          onChange={(e) => update({ theme_accent: ACCENTS[Number(e.target.value)].id as AccentName })}
+          className="color-range w-full h-8 rounded-full appearance-none cursor-pointer"
+          style={{ background: `linear-gradient(to right, ${ACCENTS.map((a) => a.swatch).join(", ")})` }}
+        />
       </Section>
 
-      {IN_APP_BUILD && (
-        <Section title="Meanwhile server">
-          <input
-            type="url"
-            placeholder="https://your-site.netlify.app"
-            value={server}
-            onChange={(e) => setServer(e.target.value)}
-            className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
-          />
-          <div className="flex gap-2 mt-2">
-            <button onClick={saveServer} className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium">
-              Save
-            </button>
-          </div>
-          <p className="text-[11px] text-muted mt-2">
-            The address you used to open Meanwhile in Chrome. The app needs it for AI advice and cloud backup;
-            everything else (readings, doses, the chart) works without it.
-          </p>
-        </Section>
-      )}
-
-      <Section title="App mode">
+      <Section title="Mode">
         <div className="grid grid-cols-2 gap-2">
           {(["decide", "learn"] as const).map((m) => {
             const active = (profile.mode ?? "decide") === m;
@@ -212,91 +146,52 @@ export default function SettingsPage() {
               <button
                 key={m}
                 onClick={() => update({ mode: m })}
-                className={`rounded-xl px-3 py-3 text-left transition ${
-                  active ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60 hover:bg-surface2"
+                className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  active ? "bg-accent/15 ring-1 ring-accent/50 text-ink" : "bg-surface2/60 hover:bg-surface2 text-ink/80"
                 }`}
               >
-                <div className={`text-sm font-medium ${active ? "text-ink" : "text-ink/80"}`}>
-                  {m === "decide" ? "Decide" : "Learn"}
-                </div>
-                <div className="text-[11px] text-muted">
-                  {m === "decide" ? "AI mic + text prompt" : "Quick log doses, no AI calls"}
-                </div>
+                {m === "decide" ? "Decide" : "Learn"}
               </button>
             );
           })}
         </div>
-        <p className="text-[11px] text-muted mt-2">
-          Mode is stored in your profile and persists across app restarts, reboots, and reinstalls (when sync is enabled).
-        </p>
       </Section>
 
-      <Section title="Glucose source">
-        {IN_APP_BUILD ? (
-          <>
-            <p className="text-sm">Readings come straight from the Eversense app on this phone. Nothing to set up here.</p>
-            <button
-              onClick={() => everBridge()?.openStatus?.()}
-              className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-            >
-              Eversense connection &amp; setup
-            </button>
-            <p className="text-[11px] text-muted mt-2">
-              Shows the latest reading, anything that needs fixing (notification access, battery), a self-test and a log file for troubleshooting.
-            </p>
-          </>
-        ) : (
-          <>
-            <input
-              type="url"
-              placeholder="http://127.0.0.1:17590"
-              value={profile.xdrip_url ?? ""}
-              onChange={(e) => update({ xdrip_url: e.target.value })}
-              className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
-            />
-            <div className="flex gap-2 mt-2 flex-wrap">
-              <button
-                onClick={async () => {
-                  const url = (profile.xdrip_url || "").trim();
-                  if (!url) { setStatus("Glucose: enter an address first"); return; }
-                  setStatus("Glucose: testing…");
-                  try {
-                    const n = await syncXdripOnce(url);
-                    const msg = n > 0
-                      ? `Glucose: pulled ${n} new readings ✓`
-                      : `Glucose: connected ✓ (no new readings since last sync)`;
-                    setStatus(msg);
-                  } catch (e) {
-                    setStatus(`Glucose error: ${(e as Error).message}. Check the Meanwhile v5 app is running on the phone (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
-                  }
-                }}
-                className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
-              >
-                Test connection
-              </button>
-              <button
-                onClick={async () => {
-                  const url = (profile.xdrip_url || "").trim();
-                  if (!url) return;
-                  try {
-                    const r = await fetch(`/api/bg/proxy?base=${encodeURIComponent(url)}&count=1`, { cache: "no-store" });
-                    const t = await r.text();
-                    setStatus(`Proxy ${r.status}: ${t.slice(0, 200)}`);
-                  } catch (e) { setStatus(`Proxy error: ${(e as Error).message}`); }
-                }}
-                className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-              >
-                Test via server proxy
-              </button>
-            </div>
-            <p className="text-[11px] text-muted mt-2">
-              Readings come from the <b>Meanwhile v5</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the site falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the address.
-            </p>
-          </>
-        )}
-      </Section>
+      {IN_APP_BUILD ? (
+        <Section title="Eversense">
+          <button onClick={() => everBridge()?.openStatus?.()} className="rounded-xl bg-surface2 px-3 py-2 text-sm">
+            Eversense connection
+          </button>
+        </Section>
+      ) : (
+        <Section title="Glucose URL">
+          <input
+            type="url"
+            placeholder="http://127.0.0.1:17590"
+            value={profile.xdrip_url ?? ""}
+            onChange={(e) => update({ xdrip_url: e.target.value })}
+            className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
+          />
+          <button
+            onClick={async () => {
+              const url = (profile.xdrip_url || "").trim();
+              if (!url) return;
+              setStatus("Testing…");
+              try {
+                const n = await syncXdripOnce(url);
+                setStatus(`Connected ✓ ${n} new readings`);
+              } catch (e) {
+                setStatus(`Error: ${(e as Error).message}`);
+              }
+            }}
+            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
+          >
+            Test
+          </button>
+        </Section>
+      )}
 
-      <Section title="Manual BG entry">
+      <Section title="Manual BG">
         <div className="flex gap-2">
           <input
             type="number"
@@ -322,33 +217,15 @@ export default function SettingsPage() {
 
       <Section title="Insulin action">
         <div className="grid grid-cols-3 gap-2">
-          <NumberField
-            label="DIA (h)"
-            step={0.5}
-            value={profile.dia_hours}
-            onCommit={(v) => update({ dia_hours: v })}
-          />
-          <NumberField
-            label="Peak (min)"
-            step={5}
-            value={profile.peak_min ?? 64}
-            onCommit={(v) => update({ peak_min: v })}
-          />
-          <NumberField
-            label="Delay (min)"
-            step={5}
-            value={profile.delay_min ?? 15}
-            onCommit={(v) => update({ delay_min: v })}
-          />
+          <NumberField label="DIA (h)" step={0.5} value={profile.dia_hours} onCommit={(v) => update({ dia_hours: v })} />
+          <NumberField label="Peak (min)" step={5} value={profile.peak_min ?? 64} onCommit={(v) => update({ peak_min: v })} />
+          <NumberField label="Delay (min)" step={5} value={profile.delay_min ?? 15} onCommit={(v) => update({ delay_min: v })} />
         </div>
-        <p className="text-[11px] text-muted mt-2">
-          IOB uses the Loop / OpenAPS exponential model with an oref0-style absorption delay. Defaults: DIA <b>5.5h</b>, peak <b>64 min</b>, delay <b>15 min</b> (insulin stays at 100% IOB during the lag, then decays). Long-acting basal is excluded from this calculation.
-        </p>
       </Section>
 
       <Section title="Daily basal reminder">
         <label className="flex items-center justify-between gap-2 cursor-pointer">
-          <span className="text-sm">Show daily reminder</span>
+          <span className="text-sm">On</span>
           <input
             type="checkbox"
             checked={profile.daily_basal_enabled ?? true}
@@ -392,25 +269,13 @@ export default function SettingsPage() {
             </select>
           </label>
         </div>
-        <p className="text-[11px] text-muted mt-2">
-          A circular button appears on the home screen at the configured time each day until you tap it. Time is interpreted in the chosen IANA zone (DST handled automatically), so it fires at the same wall clock no matter where the device is.
-        </p>
       </Section>
 
-      <Section title="Time-in-range bounds">
+      <Section title="Time in range">
         <div className="grid grid-cols-2 gap-2">
-          <NumberField
-            label="Low (mg/dL)"
-            value={profile.tir_low ?? 70}
-            onCommit={(v) => update({ tir_low: v })}
-          />
-          <NumberField
-            label="High (mg/dL)"
-            value={profile.tir_high ?? 160}
-            onCommit={(v) => update({ tir_high: v })}
-          />
+          <NumberField label="Low (mg/dL)" value={profile.tir_low ?? 70} onCommit={(v) => update({ tir_low: v })} />
+          <NumberField label="High (mg/dL)" value={profile.tir_high ?? 160} onCommit={(v) => update({ tir_high: v })} />
         </div>
-        <p className="text-[11px] text-muted mt-2">Used in chart band shading and Profile statistics.</p>
       </Section>
 
       <Section title="AI provider">
@@ -419,112 +284,71 @@ export default function SettingsPage() {
           onChange={(e) => update({ ai_provider: e.target.value as Profile["ai_provider"] })}
           className="w-full rounded-xl bg-surface2 px-3 py-2 ring-1 ring-white/5 text-sm"
         >
-          <option value="auto">Auto (try primary, fall back)</option>
+          <option value="auto">Auto</option>
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI</option>
           <option value="google">Google (Gemini)</option>
         </select>
-        <p className="text-[11px] text-muted mt-2">
-          Configure API keys via environment variables on the server: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or <code>GEMINI_API_KEY</code>. For Gemini, set <code>GEMINI_MODEL</code> (default <code>gemini-2.5-flash-lite</code>) and <code>GEMINI_THINKING_BUDGET=-1</code> for max reasoning.
-        </p>
       </Section>
 
-      <Section title="Data safety">
-        <div className="rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3 text-sm">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-medium">Persistent storage</span>
-            <span className={persist?.persisted ? "text-good text-xs" : "text-warn text-xs"}>
-              {persist?.persisted ? "Granted ✓" : persist == null ? "checking…" : "Not granted"}
-            </span>
-          </div>
-          {!persist?.persisted && (
-            <p className="text-[11px] text-muted mt-1">
-              Without persistent storage the browser can evict your data
-              (BG, doses, decisions) when it clears the cache. Installed
-              PWAs and engaged sites get it automatically; tap below to
-              re-request.
-            </p>
-          )}
-          {persist?.persisted && (
-            <p className="text-[11px] text-muted mt-1">
-              Your data is protected from cache clears and storage-pressure
-              eviction.
-            </p>
-          )}
-          <div className="text-[11px] text-muted mt-2">
-            Using {formatBytes(persist?.usage)} of {formatBytes(persist?.quota)}
-          </div>
-          <button
-            onClick={refreshPersist}
-            className="mt-2 rounded-xl bg-surface2 px-3 py-1.5 text-xs"
-          >
-            Re-request
+      {IN_APP_BUILD && (
+        <Section title="Meanwhile server">
+          <input
+            type="url"
+            placeholder="https://your-site.netlify.app"
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
+          />
+          <button onClick={saveServer} className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium">
+            Save
           </button>
-        </div>
+        </Section>
+      )}
 
-        <div className="rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3 text-sm">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-medium">Local backup</span>
-            <span className="text-[11px] text-muted">
-              {lastExportTs ? `Last ${fmtAgo(lastExportTs)} ago` : "Never"}
-            </span>
-          </div>
-          <p className="text-[11px] text-muted mt-1">
-            Download a full JSON snapshot. Keep one off-device every so
-            often — especially if you haven't enabled cloud sync below.
-          </p>
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={downloadBackup}
-              className="rounded-xl bg-accent text-white px-3 py-1.5 text-xs font-medium"
-            >
+      <Section title="Backup">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2">
+            <button onClick={downloadBackup} className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium">
               Download backup
             </button>
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
-            >
+            <button onClick={() => fileRef.current?.click()} className="rounded-xl bg-surface2 px-3 py-2 text-sm">
               Restore from file
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={async (e) => {
-                const input = e.target;
-                const f = input.files?.[0];
-                // let the same file be picked again next time
-                input.value = "";
-                if (!f) return;
-                setRestoreMsg(`Restoring ${f.name}…`);
-                try {
-                  const applied = await importAll(f);
-                  const msg = `Restored ${applied} rows from ${f.name} ✓`;
-                  setRestoreMsg(msg);
-                  setStatus(msg);
-                } catch (err) {
-                  console.error("restore failed:", err);
-                  const msg = `Restore error: ${(err as Error).message}. Pick a Meanwhile backup (.json) file.`;
-                  setRestoreMsg(msg);
-                  setStatus(msg);
-                }
-              }}
-            />
           </div>
-          {restoreMsg && <p className="text-xs mt-2" role="status">{restoreMsg}</p>}
+          <span className="text-[11px] text-muted">{lastExportTs ? `${fmtAgo(lastExportTs)} ago` : ""}</span>
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={async (e) => {
+            const input = e.target;
+            const f = input.files?.[0];
+            // let the same file be picked again next time
+            input.value = "";
+            if (!f) return;
+            setRestoreMsg(`Restoring ${f.name}…`);
+            try {
+              const applied = await importAll(f);
+              const msg = `Restored ${applied} rows from ${f.name} ✓`;
+              setRestoreMsg(msg);
+              setStatus(msg);
+            } catch (err) {
+              console.error("restore failed:", err);
+              const msg = `Restore error: ${(err as Error).message}`;
+              setRestoreMsg(msg);
+              setStatus(msg);
+            }
+          }}
+        />
+        {restoreMsg && <p className="text-xs" role="status">{restoreMsg}</p>}
       </Section>
 
       <Section title="Cloud sync">
-        <div className="text-xs text-muted">
-          Sync your full history to all devices through a Netlify-hosted
-          key/value store. The sync key is the shared password — paste
-          it into Meanwhile on another device to join the same data set.
-        </div>
-
-        <label className="flex items-center justify-between mt-2 gap-2 cursor-pointer">
-          <span className="text-sm">Auto-sync (on open, on focus, after every change)</span>
+        <label className="flex items-center justify-between gap-2 cursor-pointer">
+          <span className="text-sm">Auto-sync</span>
           <input
             type="checkbox"
             checked={profile.sync_auto ?? true}
@@ -532,17 +356,17 @@ export default function SettingsPage() {
             className="size-5 accent-accent"
           />
         </label>
-
-        <div className="mt-2 rounded-xl bg-surface2/60 ring-1 ring-white/5 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted">Sync key</div>
+        <label className="block">
+          <span className="text-xs text-muted">Sync key</span>
           <input
             type="text"
             value={profile.sync_key ?? ""}
             onChange={(e) => update({ sync_key: e.target.value.trim() })}
-            placeholder="paste a key here to join another device's data"
-            className="num mt-1 w-full rounded-lg bg-surface px-3 py-2 ring-1 ring-white/5 text-xs font-mono break-all"
+            className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 ring-1 ring-white/5 text-xs font-mono break-all"
           />
-          <div className="flex gap-2 mt-2 flex-wrap">
+        </label>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2">
             <button
               onClick={async () => {
                 if (!profile.sync_key) return;
@@ -555,7 +379,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={async () => {
-                if (!confirm("Generate a new sync key? Other devices using the current key will stop syncing until you give them the new one.")) return;
+                if (!confirm("New sync key? Other devices stop syncing until they have it.")) return;
                 const k = await regenerateSyncKey();
                 setProfile((p) => p ? { ...p, sync_key: k } : p);
                 setStatus("New sync key generated");
@@ -565,14 +389,6 @@ export default function SettingsPage() {
               Regenerate
             </button>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 mt-2">
-          <div className="text-[11px] text-muted min-w-0 truncate">
-            {lastSyncTs
-              ? `Last synced ${fmtAgo(lastSyncTs)} ago${lastSyncSummary ? ` · ${lastSyncSummary}` : ""}`
-              : "Never synced"}
-          </div>
           <button
             onClick={runSyncNow}
             disabled={syncing}
@@ -581,51 +397,8 @@ export default function SettingsPage() {
             {syncing ? "Syncing…" : "Sync now"}
           </button>
         </div>
-      </Section>
-
-      <Section title="App version">
-        <p className="text-[11px] text-muted">
-          Meanwhile is a PWA — old code can stick around in the service-worker cache. <b>Hard refresh</b> unregisters the worker, clears the SW caches, and reloads from the network. <b>This button does not touch your data.</b>
-        </p>
-        <p className="text-[11px] text-muted">
-          ⚠ Clearing browser data from <i>Chrome / Safari settings</i> is a different operation and <b>will</b> wipe Meanwhile's IndexedDB unless persistent storage is granted above. Always have either Cloud sync enabled or a recent local backup before clearing browser data.
-        </p>
-        <div className="flex gap-2 mt-2">
-          <button
-            onClick={async () => {
-              setStatus("Refreshing…");
-              try {
-                if ("serviceWorker" in navigator) {
-                  const regs = await navigator.serviceWorker.getRegistrations();
-                  await Promise.all(regs.map((r) => r.unregister()));
-                }
-                if ("caches" in window) {
-                  const keys = await caches.keys();
-                  await Promise.all(keys.map((k) => caches.delete(k)));
-                }
-              } catch (e) {
-                setStatus(`Refresh prep error: ${(e as Error).message}`);
-              }
-              const url = new URL(window.location.href);
-              url.searchParams.set("_r", Date.now().toString());
-              window.location.replace(url.toString());
-            }}
-            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
-          >
-            Hard refresh
-          </button>
-          <button
-            onClick={downloadBackup}
-            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-          >
-            Download backup first
-          </button>
-        </div>
-      </Section>
-
-      <Section title="About">
-        <div className="text-xs text-muted leading-relaxed">
-          Meanwhile is a personal decision-support tool for adults managing T1D. It does not have hard safety caps; you must verify every dose. Your data lives in IndexedDB on this device and syncs to a Netlify-hosted key/value store keyed by your sync key.
+        <div className="text-[11px] text-muted truncate">
+          {lastSyncTs ? `${fmtAgo(lastSyncTs)} ago${lastSyncSummary ? ` · ${lastSyncSummary}` : ""}` : "Never synced"}
         </div>
       </Section>
 

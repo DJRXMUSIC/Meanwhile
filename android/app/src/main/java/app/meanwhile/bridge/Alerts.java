@@ -27,7 +27,6 @@ import app.meanwhile.bridge.core.AlertEngine;
 import app.meanwhile.bridge.core.AlertRule;
 import app.meanwhile.bridge.core.AlertSettings;
 import app.meanwhile.bridge.core.Reading;
-import app.meanwhile.bridge.core.XdripAlertImport;
 
 /**
  * Low and high glucose alerts, set up from xDrip+'s settings and working as xDrip+'s do.
@@ -201,6 +200,7 @@ final class Alerts {
         createChannel(c);
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm != null) nm.notify(NOTIFICATION_ID, build(c, cfg, rule, last, now));
+        showAlarmScreen(c);
     }
 
     /** xDrip+'s alert notification: "85 LOW WARNING", "LOW alert: 85 at 14:05", Snooze. */
@@ -216,11 +216,10 @@ final class Alerts {
                 .addAction(new Notification.Action.Builder(null, "Snooze " + rule.snoozeMinutes() + " min",
                         broadcast(c, ACTION_SNOOZE, 3, now)).build())
                 .setWhen(now)
-                .setShowWhen(true);
-        if (rule.overrideSilent) {
-            b.setCategory(Notification.CATEGORY_ALARM);
-            b.setFullScreenIntent(openAlerts(c, true), true);
-        }
+                .setShowWhen(true)
+                // the alarm screen: straight up when locked, a tap away when not
+                .setCategory(Notification.CATEGORY_ALARM)
+                .setFullScreenIntent(openAlerts(c, true), true);
         return b.build();
     }
 
@@ -290,11 +289,35 @@ final class Alerts {
         return PendingIntent.getBroadcast(c, code, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
+    /** The alarm screen (big Snooze). */
+    static Intent alarmScreen(Context c) {
+        return new Intent(c, AlertScreenActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    }
+
     static PendingIntent openAlerts(Context c, boolean fullScreen) {
-        final Intent i = new Intent(c, AlertsActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                .putExtra(AlertsActivity.EXTRA_FROM_ALERT, true);
-        return PendingIntent.getActivity(c, fullScreen ? 5 : 4, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return PendingIntent.getActivity(c, fullScreen ? 5 : 4, alarmScreen(c),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    /**
+     * Puts the alarm screen in front at once, even while the phone is in use. Android allows
+     * that only to an app that may display over other apps; otherwise the notification's
+     * full-screen intent shows it when the phone is locked, and a tap on the notification
+     * opens it.
+     */
+    static void showAlarmScreen(Context c) {
+        if (Build.VERSION.SDK_INT >= 29 && !android.provider.Settings.canDrawOverlays(c)) return;
+        try {
+            c.startActivity(alarmScreen(c));
+        } catch (RuntimeException e) {
+            EventLog.log(c, "ALERT", "could not show the alarm screen: " + e);
+        }
+    }
+
+    static String title(AlertRule r) {
+        final String n = r.name.trim();
+        return n.isEmpty() ? (r.above ? "High alert" : "Low alert") : n;
     }
 
     // ------------------------------------------------------------------ what the user does
@@ -342,17 +365,6 @@ final class Alerts {
         checkNow(c, "alerts turned " + (minutes <= 0 ? "on" : "off"));
     }
 
-    /** Replaces the alerts with xDrip+'s, keeping any "turned off for" times set here. */
-    static synchronized void importFrom(Context c, XdripAlertImport.Result r) {
-        final AlertConfig cur = config(c);
-        saveConfig(c, new AlertConfig(r.rules, r.settings.keepingLocalOf(cur.settings), r.units));
-        final StringBuilder sb = new StringBuilder("imported " + r.rules.size() + " alerts from xDrip+ (profile "
-                + r.settings.profile + "):");
-        for (AlertRule rule : r.rules) sb.append(" [").append(rule).append("]");
-        EventLog.log(c, "ALERT", sb.toString());
-        checkNow(c, "import");
-    }
-
     static synchronized void update(Context c, AlertConfig cfg, String what) {
         saveConfig(c, cfg);
         EventLog.log(c, "ALERT", "changed: " + what);
@@ -362,7 +374,7 @@ final class Alerts {
     /** Plays the alert's sound once, as loud as alerts get with the current volume level. */
     static void test(Context c, AlertRule rule) {
         final Context app = c.getApplicationContext();
-        final float volume = AlertEngine.testVolume(config(app).settings);
+        final float volume = AlertEngine.testVolume(rule);
         handler().post(() -> noise().test(app, rule, volume));
     }
 

@@ -214,9 +214,9 @@ public final class AlertEngine {
         }
     }
 
-    /** A test of an alert: as loud as it gets with these settings (the volume level). */
-    public static float testVolume(AlertSettings s) {
-        return s.volumePercent / 100f;
+    /** A test of an alert: as loud as it gets (its own volume). */
+    public static float testVolume(AlertRule rule) {
+        return rule.volumePercent / 100f;
     }
 
     public static Sound sound(AlertRule rule, AlertSettings s, int minutesSinceStart) {
@@ -234,8 +234,8 @@ public final class AlertEngine {
             volume = Math.max(0, Math.min(1, volume));
             if (s.ascendingToMedium && ascending) volume = Math.min(volume, MEDIUM_VOLUME);
             if (AlertSettings.MEDIUM.equals(profile)) volume = MEDIUM_VOLUME;
-            // this app's volume level: what "full volume" means
-            volume = volume * s.volumePercent / 100f;
+            // the alert's own volume: what "full volume" means for it
+            volume = volume * rule.volumePercent / 100f;
         }
         final boolean vibrate = !AlertSettings.SILENT.equals(profile) && rule.vibrate;
         return new Sound(volume, vibrate);

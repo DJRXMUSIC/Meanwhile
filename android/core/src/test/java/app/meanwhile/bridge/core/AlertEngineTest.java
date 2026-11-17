@@ -330,32 +330,30 @@ public class AlertEngineTest {
     }
 
     @Test
-    public void volumeLevelScalesEveryProfile() {
-        // High at a 40% level plays at 40%; Medium at 70% of that; Ascending climbs to it
-        final AlertSettings high40 = highProfile().withVolume(40);
-        assertEquals(0.40f, AlertEngine.sound(LOW90, high40, 0).volume, 1e-6);
-        assertEquals(0.28f, AlertEngine.sound(LOW90, high40.withProfile(AlertSettings.MEDIUM), 0).volume, 1e-6);
-        final AlertSettings asc40 = AlertSettings.defaults().withVolume(40);
-        assertEquals(0f, AlertEngine.sound(LOW90, asc40, 2).volume, 1e-6);
-        assertEquals(0.40f / 3, AlertEngine.sound(LOW90, asc40, 3).volume, 1e-6);
-        assertEquals(0.40f, AlertEngine.sound(LOW90, asc40, 9).volume, 1e-6);
+    public void eachAlertsVolumeScalesEveryProfile() {
+        // High at 40% plays at 40%; Medium at 70% of that; Ascending climbs to it
+        final AlertRule low40 = LOW90.withVolume(40);
+        assertEquals(0.40f, AlertEngine.sound(low40, highProfile(), 0).volume, 1e-6);
+        assertEquals(0.28f, AlertEngine.sound(low40, highProfile().withProfile(AlertSettings.MEDIUM), 0).volume, 1e-6);
+        final AlertSettings asc = AlertSettings.defaults();
+        assertEquals(0f, AlertEngine.sound(low40, asc, 2).volume, 1e-6);
+        assertEquals(0.40f / 3, AlertEngine.sound(low40, asc, 3).volume, 1e-6);
+        assertEquals(0.40f, AlertEngine.sound(low40, asc, 9).volume, 1e-6);
         // vibration isn't affected
-        assertEquals(0f, AlertEngine.sound(LOW90, asc40.withProfile(AlertSettings.VIBRATE_ONLY), 9).volume, 1e-6);
-        assertEquals(0.4f, AlertEngine.testVolume(high40), 1e-6);
+        assertEquals(0f, AlertEngine.sound(low40, asc.withProfile(AlertSettings.VIBRATE_ONLY), 9).volume, 1e-6);
+        assertEquals(0.4f, AlertEngine.testVolume(low40), 1e-6);
+        // another alert keeps its own
+        assertEquals(1f, AlertEngine.sound(HIGH155, highProfile(), 0).volume, 1e-6);
+        assertEquals(0.07f, AlertEngine.sound(LOW90.withVolume(7), highProfile(), 0).volume, 1e-6);
     }
 
     @Test
-    public void volumeLevelIsAnyPercentFromOneToHundred() {
-        assertEquals(100, AlertSettings.defaults().volumePercent);
-        assertEquals(1, highProfile().withVolume(0).volumePercent);
-        assertEquals(1, highProfile().withVolume(-20).volumePercent);
-        assertEquals(100, highProfile().withVolume(250).volumePercent);
-        assertEquals(33, highProfile().withVolume(33).volumePercent);
-        assertEquals(43, highProfile().withVolume(43).volumePercent);
-        assertEquals(0.07f, AlertEngine.sound(LOW90, highProfile().withVolume(7), 0).volume, 1e-6);
-        // other changes keep it
-        assertEquals(35, highProfile().withVolume(35).withProfile(AlertSettings.MEDIUM).withDisabledUntil(1, 2, 3)
-                .withOptions(true, true, false, 15, false, true, false, false).volumePercent);
+    public void volumeIsOneToHundredAndCopiesKeepIt() {
+        assertEquals(100, LOW90.volumePercent);
+        assertEquals(1, LOW90.withVolume(0).volumePercent);
+        assertEquals(100, LOW90.withVolume(250).volumePercent);
+        assertEquals(33, LOW90.withVolume(33).volumePercent);
+        assertEquals(33, LOW90.withVolume(33).withActive(false).withSound("x").withSettings(80, 2, 30, true, true).volumePercent);
     }
 
     @Test

@@ -82,12 +82,8 @@ export function DailyBasalCard({
         </button>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-muted">Daily basal due</div>
-          <div className="mt-0.5 text-sm">
-            Tap the circle to log your <b>{units}U</b> long-acting dose for today.
-          </div>
-          <div className="text-[11px] text-muted mt-1">
-            Configured for {timeStr} {tzShort}
-          </div>
+          <div className="mt-0.5 text-sm"><b>{units}U</b> long-acting</div>
+          <div className="text-[11px] text-muted mt-1">{timeStr} {tzShort}</div>
         </div>
       </div>
 

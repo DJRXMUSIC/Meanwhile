@@ -95,7 +95,7 @@ export function InputBar({
         </button>
       </div>
       {supported === false && (
-        <div className="text-[11px] text-muted text-center mt-2">Voice dictation isn't supported on this browser — type instead.</div>
+        <div className="text-[11px] text-muted text-center mt-2">Voice not available</div>
       )}
     </div>
   );

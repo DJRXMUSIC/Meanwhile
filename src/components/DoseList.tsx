@@ -19,10 +19,9 @@ export function DoseList({ doses }: { doses: InsulinDose[] }) {
     <section className="mx-3 rounded-2xl bg-surface p-3 ring-1 ring-white/5">
       <div className="flex items-baseline justify-between mb-2 px-1">
         <div className="text-xs uppercase tracking-wider text-muted">Insulin history · 24h</div>
-        <div className="text-[10px] text-muted">tap to edit</div>
       </div>
       {recent.length === 0 ? (
-        <div className="text-sm text-muted px-1 py-2">No doses logged in the last 24 hours.</div>
+        <div className="text-sm text-muted px-1 py-2">No doses</div>
       ) : (
         <ul className="divide-y divide-white/5">
           {recent.map((d) => {

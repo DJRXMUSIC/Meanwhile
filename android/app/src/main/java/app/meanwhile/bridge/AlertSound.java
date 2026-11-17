@@ -108,7 +108,7 @@ final class AlertSound implements Alerts.Noise {
         release(c);
         // A phone sound (ringtones, notifications, alarms) may be one this app can't read;
         // Android then plays it for the app.
-        if (isPhoneSound(uri) && !AlertsActivity.canOpen(c, uri)
+        if (isPhoneSound(uri) && !SoundNames.canOpen(c, uri)
                 && playRingtone(c, uri, volume, forceSpeaker, overrideSilent)) {
             return;
         }

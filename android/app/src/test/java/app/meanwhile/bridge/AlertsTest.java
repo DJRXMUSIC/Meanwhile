@@ -17,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,26 +39,9 @@ import app.meanwhile.bridge.core.AlertRule;
 import app.meanwhile.bridge.core.AlertSettings;
 import app.meanwhile.bridge.core.Reading;
 import app.meanwhile.bridge.core.TimestampSource;
-import app.meanwhile.bridge.core.XdripAlertImport;
 
 @RunWith(RobolectricTestRunner.class)
 public class AlertsTest {
-
-    /** An xDrip+ export with a low at 90 (snooze 60, silent-mode override) and a high at 180. */
-    static final String EXPORT = "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n"
-            + "<string name=\"saved_alerts\">[{&quot;above&quot;:false,&quot;active&quot;:true,&quot;all_day&quot;:true,"
-            + "&quot;default_snooze&quot;:60,&quot;force_speaker&quot;:true,&quot;minutes_between&quot;:1,"
-            + "&quot;name&quot;:&quot;LOW WARNING&quot;,&quot;override_silent_mode&quot;:true,&quot;threshold&quot;:90.0,"
-            + "&quot;uuid&quot;:&quot;low-90&quot;,&quot;vibrate&quot;:false},"
-            + "{&quot;above&quot;:true,&quot;active&quot;:true,&quot;all_day&quot;:true,&quot;default_snooze&quot;:90,"
-            + "&quot;force_speaker&quot;:true,&quot;minutes_between&quot;:3,&quot;name&quot;:&quot;Elevated&quot;,"
-            + "&quot;override_silent_mode&quot;:false,&quot;threshold&quot;:180.0,&quot;uuid&quot;:&quot;high-180&quot;,"
-            + "&quot;vibrate&quot;:true}]</string>\n"
-            + "<string name=\"bg_alert_profile\">High</string>\n"
-            + "<boolean name=\"smart_snoozing\" value=\"false\" />\n"
-            + "<boolean name=\"smart_alerting\" value=\"false\" />\n"
-            + "<long name=\"alerts_disabled_until\" value=\"99999999999999\" />\n"
-            + "</map>\n";
 
     /** Records what would be heard. */
     static final class FakeNoise implements Alerts.Noise {
@@ -101,8 +85,13 @@ public class AlertsTest {
         Bridge.resetForTests();
     }
 
+    /** A low at 90 (snooze 60, sounds on silent) and a high at 180 (no override), both at 50%. */
     private void importExport() {
-        Alerts.importFrom(app, XdripAlertImport.parse(EXPORT.getBytes(StandardCharsets.UTF_8)));
+        final AlertSettings s = new AlertSettings(AlertSettings.HIGH, false, false, false, 15, false, true, false, false, 0, 0, 0);
+        Alerts.update(app, new AlertConfig(Arrays.asList(
+                new AlertRule("low-90", "LOW WARNING", true, false, 90, true, 0, 0, 1, 60, false, true, true, null, 50),
+                new AlertRule("high-180", "Elevated", true, true, 180, true, 0, 0, 3, 90, true, false, true, null, 50)),
+                s, "mgdl"), "test setup");
     }
 
     private void storeReading(long ts, int mgdl) {
@@ -123,8 +112,9 @@ public class AlertsTest {
         assertEquals("85 LOW WARNING", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString());
         assertEquals("Snooze 60 min", n.actions[0].title.toString());
         assertNotNull(n.fullScreenIntent);
-        assertEquals("Beep (built in)", AlertsActivity.soundName(app, AlertConfig.SOUND_BEEP));
-        assertEquals("Vibration sound (built in)", AlertsActivity.soundName(app, AlertConfig.SOUND_VIBRATION));
+        assertEquals("Beep", SoundNames.name(app, AlertConfig.SOUND_BEEP));
+        assertEquals("Vibration sound", SoundNames.name(app, AlertConfig.SOUND_VIBRATION));
+        assertEquals("Phone alarm", SoundNames.name(app, null));
     }
 
     @Test
@@ -151,14 +141,6 @@ public class AlertsTest {
         final ActiveAlert a = Alerts.active(app);
         app.getSharedPreferences("alerts", 0).edit().putString("active", AlertConfig.activeToJson(
                 new ActiveAlert(a.uuid, a.snoozed, System.currentTimeMillis() - 1000, a.startedAt))).commit();
-    }
-
-    @Test
-    public void importTakesXdripsAlertsButNotItsSnoozes() {
-        importExport();
-        assertEquals(2, Alerts.config(app).rules.size());
-        assertEquals(AlertSettings.HIGH, Alerts.config(app).settings.profile);
-        assertEquals(0, Alerts.config(app).settings.allDisabledUntil);
     }
 
     @Test
@@ -262,14 +244,18 @@ public class AlertsTest {
     }
 
     @Test
-    public void highAlertThatDoesNotOverrideSilentIsAPlainNotification() {
+    public void everyAlertCanOpenTheAlarmScreen() {
         importExport();
         storeReading(System.currentTimeMillis(), 200);
         assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
         final Notification n = nm.getNotification(Alerts.NOTIFICATION_ID);
         assertEquals("200 Elevated", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString());
         assertEquals("Snooze 90 min", n.actions[0].title.toString());
-        assertNull(n.fullScreenIntent);
+        // even one that doesn't sound on silent: speed matters, the alarm screen is a tap away
+        assertNotNull(n.fullScreenIntent);
+        assertEquals(Notification.CATEGORY_ALARM, n.category);
+        assertEquals(AlertScreenActivity.class.getName(),
+                shadowOf(n.contentIntent).getSavedIntent().getComponent().getClassName());
     }
 
     @Test
@@ -285,40 +271,6 @@ public class AlertsTest {
     public void mmolDisplay() {
         assertEquals("3.9", Alerts.bgText(70, "mmol").replace(',', '.'));
         assertEquals("70", Alerts.bgText(70, "mgdl"));
-        assertEquals(72, AlertsActivity.parseThreshold("4.0", "mmol"), 0);
-        assertEquals(90, AlertsActivity.parseThreshold("90", "mgdl"), 0);
-        assertEquals(-1, AlertsActivity.parseThreshold("x", "mgdl"), 0);
-    }
-
-    @Test
-    public void alertsScreenShowsTheImportedAlerts() {
-        importExport();
-        storeReading(System.currentTimeMillis(), 70);
-        Alerts.checkNow(app, "test");
-        final ActivityController<AlertsActivity> c = Robolectric.buildActivity(AlertsActivity.class).setup();
-        final String all = texts(c.get().getWindow().getDecorView());
-        // laid out like xDrip+: Snooze, Glucose Level Alerts List, Glucose Alerts Settings
-        for (String s : new String[]{"Snooze", "Active alert: LOW WARNING · 70 mg/dL", "for 1 hour ▾",
-                "Disable Low alerts", "Disable High alerts", "Disable All alerts",
-                "Glucose Level Alerts List", "Create low alert", "Create high alert", "LOW ALERTS", "HIGH ALERTS",
-                "≤ 90 mg/dL · all day", "Re-raise every 1 min · Default Snooze 60 min", "≥ 180 mg/dL",
-                "Alert Tone: the phone's alarm sound", "Glucose Alerts Settings", "Alert Volume Profile",
-                "Alert volume: 50%", "Smart Snoozing", "Smart Alerting", "Don't alarm during phone calls",
-                "Start Snoozed", "Suppress Alerts if missed readings", "Delay Ascending Volume", "Ascend to medium"}) {
-            assertTrue(s + " in:\n" + all, all.contains(s));
-        }
-        c.pause().stop().destroy();
-    }
-
-    @Test
-    public void volumeLevelSetsHowLoudAlertsAndTestsAre() {
-        Alerts.update(app, Alerts.config(app).withSettings(Alerts.config(app).settings.withVolume(35)), "volume");
-        storeReading(System.currentTimeMillis(), 80);
-        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
-        assertEquals("alert 570e659e-467b-4990-94f7-b92425a11a3f volume 35%", noise.calls.get(noise.calls.size() - 1));
-        Alerts.test(app, Alerts.config(app).rules.get(0));
-        idleAlertThread();
-        assertEquals("test 570e659e-467b-4990-94f7-b92425a11a3f 35%", noise.calls.get(noise.calls.size() - 1));
     }
 
     @Test
@@ -365,52 +317,204 @@ public class AlertsTest {
     }
 
     @Test
-    public void backAlwaysLandsOnMeanwhile() {
-        // opened on its own (the app icon's shortcut, an alert): back opens Meanwhile, not nothing
-        final ActivityController<AlertsActivity> c = Robolectric.buildActivity(AlertsActivity.class).setup();
+    public void eachAlertPlaysAndTestsAtItsOwnVolume() {
+        importExport();
+        Alerts.update(app, Alerts.config(app).withRule(Alerts.config(app).rule("low-90").withVolume(35)), "volume");
+        storeReading(System.currentTimeMillis(), 80);
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
+        assertEquals("alert low-90 volume 35%", noise.calls.get(noise.calls.size() - 1));
+        Alerts.test(app, Alerts.config(app).rule("high-180").withVolume(70));
+        idleAlertThread();
+        assertEquals("test high-180 70%", noise.calls.get(noise.calls.size() - 1));
+    }
+
+    // ---------------------------------------------------------------- the alarm screen
+
+    @Test
+    public void alarmScreenOpensByItselfOnlyWhenAllowedOverOtherApps() {
+        importExport();
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false);
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        assertNull(shadowOf(app).getNextStartedActivity());
+
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        makeRepeatDue();
+        Alerts.checkNow(app, "test");
+        final Intent started = shadowOf(app).getNextStartedActivity();
+        assertNotNull(started);
+        assertEquals(AlertScreenActivity.class.getName(), started.getComponent().getClassName());
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false);
+    }
+
+    @Test
+    public void alarmScreenSnoozesWithItsBigButton() {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        final ActivityController<AlertScreenActivity> c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
         final String all = texts(c.get().getWindow().getDecorView());
-        assertTrue(all, all.contains("← Meanwhile"));
+        assertTrue(all, all.contains("LOW WARNING"));
+        assertTrue(all, all.contains("80"));
+        assertTrue(all, all.contains("SNOOZE\n60 min"));
+        final android.widget.Button big = findButton(c.get().getWindow().getDecorView(), "SNOOZE\n60 min");
+        big.performClick();
+        assertTrue(c.get().isFinishing());
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+        assertTrue(Alerts.active(app).nextAlertAt > System.currentTimeMillis() + 59 * 60_000L);
+        assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+    }
+
+    @Test
+    public void alarmScreenSnoozesWithAVolumeKeyOrAQuickChoice() {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        ActivityController<AlertScreenActivity> c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
+        assertTrue(c.get().onKeyDown(android.view.KeyEvent.KEYCODE_VOLUME_DOWN,
+                new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_DOWN)));
+        assertTrue(c.get().isFinishing());
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+
+        makeRepeatDue();
+        Alerts.checkNow(app, "test");
+        c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
+        findButton(c.get().getWindow().getDecorView(), "15 min").performClick();
+        idleAlertThread();
+        final long left = Alerts.active(app).nextAlertAt - System.currentTimeMillis();
+        assertTrue(left > 14 * 60_000L && left <= 15 * 60_000L);
+    }
+
+    @Test
+    public void alarmScreenClosesWhenNoAlertIsGoingOn() {
+        importExport();
+        final ActivityController<AlertScreenActivity> c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(c.get().isFinishing());
+    }
+
+    // ---------------------------------------------------------------- the Alerts tab's bridge
+
+    @Test
+    public void alertsTabReadsEverything() throws Exception {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        final org.json.JSONObject st = new org.json.JSONObject(AlertsBridge.state(app));
+        assertEquals(2, st.getJSONObject("config").getJSONArray("alerts").length());
+        assertEquals("low-90", st.getJSONObject("active").getString("uuid"));
+        assertEquals(80, st.getJSONObject("last").getInt("mgdl"));
+        assertEquals(10, st.getJSONArray("snooze_choices").getInt(0));
+        assertEquals("Phone alarm", st.getJSONObject("sounds").getJSONObject("low-90").getString("name"));
+        assertTrue(st.getJSONObject("perms").has("overlay"));
+        assertTrue(st.getJSONObject("perms").has("dnd"));
+    }
+
+    @Test
+    public void alertsTabAddsEditsAndRemovesAlerts() {
+        importExport();
+        final boolean[] done = {false};
+        assertNull(AlertsBridge.saveRule(app, "{\"uuid\":\"\",\"name\":\"Urgent\",\"active\":true,\"above\":false,"
+                + "\"threshold\":60,\"all_day\":true,\"minutes_between\":1,\"default_snooze\":20,\"vibrate\":true,"
+                + "\"override_silent_mode\":true,\"force_speaker\":true,\"volume_percent\":80}", () -> done[0] = true));
+        idleAlertThread();
+        assertTrue(done[0]);
+        AlertRule urgent = null;
+        for (AlertRule r : Alerts.config(app).rules) if ("Urgent".equals(r.name)) urgent = r;
+        assertNotNull(urgent);
+        assertFalse(urgent.uuid.isEmpty());
+        assertEquals(80, urgent.volumePercent);
+        assertEquals(3, Alerts.config(app).rules.size());
+
+        // what can't be saved says why, and nothing changes
+        assertNotNull(AlertsBridge.saveRule(app, "{\"uuid\":\"x\",\"threshold\":20}", null));
+        assertNotNull(AlertsBridge.saveRule(app, "not json", null));
+
+        AlertsBridge.removeRule(app, urgent.uuid, null);
+        idleAlertThread();
+        assertEquals(2, Alerts.config(app).rules.size());
+    }
+
+    @Test
+    public void alertsTabChangesOptionsSnoozesAndTurnsOff() {
+        importExport();
+        assertNull(AlertsBridge.saveSettings(app, "{\"bg_alert_profile\":\"ascending\",\"smart_snoozing\":true}", null));
+        idleAlertThread();
+        assertEquals(AlertSettings.ASCENDING, Alerts.config(app).settings.profile);
+        assertTrue(Alerts.config(app).settings.smartSnoozing);
+
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        AlertsBridge.snooze(app, 0, null);
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+
+        AlertsBridge.disable(app, "high", 30, null);
+        idleAlertThread();
+        assertTrue(Alerts.config(app).settings.highDisabledUntil > System.currentTimeMillis());
+        AlertsBridge.disable(app, "nonsense", 30, null);
+        idleAlertThread();
+        assertEquals(0, Alerts.config(app).settings.lowDisabledUntil);
+    }
+
+    // ---------------------------------------------------------------- adb only
+
+    @Test
+    public void adbControlsNeedTheTokenAdbLeft() throws Exception {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        final java.io.File dir = app.getExternalFilesDir(null);
+        dir.mkdirs();
+        java.nio.file.Files.write(new java.io.File(dir, Automation.TOKEN_FILE).toPath(),
+                "0123456789abcdef0123\n".getBytes(StandardCharsets.UTF_8));
+        final AutomationReceiver r = new AutomationReceiver();
+        r.onReceive(app, new Intent().putExtra("action", "alerts_snooze").putExtra("token", "0123456789abcdef9999"));
+        idleAlertThread();
+        assertFalse(Alerts.active(app).snoozed);
+        r.onReceive(app, new Intent().putExtra("action", "alerts_snooze").putExtra("token", "0123456789abcdef0123"));
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+
+        java.nio.file.Files.write(new java.io.File(dir, "alerts.json").toPath(), AlertConfig.empty().toJson()
+                .getBytes(StandardCharsets.UTF_8));
+        r.onReceive(app, new Intent().putExtra("action", "alerts_config").putExtra("file", "alerts.json")
+                .putExtra("token", "0123456789abcdef0123"));
+        idleAlertThread();
+        assertEquals(0, Alerts.config(app).rules.size());
+        // only a plain file name in the app's own folder
+        r.onReceive(app, new Intent().putExtra("action", "alerts_config").putExtra("file", "../x.json")
+                .putExtra("token", "0123456789abcdef0123"));
+        idleAlertThread();
+    }
+
+    @Test
+    public void backFromTheEversenseScreenLandsOnMeanwhile() {
+        final ActivityController<StatusActivity> c = Robolectric.buildActivity(StatusActivity.class).setup();
         c.get().onBackPressed();
         assertTrue(c.get().isFinishing());
         final Intent next = shadowOf(c.get()).getNextStartedActivity();
-        if (c.get().isTaskRoot()) {
-            assertNotNull(next);
+        if (c.get().isTaskRoot() && next != null && next.getComponent() != null
+                && !next.getComponent().getClassName().equals(BridgeService.class.getName())) {
             assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
         }
         c.pause().stop().destroy();
     }
 
-    @Test
-    public void automationIsIgnoredWhenNotFromAdb() {
-        importExport();
-        storeReading(System.currentTimeMillis(), 70);
-        Alerts.checkNow(app, "test");
-        final ActivityController<AlertsActivity> c = Robolectric.buildActivity(AlertsActivity.class,
-                new Intent(app, AlertsActivity.class).putExtra("action", "snooze")).setup();
-        idleAlertThread();
-        assertFalse(Alerts.active(app).snoozed);
-        c.pause().stop().destroy();
-    }
-
-    @Test
-    public void automationWorksWithTheTokenAdbLeft() throws Exception {
-        importExport();
-        storeReading(System.currentTimeMillis(), 70);
-        Alerts.checkNow(app, "test");
-        final java.io.File dir = app.getExternalFilesDir(null);
-        dir.mkdirs();
-        java.nio.file.Files.write(new java.io.File(dir, AlertsActivity.AUTOMATION_TOKEN).toPath(),
-                "0123456789abcdef0123\n".getBytes(StandardCharsets.UTF_8));
-        final ActivityController<AlertsActivity> wrong = Robolectric.buildActivity(AlertsActivity.class,
-                new Intent(app, AlertsActivity.class).putExtra("action", "snooze").putExtra("token", "0123456789abcdef9999")).setup();
-        idleAlertThread();
-        assertFalse(Alerts.active(app).snoozed);
-        wrong.pause().stop().destroy();
-        final ActivityController<AlertsActivity> right = Robolectric.buildActivity(AlertsActivity.class,
-                new Intent(app, AlertsActivity.class).putExtra("action", "snooze").putExtra("token", "0123456789abcdef0123")).setup();
-        idleAlertThread();
-        assertTrue(Alerts.active(app).snoozed);
-        right.pause().stop().destroy();
+    private static android.widget.Button findButton(View v, String text) {
+        if (v instanceof android.widget.Button && text.contentEquals(((android.widget.Button) v).getText())) {
+            return (android.widget.Button) v;
+        }
+        if (v instanceof ViewGroup) {
+            final ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                final android.widget.Button b = findButton(g.getChildAt(i), text);
+                if (b != null) return b;
+            }
+        }
+        return null;
     }
 
     private static String texts(View v) {

@@ -201,7 +201,7 @@ public class StatusActivity extends Activity {
             value.setText("--");
             value.setTextColor(GREY);
             age.setText("Waiting for the first reading");
-            detail.setText("Open the Eversense app once everything below shows a green dot.");
+            detail.setText("");
         } else {
             final Reading r = recent.get(0);
             final Reading prev = recent.size() > 1 ? recent.get(1) : null;
@@ -484,7 +484,6 @@ public class StatusActivity extends Activity {
         detail.setAlpha(0.75f);
         card.addView(detail);
         col.addView(card, marginTop(12));
-        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
 
         col.addView(header("Status"));
         statusList = new LinearLayout(this);
@@ -506,11 +505,6 @@ public class StatusActivity extends Activity {
         logResult = text("", 13, false);
         logResult.setVisibility(View.GONE);
         col.addView(logResult);
-        final TextView logHint = text("The log file has everything needed to diagnose a problem "
-                + "(status, raw Eversense notification, readings, events, app logcat). "
-                + "It is saved in Downloads/" + LogExport.FOLDER + ".", 12, false);
-        logHint.setAlpha(0.6f);
-        col.addView(logHint);
 
         col.addView(header("Recent readings"));
         readings = mono();
@@ -541,27 +535,27 @@ public class StatusActivity extends Activity {
         a.addView(button("Get latest app version", v -> openUrl(RELEASE_PAGE)));
 
         a.addView(header("Settings"));
-        a.addView(text("Port (default 17590; xDrip+ uses 17580, so both can run)", 13, false));
+        a.addView(text("Port", 13, false));
         portField = field(InputType.TYPE_CLASS_NUMBER);
         a.addView(portField);
         lanBox = new CheckBox(this);
-        lanBox.setText("Also listen on Wi-Fi/LAN (other devices can read glucose)");
+        lanBox.setText("Wi-Fi/LAN");
         a.addView(lanBox);
-        a.addView(text("API secret for LAN clients (blank = none)", 13, false));
+        a.addView(text("API secret (LAN)", 13, false));
         secretField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         a.addView(secretField);
-        a.addView(text("Units shown by the Eversense app", 13, false));
+        a.addView(text("Units", 13, false));
         unitsGroup = new RadioGroup(this);
         unitsGroup.setOrientation(RadioGroup.HORIZONTAL);
         unitsGroup.addView(radio(1, "Auto"));
         unitsGroup.addView(radio(2, "mg/dL"));
         unitsGroup.addView(radio(3, "mmol/L"));
         a.addView(unitsGroup);
-        a.addView(text("Eversense app package names (comma separated)", 13, false));
+        a.addView(text("Eversense packages", 13, false));
         packagesField = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         a.addView(packagesField);
         staleBox = new CheckBox(this);
-        staleBox.setText("Alert when no reading arrives for (minutes):");
+        staleBox.setText("Missing readings alert after (min)");
         a.addView(staleBox);
         staleField = field(InputType.TYPE_CLASS_NUMBER);
         a.addView(staleField);

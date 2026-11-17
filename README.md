@@ -66,7 +66,7 @@ npm test            # countdown, reading sync, in-app paths, backup restore, ser
 1. Install the bridge on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v5.apk (steps in [`android/README.md`](android/README.md)).
 2. Inside the app there is nothing to set: readings come straight from the bridge. (The website version reads `http://127.0.0.1:17590`, set under Settings → **Glucose source**.)
 3. Polling runs every 60 s while the app is open.
-4. Low and high glucose alerts (your xDrip+ setup is built in: low ≤ 90 with a beep, high ≥ 155 with a vibration sound, both critical): Meanwhile → Settings → **Open glucose alerts**, or press and hold the app icon; see [`android/README.md`](android/README.md#glucose-alerts-from-xdrip).
+4. Low and high glucose alerts: the **Alerts** tab in the app; see [`android/README.md`](android/README.md#glucose-alerts).
 
 ### Garmin Instinct E watch face
 

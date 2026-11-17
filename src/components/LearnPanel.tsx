@@ -257,9 +257,6 @@ function WhenPicker({ when }: { when: ReturnType<typeof useWhen> }) {
             onChange={(e) => setCustomTimeStr(e.target.value)}
             className="num block w-full max-w-full h-12 text-center rounded-xl bg-surface2 text-base outline-none ring-1 ring-white/5 focus:ring-accent/60 box-border"
           />
-          <p className="text-[11px] text-muted mt-1">
-            Time today; if it&apos;s in the future we&apos;ll use yesterday&apos;s time.
-          </p>
         </div>
       )}
     </div>
