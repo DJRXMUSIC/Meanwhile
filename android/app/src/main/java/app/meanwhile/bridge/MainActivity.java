@@ -593,7 +593,8 @@ public class MainActivity extends Activity {
 
     /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */
     private static String automationPage(Intent intent) {
-        final String page = intent == null ? null : intent.getStringExtra(EXTRA_PAGE);
+        if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return "";
+        final String page = intent.getStringExtra(EXTRA_PAGE);
         return "settings/".equals(page) || "profile/".equals(page) ? page : "";
     }
 

@@ -52,7 +52,8 @@ final class LogExport {
 
     /** A safe file name: letters, digits, dot, dash and underscore only, at most 80 characters. */
     static String safeName(String name) {
-        String n = name == null ? "" : name.replaceAll("[^A-Za-z0-9._-]", "_").replaceAll("^\\.+", "");
+        String n = name == null ? "" : name.replaceAll("[^A-Za-z0-9._-]", "_")
+                .replaceAll("\\.{2,}", "_").replaceAll("^\\.+", "");
         if (n.length() > 80) n = n.substring(n.length() - 80);
         return n.isEmpty() ? "file" : n;
     }

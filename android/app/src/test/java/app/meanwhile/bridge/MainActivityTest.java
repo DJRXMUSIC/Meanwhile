@@ -389,7 +389,9 @@ public class MainActivityTest {
         assertFalse(odd, odd.contains(" "));
         assertEquals("file", LogExport.safeName(""));
         assertEquals("a_b.json", LogExport.safeName("a/b.json"));
-        assertEquals("hidden", LogExport.safeName("..hidden"));
+        assertEquals("_hidden", LogExport.safeName("..hidden"));
+        assertEquals("____evil_dir_x.json", LogExport.safeName("../../evil dir/x.json"));
+        assertEquals("meanwhile-2026-11-16.json", LogExport.safeName("meanwhile-2026-11-16.json"));
     }
 
     /** Reads back a saved file, wherever {@link LogExport} put it. */
@@ -511,7 +513,7 @@ public class MainActivityTest {
         client(a).onReceivedHttpError(a.web(), request(SITE, true),
                 new WebResourceResponse("text/html", "utf-8", 404, "Not Found", null, null));
         s = screen(a);
-        assertTrue(s, s.contains("error 404"));
+        assertTrue(s, s.contains("Error 404"));
         tap(a, "Try again");
         assertEquals(View.VISIBLE, a.web().getVisibility());
         assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
