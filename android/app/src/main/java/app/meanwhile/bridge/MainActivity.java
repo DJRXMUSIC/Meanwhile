@@ -361,12 +361,25 @@ public class MainActivity extends Activity {
     }
 
     private final class Chrome extends WebChromeClient {
+        /** The page's errors and warnings go into the event log (and so the saved log file). */
+        @Override
+        public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+            if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR
+                    || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {
+                final String text = m.message() == null ? "" : m.message();
+                EventLog.log(MainActivity.this, "PAGE", m.messageLevel() + ": "
+                        + (text.length() > 500 ? text.substring(0, 500) : text) + " (" + m.sourceId() + ":" + m.lineNumber() + ")");
+            }
+            return false;
+        }
+
         // "Restore from file" in Meanwhile's settings
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
             final File staged = automationPick;
             automationPick = null;
+            EventLog.log(MainActivity.this, "WEB", "file picker opened by the page");
             if (staged != null) {
                 // the emulator test: the file adb staged, instead of the picker it can't operate
                 callback.onReceiveValue(new Uri[]{Uri.fromFile(staged)});
@@ -546,8 +559,12 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_FILE) {
             final ValueCallback<Uri[]> cb = fileCallback;
             fileCallback = null;
-            if (cb == null) return;
+            if (cb == null) {
+                EventLog.log(this, "WEB", "file picker returned, but the page was no longer waiting for it");
+                return;
+            }
             final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            EventLog.log(this, "WEB", picked == null ? "file picker: nothing chosen" : "file picker: a file was chosen");
             cb.onReceiveValue(picked == null ? null : new Uri[]{picked});
         } else if (requestCode == REQ_SPEECH) {
             String heard = null;

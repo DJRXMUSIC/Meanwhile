@@ -504,6 +504,7 @@ export default function SettingsPage() {
                   setRestoreMsg(msg);
                   setStatus(msg);
                 } catch (err) {
+                  console.error("restore failed:", err);
                   const msg = `Restore error: ${(err as Error).message}. Pick a Meanwhile backup (.json) file.`;
                   setRestoreMsg(msg);
                   setStatus(msg);
