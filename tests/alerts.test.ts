@@ -75,3 +75,33 @@ test("what can't be saved", () => {
   assert.match(validate({ ...newAlert(false), minutes_between: 0 }) ?? "", /Repeat/);
   assert.match(validate({ ...newAlert(false), volume_percent: 0 }) ?? "", /Volume/);
 });
+
+test("the snoozed alert shown on Now: only while its snooze lasts", async () => {
+  const { activeSnooze } = await import("../src/lib/alerts");
+  const rule = { ...newAlert(false), uuid: "a", name: "LOW WARNING" };
+  const base = { config: { units: "mgdl", settings: {} as never, alerts: [rule] }, now: 1_000_000, last: null,
+    snooze_choices: [], sounds: {}, perms: { overlay: true, full_screen: true, dnd: true, notifications: true } };
+  assert.equal(activeSnooze(null), null);
+  assert.equal(activeSnooze({ ...base, active: null }), null);
+  assert.equal(activeSnooze({ ...base, active: { uuid: "a", snoozed: false, next_alert_at: 2_000_000 } }), null);
+  assert.equal(activeSnooze({ ...base, active: { uuid: "a", snoozed: true, next_alert_at: 900_000 } }), null);
+  assert.equal(activeSnooze({ ...base, active: { uuid: "gone", snoozed: true, next_alert_at: 2_000_000 } }), null);
+  assert.deepEqual(activeSnooze({ ...base, active: { uuid: "a", snoozed: true, next_alert_at: 2_000_000 } }),
+    { name: "LOW WARNING", until: 2_000_000 });
+});
+
+test("back to Now: two minutes after a snooze with no touch since, once", async () => {
+  const { shouldReturnToNow, BACK_TO_NOW_MS } = await import("../src/lib/alerts");
+  const snoozed = 10_000_000;
+  assert.equal(BACK_TO_NOW_MS, 120_000);
+  assert.equal(shouldReturnToNow(0, 0, snoozed + 999_999, 0), false); // no snooze
+  assert.equal(shouldReturnToNow(snoozed, 0, snoozed + 119_000, 0), false); // not yet
+  assert.equal(shouldReturnToNow(snoozed, 0, snoozed + 120_000, 0), true);
+  // a touch after the snooze restarts the two minutes
+  assert.equal(shouldReturnToNow(snoozed, snoozed + 60_000, snoozed + 150_000, 0), false);
+  assert.equal(shouldReturnToNow(snoozed, snoozed + 60_000, snoozed + 180_000, 0), true);
+  // a touch before the snooze doesn't count
+  assert.equal(shouldReturnToNow(snoozed, snoozed - 5_000, snoozed + 120_000, 0), true);
+  // once per snooze
+  assert.equal(shouldReturnToNow(snoozed, 0, snoozed + 500_000, snoozed), false);
+});

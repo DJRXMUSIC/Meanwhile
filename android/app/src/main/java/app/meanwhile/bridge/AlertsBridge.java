@@ -37,6 +37,7 @@ final class AlertsBridge {
                     .append(",\"next_alert_at\":").append(a.nextAlertAt).append('}');
         }
         sb.append(",\"now\":").append(System.currentTimeMillis());
+        sb.append(",\"snoozed_at\":").append(Alerts.snoozedAt(c));
         sb.append(",\"last\":");
         if (last == null) sb.append("null");
         else sb.append("{\"mgdl\":").append(last.mgdl).append(",\"ts\":").append(last.timestamp).append('}');

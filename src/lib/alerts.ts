@@ -43,6 +43,8 @@ export interface AlertsState {
   config: { units: string; settings: AlertOptions; alerts: AlertRule[] };
   active: { uuid: string; snoozed: boolean; next_alert_at: number } | null;
   now: number;
+  /** When Snooze was last pressed (0 if never). */
+  snoozed_at?: number;
   last: { mgdl: number; ts: number } | null;
   snooze_choices: number[];
   sounds: Record<string, { name: string; playable: boolean }>;
@@ -168,4 +170,45 @@ export function validate(r: AlertRule): string | null {
   if (!Number.isInteger(r.minutes_between) || r.minutes_between < 1 || r.minutes_between > 120) return "Repeat must be 1–120 min";
   if (r.volume_percent < 1 || r.volume_percent > 100) return "Volume must be 1–100%";
   return null;
+}
+
+// ---- Changes from the app ------------------------------------------------
+
+declare global {
+  interface Window {
+    __alertsChanged?: () => void;
+    __alertsSoundPicked?: (uri: string | null) => void;
+  }
+}
+
+export const ALERTS_CHANGED = "meanwhile:alerts";
+// Sent to the Now page when it should show the present (back to Now after a snooze).
+export const SHOW_NOW = "meanwhile:now";
+
+// The app calls window.__alertsChanged() after a change; everyone listening hears it.
+export function onAlertsChanged(cb: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.__alertsChanged = () => window.dispatchEvent(new Event(ALERTS_CHANGED));
+  window.addEventListener(ALERTS_CHANGED, cb);
+  return () => window.removeEventListener(ALERTS_CHANGED, cb);
+}
+
+// The snoozed alert to show on Now, or null when none is snoozed now.
+export function activeSnooze(st: AlertsState | null): { name: string; until: number } | null {
+  if (!st?.active || !st.active.snoozed || st.active.next_alert_at <= st.now) return null;
+  const rule = st.config.alerts.find((r) => r.uuid === st.active!.uuid);
+  return rule ? { name: rule.name, until: st.active.next_alert_at } : null;
+}
+
+export const BACK_TO_NOW_MS = 2 * 60_000;
+
+// Two minutes after a snooze with no touch since: go back to Now (once per snooze).
+export function shouldReturnToNow(
+  snoozedAt: number,
+  lastInteraction: number,
+  now: number,
+  handledSnoozeAt: number,
+): boolean {
+  if (!snoozedAt || snoozedAt === handledSnoozeAt) return false;
+  return now - Math.max(snoozedAt, lastInteraction) >= BACK_TO_NOW_MS;
 }

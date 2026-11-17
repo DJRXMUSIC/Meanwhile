@@ -8,6 +8,7 @@ import {
   hhmm,
   minutesLabel,
   newAlert,
+  onAlertsChanged,
   parseThreshold,
   PROFILES,
   readState,
@@ -22,13 +23,6 @@ import {
   type AlertRule,
   type AlertsState,
 } from "@/lib/alerts";
-
-declare global {
-  interface Window {
-    __alertsChanged?: () => void;
-    __alertsSoundPicked?: (uri: string | null) => void;
-  }
-}
 
 const btn = "rounded-xl bg-surface2 px-3 py-2 text-sm";
 const btnAccent = "rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium";
@@ -47,11 +41,11 @@ export default function AlertsPage() {
   useEffect(() => {
     load();
     setReady(true);
-    window.__alertsChanged = load;
+    const off = onAlertsChanged(load);
     const t = setInterval(load, 5000);
     return () => {
       clearInterval(t);
-      window.__alertsChanged = undefined;
+      off();
       window.__alertsSoundPicked = undefined;
     };
   }, [load]);
