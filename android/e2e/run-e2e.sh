@@ -231,12 +231,17 @@ print("backup:", len(d["bg"]), "readings", sgvs)
 PYB
 ok "backup file saved to Downloads/Meanwhile/$BK with the readings and profile"
 
-# Settings starts with the way into the glucose alerts
+# Settings starts with the way into the glucose alerts: pressing it opens the alerts screen
+alerts_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity|ResumedActivity" | grep -q "AlertsActivity"; }
 adb logcat -c
-webcheck --es page settings/ --es until "Open glucose alerts"
+webcheck --es page settings/ --es click "Open glucose alerts" --es until "Open glucose alerts"
 wait_until 60 reported || fail "the settings page never reported"
 webcheck_line | grep -q "Open glucose alerts" || fail "no glucose alerts entry in Settings: $(webcheck_line)"
-ok "Meanwhile Settings shows 'Open glucose alerts'"
+wait_until 20 alerts_on_top || { shot no-alerts-screen; fail "pressing 'Open glucose alerts' did not open the alerts screen: $(adb shell dumpsys activity activities | grep -E 'ResumedActivity' | head -3)"; }
+shot alerts-from-settings
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+ok "Meanwhile Settings: 'Open glucose alerts' opens the alerts screen"
 
 # cloud backup: Settings > Sync now sends the data to a Meanwhile server
 curl -fsS --max-time 10 -o /dev/null "$SERVER_URL" || fail "the Meanwhile server isn't running at $SERVER_URL"

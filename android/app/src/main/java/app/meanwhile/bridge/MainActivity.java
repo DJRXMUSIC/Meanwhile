@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_API = "api";
     /** The only buttons automation may press: both harmless to press any time. */
     static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
-            java.util.Arrays.asList("Download backup", "Sync now"));
+            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
