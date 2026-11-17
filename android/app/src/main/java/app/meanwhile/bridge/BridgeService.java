@@ -158,6 +158,7 @@ public class BridgeService extends Service {
             lastStaleAlert = 0;
         }
         postStatus(this);
+        Alerts.check(this, "watchdog");
     }
 
     private static String staleHint(Bridge bridge) {
@@ -176,6 +177,7 @@ public class BridgeService extends Service {
                 NotificationManager.IMPORTANCE_HIGH);
         nm.createNotificationChannel(status);
         nm.createNotificationChannel(stale);
+        Alerts.createChannel(context);
     }
 
     /** {title, text} of the status notification. */

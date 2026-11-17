@@ -41,6 +41,7 @@ public final class Bridge {
 
     /** Tests only: drop the singleton, its socket and its database handle. */
     static void resetForTests() {
+        Alerts.resetForTests();
         synchronized (Bridge.class) {
             if (instance != null) {
                 instance.server.stop();
@@ -79,7 +80,10 @@ public final class Bridge {
             }
         });
         this.server = new HttpServer(routes);
-        engine.setListener(reading -> BridgeService.refresh(app));
+        engine.setListener(reading -> {
+            BridgeService.refresh(app);
+            Alerts.check(app, "reading " + reading.mgdl);
+        });
         applySettings();
     }
 
