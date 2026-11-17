@@ -306,7 +306,8 @@ has_log() { alert_log | grep -qF -- "$1"; }
 plays() { alert_log | grep -c "PLAY low" || true; }
 alert_shown() { adb shell cmd notification list 2>/dev/null | tr -d '\r' | grep -q "|$APP|3|"; }
 alert_gone() { ! alert_shown; }
-alarm_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity" | grep -q "AlertScreenActivity"; }
+# the alarm drawn over the screen (a window titled MeanwhileAlarm)
+alarm_on_top() { adb shell dumpsys window windows 2>/dev/null | grep -q "MeanwhileAlarm"; }
 alarm_gone() { ! alarm_on_top; }
 control() { adb shell am broadcast -n "$APP/.AutomationReceiver" "$@" >/dev/null; }
 
@@ -318,7 +319,7 @@ control --es action alerts_config --es file alerts.json --es token "$TOKEN"
 wait_until 20 has_log "alerts set by adb: 2 alerts" || fail "alerts not set: $(alert_log)"
 ok "alerts set (low ≤80 at 60%, high ≥300), and a control without adb's token is refused"
 
-# the alarm screen comes up by itself when the app may show over other apps
+# the alarm covers the screen by itself when the app may display over other apps
 adb shell appops set "$APP" SYSTEM_ALERT_WINDOW allow
 sleep 11
 post --es value 70 --el when_offset_ms 1000
@@ -329,9 +330,10 @@ wait_until 15 sh -c 'adb logcat -d -s EversenseBridge:I | grep -qE "SOUND: (play
   || fail "the alert made no sound: $(alert_log)"
 SOUND=$(alert_log | grep "SOUND:" | tail -1 | sed 's/.*SOUND: //')
 echo "$SOUND" | grep -q "at 60%" || fail "the alert didn't play at its own volume (60%): $SOUND"
-wait_until 15 alarm_on_top || { shot no-alarm-screen; fail "the alarm screen didn't come up: $(adb shell dumpsys activity activities | grep -E 'ResumedActivity' | head -3)"; }
-shot alarm-screen
-ok "70 mg/dL -> low alert sounds ($SOUND), its notification shows, and the alarm screen comes up"
+wait_until 15 alarm_on_top || { shot no-alarm; fail "the alarm didn't cover the screen: $(alert_log | tail -5)"; }
+has_log "alarm shown over the screen" || fail "no log of the alarm overlay: $(alert_log)"
+shot alarm-over-the-screen
+ok "70 mg/dL -> low alert sounds ($SOUND), its notification shows, and the alarm covers the screen"
 
 # it repeats every minute, by itself, while still low
 wait_until 80 has_log "PLAY low E2E LOW ≤80 (low E2E LOW ≤80 repeats)" || fail "the alert did not repeat after a minute: $(alert_log)"
@@ -349,16 +351,16 @@ STOPS=$(alert_log | grep -c "STOP (no alert applies)" || true)
 cleared() { [ "$(alert_log | grep -c "STOP (no alert applies)" || true)" -gt "$STOPS" ]; }
 wait_until 80 cleared || fail "the stopped alert was never cleared: $(alert_log)"
 
-# low again: the alarm screen is up, and a volume button snoozes (for the alert's 15 minutes)
+# low again: the alarm covers the screen, and a volume button snoozes (for the alert's 15 minutes)
 sleep 11
 post --es value 68 --el when_offset_ms 1000
 wait_until 20 count_is 10 || fail "reading 68 not captured"
 wait_until 20 has_log "reading 68: PLAY low" || fail "68 did not start the alert again: $(alert_log)"
-wait_until 15 alarm_on_top || fail "the alarm screen didn't come up for 68"
+wait_until 15 alarm_on_top || fail "the alarm didn't cover the screen for 68"
 adb shell input keyevent KEYCODE_VOLUME_DOWN
-wait_until 20 has_log "snoozed for 15 min (alarm screen volume key)" || fail "the volume button did not snooze: $(alert_log)"
+wait_until 20 has_log "snoozed for 15 min (alarm volume key)" || fail "the volume button did not snooze: $(alert_log)"
 wait_until 10 alert_gone || fail "alert notification still shown after snooze"
-wait_until 10 alarm_gone || fail "the alarm screen stayed up after snooze"
+wait_until 10 alarm_gone || fail "the alarm stayed on the screen after snooze"
 BEFORE=$(plays)
 sleep 11
 post --es value 71 --el when_offset_ms 1000
@@ -366,7 +368,7 @@ wait_until 20 count_is 11 || fail "reading 71 not captured"
 sleep 8
 [ "$(plays)" = "$BEFORE" ] || fail "the alert sounded while snoozed: $(alert_log)"
 alert_gone || fail "alert notification came back while snoozed"
-ok "alarm screen: a volume button snoozes for 15 min, the screen closes, and a further low (71) stays quiet"
+ok "alarm over the screen: a volume button snoozes for 15 min, it goes, and a further low (71) stays quiet"
 
 echo "all $PASSED end-to-end checks passed"
 get "/sgv.json?count=7"

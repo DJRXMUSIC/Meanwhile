@@ -3,7 +3,6 @@ package app.meanwhile.bridge;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
-import android.provider.Settings;
 
 import java.util.UUID;
 
@@ -69,7 +68,7 @@ final class AlertsBridge {
                 // can't tell: leave as is
             }
         }
-        final boolean overlay = Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(c);
+        final boolean overlay = AlarmOverlay.allowed(c);
         return "{\"overlay\":" + overlay + ",\"full_screen\":" + fullScreen + ",\"dnd\":" + dnd
                 + ",\"notifications\":" + notifications + "}";
     }

@@ -331,19 +331,57 @@ public class AlertsTest {
     // ---------------------------------------------------------------- the alarm screen
 
     @Test
-    public void alarmScreenOpensByItselfOnlyWhenAllowedOverOtherApps() {
+    public void alarmOverlayCoversTheScreenOnlyWhenAllowedOverOtherApps() {
         importExport();
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false);
         storeReading(System.currentTimeMillis(), 80);
         Alerts.checkNow(app, "test");
-        assertNull(shadowOf(app).getNextStartedActivity());
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(AlarmOverlay.isShowing());
 
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
         makeRepeatDue();
         Alerts.checkNow(app, "test");
-        final Intent started = shadowOf(app).getNextStartedActivity();
-        assertNotNull(started);
-        assertEquals(AlertScreenActivity.class.getName(), started.getComponent().getClassName());
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(AlarmOverlay.isShowing());
+        final String all = texts(AlarmOverlay.panelForTests());
+        assertTrue(all, all.contains("LOW WARNING"));
+        assertTrue(all, all.contains("SNOOZE\n60 min"));
+
+        // its big button snoozes, and it goes
+        findButton(AlarmOverlay.panelForTests(), "SNOOZE\n60 min").performClick();
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(AlarmOverlay.isShowing());
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+        assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false);
+    }
+
+    @Test
+    public void alarmOverlaySnoozesWithAVolumeButtonAndGoesWhenTheAlertStops() {
+        importExport();
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(AlarmOverlay.isShowing());
+        AlarmOverlay.panelForTests().dispatchKeyEvent(
+                new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP));
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(AlarmOverlay.isShowing());
+        idleAlertThread();
+        assertTrue(Alerts.active(app).snoozed);
+
+        // up again at the next repeat; back in range takes it away
+        makeRepeatDue();
+        Alerts.checkNow(app, "test");
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(AlarmOverlay.isShowing());
+        storeReading(System.currentTimeMillis() + 1000, 120);
+        Alerts.checkNow(app, "test");
+        shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(AlarmOverlay.isShowing());
         org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(false);
     }
 
@@ -504,6 +542,7 @@ public class AlertsTest {
     }
 
     private static android.widget.Button findButton(View v, String text) {
+        if (v == null) return null;
         if (v instanceof android.widget.Button && text.contentEquals(((android.widget.Button) v).getText())) {
             return (android.widget.Button) v;
         }

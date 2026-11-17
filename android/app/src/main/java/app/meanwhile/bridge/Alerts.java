@@ -200,7 +200,9 @@ final class Alerts {
         createChannel(c);
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm != null) nm.notify(NOTIFICATION_ID, build(c, cfg, rule, last, now));
-        showAlarmScreen(c);
+        // over whatever is on screen while the phone is in use (the lock screen gets the
+        // notification's full-screen alarm screen)
+        AlarmOverlay.show(c);
     }
 
     /** xDrip+'s alert notification: "85 LOW WARNING", "LOW alert: 85 at 14:05", Snooze. */
@@ -232,6 +234,7 @@ final class Alerts {
     static boolean silence(Context c) {
         final Noise n = noise;
         if (n != null) n.stop(c);
+        AlarmOverlay.hide(c);
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm == null) return false;
         boolean showing = false;
@@ -298,21 +301,6 @@ final class Alerts {
     static PendingIntent openAlerts(Context c, boolean fullScreen) {
         return PendingIntent.getActivity(c, fullScreen ? 5 : 4, alarmScreen(c),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-    }
-
-    /**
-     * Puts the alarm screen in front at once, even while the phone is in use. Android allows
-     * that only to an app that may display over other apps; otherwise the notification's
-     * full-screen intent shows it when the phone is locked, and a tap on the notification
-     * opens it.
-     */
-    static void showAlarmScreen(Context c) {
-        if (Build.VERSION.SDK_INT >= 29 && !android.provider.Settings.canDrawOverlays(c)) return;
-        try {
-            c.startActivity(alarmScreen(c));
-        } catch (RuntimeException e) {
-            EventLog.log(c, "ALERT", "could not show the alarm screen: " + e);
-        }
     }
 
     static String title(AlertRule r) {
