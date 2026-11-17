@@ -54,6 +54,7 @@ wait_until() {
 }
 listener_up() { [ "$(py /status.json "d['listener_connected']")" = True ]; }
 count_is() { [ "$(count)" = "$1" ]; }
+outcome_is() { [ "$(outcome)" = "$1" ]; }
 
 wait_boot() {
   adb wait-for-device
@@ -90,9 +91,9 @@ ok "custom-view notification -> sgv 123 with the app's exact reading time ($WHEN
 
 # ------------------------------------------------------------------ refresh of same reading
 post --es value 123 --el fixed_when "$WHEN"
-sleep 3
+# wait for the app to have handled it (a slow emulator can take a few seconds to deliver it)
+wait_until 20 outcome_is REPOST || fail "outcome $(outcome) != REPOST"
 [ "$(count)" = 1 ] || fail "refresh duplicated the reading"
-[ "$(outcome)" = REPOST ] || fail "outcome $(outcome) != REPOST"
 ok "re-posted notification (same reading) is not duplicated"
 
 # ------------------------------------------------------------------ next reading + trend
@@ -118,9 +119,8 @@ ok "title-only notification '7.6 mmol/L' -> 137 mg/dL"
 # ------------------------------------------------------------------ LO is not a number
 sleep 11
 post --es value LO
-sleep 3
+wait_until 20 outcome_is NO_VALUE || fail "outcome $(outcome) != NO_VALUE"
 [ "$(count)" = 3 ] || fail "LO produced a reading"
-[ "$(outcome)" = NO_VALUE ] || fail "outcome $(outcome) != NO_VALUE"
 ok "'LO' is logged, not stored"
 
 # ------------------------------------------------------------------ CORS / preflight for the PWA
