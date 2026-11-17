@@ -7,6 +7,9 @@
 // The page and the app update separately, so each function is checked for
 // before use: an older app may not have a newer one.
 
+// True in the build that goes inside the EverBridge app (npm run build:app).
+export const IN_APP_BUILD = process.env.NEXT_PUBLIC_EVERBRIDGE_APP === "1";
+
 export interface EverBridgeNative {
   /** Newest `count` readings as the JSON text /sgv.json returns; null on failure. */
   sgv(count: number): string | null;
@@ -18,6 +21,10 @@ export interface EverBridgeNative {
   /** The result arrives as window.__everbridgeSpeech(text, error). */
   startSpeech?(): void;
   openStatus?(): void;
+  /** Address of the Meanwhile server (AI advice, cloud sync); "" if not set. */
+  apiBase?(): string;
+  /** Saves it. Returns the cleaned-up address, or null if it isn't usable. */
+  setApiBase?(url: string): string | null;
 }
 
 export function everBridge(): EverBridgeNative | null {
@@ -53,6 +60,23 @@ export function saveTextNatively(name: string, text: string): string | null | un
     return null;
   }
 }
+
+// Where a server request goes. On the website: the same site (relative path).
+// In the app, which has no server of its own: the Meanwhile server whose
+// address was entered in Settings, or null until there is one.
+export function apiUrl(path: string): string | null {
+  if (!IN_APP_BUILD) return path;
+  let base = "";
+  try {
+    base = everBridge()?.apiBase?.() ?? "";
+  } catch {
+    base = "";
+  }
+  return base ? base.replace(/\/+$/, "") + path : null;
+}
+
+export const NO_SERVER_MESSAGE =
+  "Add your Meanwhile server address in Settings to use this (AI advice and cloud backup need it)";
 
 export function copyTextNatively(text: string): boolean {
   const n = everBridge();

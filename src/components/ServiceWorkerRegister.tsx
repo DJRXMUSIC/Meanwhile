@@ -22,6 +22,8 @@ export function ServiceWorkerRegister() {
 
     if (!("serviceWorker" in navigator)) return;
     if (process.env.NODE_ENV !== "production") return;
+    // The app carries its pages with it: there is nothing to cache.
+    if (process.env.NEXT_PUBLIC_EVERBRIDGE_APP === "1") return;
 
     const onControllerChange = () => {
       if (!reloadOnTakeover.current) return;

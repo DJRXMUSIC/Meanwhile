@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { preflight, withCors } from "@/lib/cors";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -95,7 +96,7 @@ function rowTs(row: unknown): number {
   return r?.updated_ts ?? r?.ts ?? 0;
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
@@ -150,9 +151,21 @@ export async function POST(req: Request) {
   });
 }
 
-export async function GET() {
+async function handleGET() {
   return NextResponse.json({
     ok: true,
     hint: "POST { sync_key, since, push } to sync.",
   });
+}
+
+export async function POST(req: Request) {
+  return withCors(req, await handlePOST(req));
+}
+
+export async function GET(req: Request) {
+  return withCors(req, await handleGET());
+}
+
+export function OPTIONS(req: Request) {
+  return preflight(req);
 }

@@ -13,7 +13,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.speech.RecognizerIntent;
-import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -29,7 +28,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -48,30 +46,44 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import app.meanwhile.bridge.core.AppPages;
 import app.meanwhile.bridge.core.BridgeRoutes;
 import app.meanwhile.bridge.core.WebOrigin;
 
 /**
- * What the app icon opens: Meanwhile, in a WebView, with the bridge running underneath in
- * the same process.
+ * What the app icon opens: Meanwhile, with the bridge running underneath in the same
+ * process.
  *
- * The page is the Meanwhile site (its address is entered once and kept on the phone). On
- * that site only, the page gets {@code window.EverBridgeNative}: the readings straight from
- * the bridge's store (no network hop), saving a backup file, voice input, the clipboard and
- * a way to open the bridge's {@link StatusActivity status screen}. Links to anywhere else
- * open in the browser.
+ * Meanwhile's pages are packaged inside the app (assets/web, built from this repository
+ * by {@code npm run build:app}) and served here from {@link AppPages#HOME}, an address
+ * Android reserves for exactly that. Nothing is downloaded to show them, so the app opens
+ * with no internet. Its data (IndexedDB) lives in the app's own storage.
  *
- * The WebView must never take the bridge down with it: a crashed page renderer is replaced
+ * Those pages, and only those, get {@code window.EverBridgeNative}: the readings straight
+ * from the bridge's store (no network hop), saving a backup file, voice input, the
+ * clipboard, the bridge's {@link StatusActivity status screen}, and the address of the
+ * Meanwhile server that AI advice and cloud backup go to. Links anywhere else open in
+ * the browser.
+ *
+ * The page must never take the bridge down with it: a crashed page renderer is replaced
  * here instead of being left to kill the process, which is also the notification listener.
  *
- * Automation (used by the emulator test): {@code --es action web_check} logs what the page
- * shows; with it, {@code --es url http://localhost:PORT} loads a site served on this
- * device for that run only.
+ * Automation (used by the emulator test), each logging what the page shows:
+ * {@code --es action web_check} on the home page; with {@code --es page settings/
+ * --es click "Download backup"} (or "Sync now") that button is pressed first, and
+ * {@code --es until <text>} waits for that text. {@code --es api http://localhost:PORT}
+ * points AI and sync at a server on this device for that run only (never saved).
  */
 public class MainActivity extends Activity {
 
     static final String EXTRA_ACTION = "action";
-    static final String EXTRA_URL = "url";
+    static final String EXTRA_PAGE = "page";
+    static final String EXTRA_CLICK = "click";
+    static final String EXTRA_UNTIL = "until";
+    static final String EXTRA_API = "api";
+    /** The only buttons automation may press: both harmless to press any time. */
+    static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
+            java.util.Arrays.asList("Download backup", "Sync now"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
@@ -87,12 +99,12 @@ public class MainActivity extends Activity {
     private Bridge bridge;
     private FrameLayout root;
     private WebView web;
-    /** The address form or an error message, shown instead of the page; null otherwise. */
+    /** An error message shown instead of the page; null otherwise. */
     private View panel;
-    /** The site being shown. Its origin is what {@link #trusted} is measured against. */
-    private String baseUrl;
-    /** True while the page in the WebView is on {@link #baseUrl}'s origin. */
+    /** True while the page in the WebView is one of the app's own pages. */
     private volatile boolean trusted;
+    /** Server address for this run only, from automation; null normally. */
+    private volatile String apiOverride;
     private ValueCallback<Uri[]> fileCallback;
     private int crashes;
     private long firstCrashAt;
@@ -136,16 +148,21 @@ public class MainActivity extends Activity {
         });
         setContentView(root);
 
-        final String testUrl = automationUrl(getIntent());
-        final String url = testUrl != null ? testUrl : bridge.settings.webUrl();
-        if (url.isEmpty()) showAddressForm();
-        else open(url);
+        final Intent intent = getIntent();
+        final boolean automated = intent != null && intent.getStringExtra(EXTRA_ACTION) != null;
+        apiOverride = automationApi(intent);
+        if (!hasPages()) {
+            showError("This copy of the app is incomplete", "It was built without Meanwhile's pages. "
+                    + "Install the APK from the bridge-latest release.");
+        } else {
+            open(AppPages.HOME + automationPage(intent));
+        }
 
         // Setup first: without notification access there are no readings to show.
-        if (savedInstanceState == null && testUrl == null && !bridge.hasNotificationAccess()) {
+        if (savedInstanceState == null && !automated && !bridge.hasNotificationAccess()) {
             startActivity(new Intent(this, StatusActivity.class));
         }
-        handleAutomation(getIntent());
+        handleAutomation(intent);
     }
 
     @Override
@@ -194,14 +211,46 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ the page
 
-    /** Shows {@code url}, which becomes the site the native functions are offered to. */
+    /** Shows one of the app's pages. */
     void open(String url) {
-        baseUrl = url;
         removePanel();
         if (web == null) web = createWeb();
         web.setVisibility(View.VISIBLE);
         trusted = false; // until the page has started loading from the right place
         web.loadUrl(url);
+    }
+
+    private boolean hasPages() {
+        try (java.io.InputStream in = getAssets().open(AppPages.ROOT + "/index.html")) {
+            return in.read() >= 0;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** The packaged file for one of the app's pages, or null to let the request through. */
+    WebResourceResponse serve(String url) {
+        if (!AppPages.isAppUrl(url)) return null;
+        for (String asset : AppPages.candidates(url)) {
+            final WebResourceResponse r = asset(asset, 200, "OK");
+            if (r != null) return r;
+        }
+        final WebResourceResponse missing = asset(AppPages.NOT_FOUND, 404, "Not Found");
+        return missing != null ? missing
+                : new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, new java.io.ByteArrayInputStream(new byte[0]));
+    }
+
+    private WebResourceResponse asset(String path, int status, String reason) {
+        final java.io.InputStream in;
+        try {
+            in = getAssets().open(path);
+        } catch (IOException e) {
+            return null; // not there (or a folder)
+        }
+        final String mime = AppPages.mimeType(path);
+        final Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-cache");
+        return new WebResourceResponse(mime, AppPages.encoding(mime), status, reason, headers, in);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -244,19 +293,24 @@ public class MainActivity extends Activity {
 
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-            trusted = WebOrigin.sameOrigin(baseUrl, url);
+            trusted = AppPages.isAppUrl(url);
         }
 
         @Override
         public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
-            trusted = WebOrigin.sameOrigin(baseUrl, url);
+            trusted = AppPages.isAppUrl(url);
+        }
+
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            return serve(request.getUrl().toString());
         }
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             if (!request.isForMainFrame()) return false;
             final String url = request.getUrl().toString();
-            if (WebOrigin.sameOrigin(baseUrl, url)) return false;
+            if (AppPages.isAppUrl(url)) return false;
             // anything that isn't Meanwhile goes to the browser, not into this window
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
@@ -269,15 +323,15 @@ public class MainActivity extends Activity {
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (request.isForMainFrame()) {
-                showError("Can't reach Meanwhile", String.valueOf(error.getDescription()));
+                showError("Meanwhile didn't open", String.valueOf(error.getDescription()));
             }
         }
 
         @Override
         public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
             if (request.isForMainFrame() && response.getStatusCode() >= 400) {
-                showError("Meanwhile didn't open", "The site answered with error " + response.getStatusCode()
-                        + ". Check the address is right.");
+                showError("Meanwhile didn't open", "Error " + response.getStatusCode() + " opening "
+                        + request.getUrl().getPath() + ".");
             }
         }
 
@@ -296,7 +350,7 @@ public class MainActivity extends Activity {
             destroyWeb();
             if (isFinishing() || isDestroyed()) return true;
             if (crashes > MAX_CRASHES) showError("Meanwhile keeps stopping", "The page crashed several times in a row.");
-            else if (baseUrl != null) open(baseUrl);
+            else open(AppPages.HOME);
             return true;
         }
     }
@@ -423,6 +477,28 @@ public class MainActivity extends Activity {
             if (trusted) runOnUiThread(MainActivity.this::startSpeech);
         }
 
+        /** Address of the Meanwhile server for AI advice and cloud backup; "" if not set. */
+        @JavascriptInterface
+        public String apiBase() {
+            if (!trusted) return "";
+            final String o = apiOverride;
+            return o != null ? o : bridge.settings.apiBase();
+        }
+
+        /** Saves it; "" clears it. Returns the cleaned-up address, or null if it isn't usable. */
+        @JavascriptInterface
+        public String setApiBase(String url) {
+            if (!trusted || url == null) return null;
+            final String trimmed = url.trim();
+            final String clean = trimmed.isEmpty() ? "" : WebOrigin.normalize(trimmed);
+            if (clean == null) return null;
+            // just the site: "https://x.netlify.app/settings" means https://x.netlify.app
+            final String site = clean.isEmpty() ? "" : clean.substring(0, clean.indexOf('/', clean.indexOf("//") + 2));
+            bridge.settings.setApiBase(site);
+            EventLog.log(MainActivity.this, "WEB", site.isEmpty() ? "server address cleared" : "server address set");
+            return site;
+        }
+
         @JavascriptInterface
         public void openStatus() {
             if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, StatusActivity.class)));
@@ -490,85 +566,65 @@ public class MainActivity extends Activity {
         return p;
     }
 
-    /** Asks for the Meanwhile site's address: on first run, and from "Change Meanwhile address". */
-    void showAddressForm() {
-        final String current = bridge.settings.webUrl();
-        final LinearLayout p = newPanel("Meanwhile address",
-                "Paste the web address you open Meanwhile with. It starts with https:// "
-                        + "and you only need to do this once.");
-        final EditText field = new EditText(this);
-        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        field.setSingleLine(true);
-        field.setHint("https://");
-        field.setText(current);
-        field.setTextColor(INK);
-        field.setHintTextColor(MUTED);
-        p.addView(field, marginTop(16));
-        final TextView problem = label("", 14, Color.rgb(239, 152, 0));
-        p.addView(problem, marginTop(4));
-        p.addView(button("Open Meanwhile", v -> {
-            final String url = WebOrigin.normalize(field.getText().toString());
-            if (url == null) {
-                problem.setText("That isn't a web address this app can open. It should look like "
-                        + "https://your-site.netlify.app");
-                return;
-            }
-            bridge.settings.setWebUrl(url);
-            EventLog.log(this, "WEB", "Meanwhile address set");
-            open(url);
-        }), marginTop(12));
-        if (!current.isEmpty()) {
-            p.addView(button("Cancel", v -> {
-                removePanel();
-                if (web != null) web.setVisibility(View.VISIBLE);
-                else open(current);
-            }), marginTop(8));
-        }
-        p.addView(button("EverBridge status and setup", v -> startActivity(new Intent(this, StatusActivity.class))),
-                marginTop(8));
-    }
-
     /** Shown instead of a page that failed to load, so the bridge's screens stay reachable. */
     private void showError(String title, String detail) {
         EventLog.log(this, "WEB", title + ": " + detail);
         final LinearLayout p = newPanel(title, detail + "\n\nReadings are still being collected.");
-        p.addView(button("Try again", v -> {
-            if (baseUrl != null) open(baseUrl);
-        }), marginTop(16));
+        p.addView(button("Try again", v -> open(AppPages.HOME)), marginTop(16));
         p.addView(button("EverBridge status and setup", v -> startActivity(new Intent(this, StatusActivity.class))),
                 marginTop(8));
-        p.addView(button("Change Meanwhile address", v -> showAddressForm()), marginTop(8));
     }
 
     // ------------------------------------------------------------------ automation
 
     private void handleAutomation(Intent intent) {
-        final String action = intent != null ? intent.getStringExtra(EXTRA_ACTION) : null;
-        if ("change_address".equals(action)) showAddressForm();
-        else if ("web_check".equals(action)) webCheck(0);
+        if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return;
+        final String api = automationApi(intent);
+        if (api != null) apiOverride = api;
+        final String page = automationPage(intent);
+        if (web != null && !page.isEmpty()) open(AppPages.HOME + page);
+        final String click = intent.getStringExtra(EXTRA_CLICK);
+        final String until = intent.getStringExtra(EXTRA_UNTIL);
+        webCheck(click != null && CLICKABLE.contains(click) ? click : null, until, 0);
+    }
+
+    /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */
+    private static String automationPage(Intent intent) {
+        final String page = intent == null ? null : intent.getStringExtra(EXTRA_PAGE);
+        return "settings/".equals(page) || "profile/".equals(page) ? page : "";
     }
 
     /**
-     * An address to load for this run only, from a {@code web_check} intent. Only a site
-     * served on this device itself is accepted, so no other app can point this window (and
-     * the readings it offers) at a site of its choosing.
+     * A server address for this run only, from automation. Only a server on this device
+     * itself is accepted, so no other app can send the page's data somewhere else.
      */
-    private static String automationUrl(Intent intent) {
+    private static String automationApi(Intent intent) {
         if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return null;
-        final String url = WebOrigin.normalize(intent.getStringExtra(EXTRA_URL));
-        return url != null && WebOrigin.isLoopbackUrl(url) ? url : null;
+        final String url = WebOrigin.normalize(intent.getStringExtra(EXTRA_API));
+        if (url == null || !WebOrigin.isLoopbackUrl(url)) return null;
+        return url.substring(0, url.indexOf('/', url.indexOf("//") + 2));
     }
 
-    /** Logs the page's text once the reading tile has filled in (or after 90 s regardless). */
-    private void webCheck(int attempt) {
+    /**
+     * Once the page has loaded: presses {@code click} if given (once), then logs the page's
+     * text when it contains {@code until} (by default, the reading tile's countdown), or
+     * after 90 s regardless.
+     */
+    private void webCheck(String click, String until, int attempt) {
         if (web == null || isFinishing()) return;
-        web.evaluateJavascript("(function(){return document.body?document.body.innerText:''})()", text -> {
+        final String script = "(function(){"
+                + (click == null ? "" : "if(!window.__ebClicked){var b=[].slice.call(document.querySelectorAll('button'))"
+                + ".filter(function(x){return x.textContent.trim()===" + JSONObject.quote(click) + "})[0];"
+                + "if(b){window.__ebClicked=1;b.click();}}")
+                + "return document.body?document.body.innerText:''})()";
+        web.evaluateJavascript(script, text -> {
             final String t = text == null ? "" : text;
-            if (t.contains("next in") || t.contains("due now") || attempt >= 90) {
+            final boolean done = until != null ? t.contains(until) : (t.contains("next in") || t.contains("due now"));
+            if (done || attempt >= 90) {
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
-                        + " text=" + (t.length() > 600 ? t.substring(0, 600) : t));
+                        + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
-                handler.postDelayed(() -> webCheck(attempt + 1), 1_000);
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1), 1_000);
             }
         });
     }

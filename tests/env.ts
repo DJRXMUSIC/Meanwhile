@@ -1,6 +1,17 @@
 // A browser-ish world for the library code under test: IndexedDB in memory,
 // and `window` (the app's db() refuses to run without one).
 import "fake-indexeddb/auto";
+import Module from "node:module";
+import path from "node:path";
+
+// "@/lib/x" → src/lib/x, as in the app (tsconfig paths), for the compiled tests.
+type Resolve = (request: string, ...rest: unknown[]) => string;
+const M = Module as unknown as { _resolveFilename: Resolve };
+const resolve = M._resolveFilename;
+M._resolveFilename = function (this: unknown, request: string, ...rest: unknown[]) {
+  const r = request.startsWith("@/") ? path.join(__dirname, "../src", request.slice(2)) : request;
+  return resolve.call(this, r, ...rest);
+};
 
 const g = globalThis as unknown as Record<string, unknown>;
 if (g.window === undefined) g.window = globalThis;

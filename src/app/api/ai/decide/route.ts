@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { preflight, withCors } from "@/lib/cors";
 import { z } from "zod";
 import { buildUserPrompt, type PromptContext } from "@/lib/ai/prompt";
 import { runDecision } from "@/lib/ai/providers";
@@ -20,7 +21,7 @@ const RequestSchema = z.object({
   preferred_provider: z.enum(["anthropic", "openai", "google", "auto"]).optional(),
 });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
@@ -51,4 +52,12 @@ export async function POST(req: Request) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+export async function POST(req: Request) {
+  return withCors(req, await handlePOST(req));
+}
+
+export function OPTIONS(req: Request) {
+  return preflight(req);
 }

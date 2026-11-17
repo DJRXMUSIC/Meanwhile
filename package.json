@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tests/tsconfig.json && node --test \".test-dist/tests/*.test.js\""
+    "test": "tsc -p tests/tsconfig.json && node --test \".test-dist/tests/*.test.js\"",
+    "build:app": "node scripts/build-app-web.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.1",

@@ -48,14 +48,15 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
+import app.meanwhile.bridge.core.AppPages;
 import app.meanwhile.bridge.core.Reading;
 import app.meanwhile.bridge.core.TimestampSource;
 
-/** The Meanwhile screen: address entry, the WebView's rules, and the native functions. */
+/** The Meanwhile screen: the packaged pages, the WebView's rules, and the native functions. */
 @RunWith(RobolectricTestRunner.class)
 public class MainActivityTest {
 
-    private static final String SITE = "https://my-site.netlify.app/";
+    private static final String SITE = AppPages.HOME;
 
     private Application app;
     private ActivityController<MainActivity> controller;
@@ -81,7 +82,6 @@ public class MainActivityTest {
     /** Starts the screen as an already set-up install would see it. */
     private MainActivity startWithSite() {
         grantNotificationAccess();
-        new Settings(app).setWebUrl(SITE);
         return start(new Intent(app, MainActivity.class));
     }
 
@@ -173,13 +173,13 @@ public class MainActivityTest {
         shadowOf(Looper.getMainLooper()).idle();
     }
 
-    // ---------------------------------------------------------------- first run and address
+    // ---------------------------------------------------------------- opening
 
     @Test
-    public void firstRunAsksForTheAddressAndOpensSetup() {
+    public void firstRunOpensMeanwhileAndTheBridgeSetup() {
         final MainActivity a = start(new Intent(app, MainActivity.class));
-        assertNull("no page before an address is known", a.web());
-        assertTrue(screen(a), screen(a).contains("Meanwhile address"));
+        // no address to enter: Meanwhile is inside the app
+        assertEquals(AppPages.HOME, shadowOf(a.web()).getLastLoadedUrl());
         // notification access is off on a fresh install: the bridge's setup screen comes up
         final Intent next = shadowOf(a).getNextStartedActivity();
         assertNotNull(next);
@@ -191,48 +191,57 @@ public class MainActivityTest {
     public void setUpInstallGoesStraightToMeanwhile() {
         final MainActivity a = startWithSite();
         assertNull("no setup screen once access is granted", shadowOf(a).getNextStartedActivity());
-        assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
+        assertEquals(AppPages.HOME, shadowOf(a.web()).getLastLoadedUrl());
         assertTrue(a.web().getSettings().getJavaScriptEnabled());
         assertTrue(a.web().getSettings().getDomStorageEnabled());
         assertFalse(a.web().getSettings().getAllowFileAccess());
         assertTrue(a.web().getSettings().getUserAgentString().contains("EverBridge/"));
         assertNotNull(nativeOf(a));
-        assertFalse(screen(a), screen(a).contains("Meanwhile address"));
+    }
+
+    // ---------------------------------------------------------------- the packaged pages
+
+    private static String body(WebResourceResponse r) throws java.io.IOException {
+        final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        final byte[] buf = new byte[8192];
+        int k;
+        while ((k = r.getData().read(buf)) > 0) out.write(buf, 0, k);
+        return out.toString("UTF-8");
     }
 
     @Test
-    public void typedAddressIsCleanedSavedAndOpened() {
-        grantNotificationAccess();
-        final MainActivity a = start(new Intent(app, MainActivity.class));
-        final EditText field = find(a.findViewById(android.R.id.content), EditText.class, null);
-
-        field.setText("not an address");
-        tap(a, "Open Meanwhile");
-        assertNull(a.web());
-        assertEquals("", new Settings(app).webUrl());
-        assertTrue(screen(a), screen(a).contains("That isn't a web address"));
-
-        field.setText("http://my-site.netlify.app"); // plain http to a real site: refused
-        tap(a, "Open Meanwhile");
-        assertEquals("", new Settings(app).webUrl());
-
-        field.setText("  My-Site.netlify.app ");
-        tap(a, "Open Meanwhile");
-        assertEquals(SITE, new Settings(app).webUrl());
-        assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
-        assertFalse(screen(a), screen(a).contains("Meanwhile address"));
-    }
-
-    @Test
-    public void changeAddressCanBeCancelled() {
+    public void pagesComeFromInsideTheApp() throws Exception {
         final MainActivity a = startWithSite();
-        controller.newIntent(new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "change_address"));
-        shadowOf(Looper.getMainLooper()).idle();
-        assertTrue(screen(a), screen(a).contains("Meanwhile address"));
-        assertEquals(View.GONE, a.web().getVisibility());
-        tap(a, "Cancel");
-        assertEquals(View.VISIBLE, a.web().getVisibility());
-        assertEquals(SITE, new Settings(app).webUrl());
+        WebResourceResponse r = a.serve(AppPages.HOME);
+        assertEquals(200, r.getStatusCode());
+        assertEquals("text/html", r.getMimeType());
+        assertEquals("utf-8", r.getEncoding());
+        final String home = body(r);
+        assertTrue(home, home.contains("<html"));
+        assertTrue(home, home.contains("/_next/static/"));
+
+        // every script and stylesheet the home page names is in the app
+        final java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"(/_next/static/[^\"?]+)\"").matcher(home);
+        int found = 0;
+        while (m.find()) {
+            final WebResourceResponse part = a.serve(AppPages.ORIGIN + m.group(1));
+            assertEquals(m.group(1), 200, part.getStatusCode());
+            found++;
+        }
+        assertTrue("only " + found + " parts", found >= 3);
+
+        for (String page : new String[]{"settings/", "profile/", "settings", "settings/index.txt?_rsc=1"}) {
+            r = a.serve(AppPages.HOME + page);
+            assertEquals(page, 200, r.getStatusCode());
+        }
+        assertEquals("text/plain", a.serve(AppPages.HOME + "settings/index.txt").getMimeType());
+
+        // nothing else
+        assertEquals(404, a.serve(AppPages.HOME + "no-such-page/").getStatusCode());
+        assertEquals(404, a.serve(AppPages.HOME + "../../shared_prefs/bridge_settings.xml").getStatusCode());
+        assertEquals(404, a.serve(AppPages.HOME + "%2e%2e/%2e%2e/databases/readings.db").getStatusCode());
+        assertNull("other sites are fetched normally", a.serve("https://my-site.netlify.app/api/sync"));
+        assertNull(a.serve("http://127.0.0.1:17590/sgv.json"));
     }
 
     // ---------------------------------------------------------------- staying on the site
@@ -240,7 +249,7 @@ public class MainActivityTest {
     @Test
     public void linksOffTheSiteOpenInTheBrowser() {
         final MainActivity a = startWithSite();
-        assertFalse(client(a).shouldOverrideUrlLoading(a.web(), request(SITE + "settings", true)));
+        assertFalse(client(a).shouldOverrideUrlLoading(a.web(), request(SITE + "settings/", true)));
         assertNull(shadowOf(a).getNextStartedActivity());
 
         assertTrue(client(a).shouldOverrideUrlLoading(a.web(), request("https://example.org/page", true)));
@@ -248,8 +257,10 @@ public class MainActivityTest {
         assertEquals(Intent.ACTION_VIEW, view.getAction());
         assertEquals("https://example.org/page", view.getDataString());
 
-        // a look-alike host is not the site
-        assertTrue(client(a).shouldOverrideUrlLoading(a.web(), request("https://my-site.netlify.app.evil.example/", true)));
+        // a look-alike host is not the app
+        assertTrue(client(a).shouldOverrideUrlLoading(a.web(), request("https://" + AppPages.HOST + ".evil.example/", true)));
+        // the Meanwhile server is a website too
+        assertTrue(client(a).shouldOverrideUrlLoading(a.web(), request("https://my-site.netlify.app/", true)));
         // sub-resources are not navigations
         assertFalse(client(a).shouldOverrideUrlLoading(a.web(), request("https://fonts.example/x.woff", false)));
     }
@@ -315,6 +326,34 @@ public class MainActivityTest {
         } catch (org.json.JSONException e) {
             throw new AssertionError(json, e);
         }
+    }
+
+    // ---------------------------------------------------------------- server address
+
+    @Test
+    public void serverAddressIsSavedAsJustTheSite() {
+        final MainActivity a = startWithSite();
+        final MainActivity.Native n = nativeOf(a);
+        pageStarted(a, SITE + "settings/");
+        assertEquals("", n.apiBase());
+        assertEquals("https://my-site.netlify.app", n.setApiBase("  My-Site.netlify.app/settings/  "));
+        assertEquals("https://my-site.netlify.app", n.apiBase());
+        assertEquals("https://my-site.netlify.app", new Settings(app).apiBase());
+        // unusable: refused, and the saved one is kept
+        assertNull(n.setApiBase("not an address"));
+        assertNull(n.setApiBase("http://my-site.netlify.app"));
+        assertNull(n.setApiBase(null));
+        assertEquals("https://my-site.netlify.app", n.apiBase());
+        // empty clears it
+        assertEquals("", n.setApiBase(""));
+        assertEquals("", new Settings(app).apiBase());
+
+        // and nothing from anywhere but the app's pages
+        n.setApiBase("https://my-site.netlify.app");
+        pageStarted(a, "https://evil.example/");
+        assertEquals("", n.apiBase());
+        assertNull(n.setApiBase("https://evil.example"));
+        assertEquals("https://my-site.netlify.app", new Settings(app).apiBase());
     }
 
     // ---------------------------------------------------------------- backup, clipboard, status
@@ -464,7 +503,7 @@ public class MainActivityTest {
             }
         });
         String s = screen(a);
-        assertTrue(s, s.contains("Can't reach Meanwhile"));
+        assertTrue(s, s.contains("Meanwhile didn't open"));
         assertTrue(s, s.contains("net::ERR_NAME_NOT_RESOLVED"));
         assertTrue(s, s.contains("Readings are still being collected"));
         assertEquals(View.GONE, a.web().getVisibility());
@@ -472,13 +511,12 @@ public class MainActivityTest {
         tap(a, "EverBridge status and setup");
         assertEquals(StatusActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
 
-        tap(a, "Change Meanwhile address");
-        assertTrue(screen(a), screen(a).contains("Meanwhile address"));
-        tap(a, "Cancel");
+        tap(a, "Try again");
+        assertEquals(View.VISIBLE, a.web().getVisibility());
 
         // a failed image or script is not a failed page
         client(a).onReceivedError(a.web(), request(SITE + "icon.png", false), null);
-        assertFalse(screen(a), screen(a).contains("Can't reach Meanwhile"));
+        assertFalse(screen(a), screen(a).contains("Meanwhile didn't open"));
 
         client(a).onReceivedHttpError(a.web(), request(SITE, true),
                 new WebResourceResponse("text/html", "utf-8", 404, "Not Found", null, null));
@@ -527,25 +565,37 @@ public class MainActivityTest {
     // ---------------------------------------------------------------- automation
 
     @Test
-    public void testAddressIsOnlyTakenForThisDeviceAndNeverSaved() {
+    public void automationCanOnlyPointAtThisDeviceAndNeverSaves() {
         grantNotificationAccess();
-        new Settings(app).setWebUrl(SITE);
-        // another app can't point the window at a site of its choosing
+        new Settings(app).setApiBase("https://my-site.netlify.app");
+        // another app can't send the page's data to a server of its choosing
         MainActivity a = start(new Intent(app, MainActivity.class)
-                .putExtra(MainActivity.EXTRA_ACTION, "web_check").putExtra(MainActivity.EXTRA_URL, "https://evil.example/"));
+                .putExtra(MainActivity.EXTRA_ACTION, "web_check").putExtra(MainActivity.EXTRA_API, "https://evil.example/"));
+        pageStarted(a, SITE);
+        assertEquals("https://my-site.netlify.app", nativeOf(a).apiBase());
+        controller.pause().stop().destroy();
+
+        a = start(new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "web_check")
+                .putExtra(MainActivity.EXTRA_API, "http://localhost:3000/").putExtra(MainActivity.EXTRA_PAGE, "settings/"));
+        pageStarted(a, SITE + "settings/");
+        assertEquals("http://localhost:3000", nativeOf(a).apiBase());
+        assertEquals(SITE + "settings/", shadowOf(a.web()).getLastLoadedUrl());
+        assertEquals("https://my-site.netlify.app", new Settings(app).apiBase());
+        controller.pause().stop().destroy();
+
+        // without the web_check action the extras are ignored, and only known pages open
+        a = start(new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_API, "http://localhost:3000")
+                .putExtra(MainActivity.EXTRA_PAGE, "settings/"));
+        pageStarted(a, SITE);
+        assertEquals("https://my-site.netlify.app", nativeOf(a).apiBase());
         assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
         controller.pause().stop().destroy();
-
-        a = start(new Intent(app, MainActivity.class)
-                .putExtra(MainActivity.EXTRA_ACTION, "web_check").putExtra(MainActivity.EXTRA_URL, "http://localhost:3000"));
-        assertEquals("http://localhost:3000/", shadowOf(a.web()).getLastLoadedUrl());
-        assertEquals(SITE, new Settings(app).webUrl());
-        controller.pause().stop().destroy();
-
-        // without the web_check action the extra is ignored altogether
-        a = start(new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_URL, "http://localhost:3000"));
+        a = start(new Intent(app, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "web_check")
+                .putExtra(MainActivity.EXTRA_PAGE, "../../evil"));
         assertEquals(SITE, shadowOf(a.web()).getLastLoadedUrl());
         assertSame(a, controller.get());
+        // only harmless buttons can be pressed
+        assertEquals(new java.util.HashSet<>(Arrays.asList("Download backup", "Sync now")), MainActivity.CLICKABLE);
     }
 
     @Test

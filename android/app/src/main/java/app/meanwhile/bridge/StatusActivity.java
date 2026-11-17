@@ -529,9 +529,6 @@ public class StatusActivity extends Activity {
         a.addView(button("Open sgv.json in browser", v -> openUrl(
                 "http://127.0.0.1:" + bridge.server.port() + "/sgv.json?count=12")));
         a.addView(button("Get latest app version", v -> openUrl(RELEASE_PAGE)));
-        a.addView(button("Change Meanwhile address", v -> startActivity(
-                new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_ACTION, "change_address")
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP))));
 
         a.addView(header("Settings"));
         a.addView(text("Port (default 17590; xDrip+ uses 17580, so both can run)", 13, false));

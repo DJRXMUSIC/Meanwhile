@@ -50,6 +50,15 @@ npm run dev
 
 Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **target 110 mg/dL**.
 
+### The Android app (APK)
+
+The `android/` app is the way to use Meanwhile on the phone: one app with Meanwhile's pages packaged inside it and the EverBridge reading bridge built in. Download it from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk. The website version keeps working and serves the app's AI advice and cloud backup (`/api/ai/decide`, `/api/sync`). See [`android/README.md`](android/README.md).
+
+```bash
+npm run build:app   # Meanwhile's pages for the app → android/app/src/main/assets/web (the Android build runs this itself)
+npm test            # countdown, reading sync, in-app paths, backup restore, server sync route
+```
+
 ### Glucose source: EverBridge
 
 `android/` contains **EverBridge**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification and serves it at `http://127.0.0.1:17590`. It is Meanwhile's only glucose source. xDrip+ can stay installed, with its own web service on port 17580, and nothing here reads it.

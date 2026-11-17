@@ -1,6 +1,8 @@
 # EverBridge (Android)
 
-A small Android app for the Pixel 9a. It captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17590/sgv.json`, in the same JSON format as xDrip+'s local web service. It is the only glucose source for Meanwhile and its watch face. xDrip+ can stay installed with its own web service on 17580; the bridge neither needs nor reads it.
+One Android app for the Pixel 9a: **Meanwhile**, with the Eversense bridge built in. The app icon opens Meanwhile; its pages are packaged inside the APK (built from this repository's web app), so it opens instantly and works with no internet. Underneath, the bridge runs whether Meanwhile is open or not.
+
+The bridge captures each Eversense 365 glucose reading (value and timestamp) from the Eversense app as the reading arrives. It stores the readings and serves them at `http://127.0.0.1:17590/sgv.json`, in the same JSON format as xDrip+'s local web service. It is the only glucose source for Meanwhile and its watch face. xDrip+ can stay installed with its own web service on 17580; the bridge neither needs nor reads it.
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
@@ -50,18 +52,37 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 * `GET /pebble` returns the newest reading as one JSON object (the Nightscout `/pebble` shape). The Garmin watch face (`garmin/`) reads it, because Connect IQ can't read `sgv.json`'s top-level array.
 * `GET /status.json` reports health (`ok`, listener state, last reading and its age, last capture outcome). The app's screen shows a setup checklist and a capture log, and **Copy diagnostics** puts everything, including raw notification texts, on the clipboard.
 
+## Meanwhile inside the app
+
+* **Pages:** built by `npm run build:app` (a static export of the web app) into `app/src/main/assets/web`, which the Gradle build does by itself, and served from `https://appassets.androidplatform.net/`, an address Android reserves for exactly this. Links anywhere else open in the browser.
+* **Readings:** the page reads the bridge's store directly (`window.EverBridgeNative.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
+* **Data:** Meanwhile's database lives in the app's own storage, separate from Chrome's. To move it, see *Moving from the Chrome version* below.
+* **AI advice and cloud backup** go to your Meanwhile server (the website version, e.g. on Netlify), whose address you enter once in Meanwhile → Settings → **Meanwhile server**. Everything else works without it. The server's `/api/sync` and `/api/ai/decide` accept requests from the app's address and no other site.
+* **Backup file:** Settings → **Download backup** saves `Downloads/EverBridge/meanwhile-<date>.json`; **Restore from file** opens the phone's file picker.
+* **Voice:** the mic button uses the phone's voice input.
+* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **EverBridge status & setup**. It also opens by itself until notification access is on.
+* **Safety:** if the page's renderer crashes, the app replaces it instead of going down, so capture never stops because of the page.
+
 ## Install on the Pixel 9a
 
 **Download link (always the newest build that passed every test):**
 https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk
 
 1. Open that link in Chrome on the phone and open the downloaded file. If asked, allow Chrome to install apps. Updates install the same way, on top of the old version, and keep your history.
-2. Open **EverBridge**. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
+2. Open **EverBridge**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
    * **Turn on: Notification access** → enable EverBridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → EverBridge → ⋮ → **Allow restricted settings**, then try again.
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
-4. Tap **Run self-test**: it should say PASS.
-5. In Meanwhile → Settings, the **EverBridge URL** should be `http://127.0.0.1:17590`. Tap **Test connection**.
+4. Tap **Run self-test**: it should say PASS. Press Back to get to Meanwhile.
+5. In Meanwhile → Settings → **Meanwhile server**, enter the address you used to open Meanwhile in Chrome (e.g. `https://your-site.netlify.app`) and tap **Save**. That turns on AI advice and cloud backup.
+
+### Moving from the Chrome version
+
+Your history in Chrome stays in Chrome until you bring it over:
+
+1. In Chrome, open Meanwhile → Settings → **Download backup**. Keep this file somewhere safe.
+2. In the app, Meanwhile → Settings → **Restore from file**, and pick that file. Readings the app has already collected are kept, and nothing is counted twice.
+3. Your cloud sync key comes across with the backup, so cloud backup carries on where it was once the server address is set.
 
 The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 

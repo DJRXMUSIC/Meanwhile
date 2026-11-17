@@ -1,7 +1,7 @@
 "use client";
 
 import { db } from "./db";
-import { everBridge } from "./native";
+import { apiUrl, everBridge, IN_APP_BUILD } from "./native";
 import { nextReading, READING_INTERVAL_MS } from "./nextReading";
 import type { BgReading, Trend } from "./types";
 
@@ -75,7 +75,10 @@ export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<X
   // 2) Fall back to the server-side proxy at /api/bg/proxy. The Next.js
   //    server fetches the bridge on our behalf — works as long as the deploy
   //    can reach `base` on the network.
-  const proxied = `/api/bg/proxy?base=${encodeURIComponent(base)}&count=${count}`;
+  // (in the app there is no point asking a server: it can't reach this phone's bridge)
+  const proxy = IN_APP_BUILD ? null : apiUrl("/api/bg/proxy");
+  if (!proxy) throw new Error("Bridge fetch failed: the bridge didn't answer");
+  const proxied = `${proxy}?base=${encodeURIComponent(base)}&count=${count}`;
   const res2 = await fetch(proxied, { cache: "no-store" });
   if (!res2.ok) throw new Error(`Bridge fetch failed: ${res2.status}`);
   const json = (await res2.json()) as XdripEntry[];

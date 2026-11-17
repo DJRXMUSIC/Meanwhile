@@ -30,7 +30,7 @@ final class Settings {
     private static final String KEY_STALE_ALERT = "stale_alert";
     private static final String KEY_STALE_MINUTES = "stale_minutes";
     static final String KEY_PORT_MOVED = "port_moved_off_xdrip";
-    private static final String KEY_WEB_URL = "web_url";
+    private static final String KEY_API_BASE = "api_base";
 
     private final SharedPreferences p;
 
@@ -50,13 +50,13 @@ final class Settings {
         e.commit();
     }
 
-    /** Address of the Meanwhile site the app shows; "" until it has been entered. */
-    String webUrl() {
-        return p.getString(KEY_WEB_URL, "");
+    /** Address of the Meanwhile server (AI advice, cloud backup); "" until it has been entered. */
+    String apiBase() {
+        return p.getString(KEY_API_BASE, "");
     }
 
-    void setWebUrl(String url) {
-        p.edit().putString(KEY_WEB_URL, url == null ? "" : url).commit();
+    void setApiBase(String url) {
+        p.edit().putString(KEY_API_BASE, url == null ? "" : url).commit();
     }
 
     int port() {

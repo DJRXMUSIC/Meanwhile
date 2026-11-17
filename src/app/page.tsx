@@ -18,6 +18,7 @@ import { useAutoSync } from "@/lib/useAutoSync";
 import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
+import { apiUrl, NO_SERVER_MESSAGE } from "@/lib/native";
 
 export default function HomePage() {
   const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
@@ -60,7 +61,9 @@ export default function HomePage() {
         iob,
         recent_doses: insulinList.map((d) => ({ ts: d.ts, units: d.units, kind: d.kind })),
       };
-      const res = await fetch("/api/ai/decide", {
+      const url = apiUrl("/api/ai/decide");
+      if (!url) throw new Error(NO_SERVER_MESSAGE);
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

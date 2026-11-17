@@ -8,6 +8,10 @@ on:
       - 'public/**'
       - 'package*.json'
       - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/**'
       - '.github/workflows/android-bridge.yml'
   pull_request:
     paths:
@@ -16,6 +20,10 @@ on:
       - 'public/**'
       - 'package*.json'
       - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/**'
       - '.github/workflows/android-bridge.yml'
   workflow_dispatch:
 
@@ -40,6 +48,16 @@ jobs:
           java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
+
+      # The APK includes Meanwhile's pages, which the Gradle build builds from this commit.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the web app's packages
+        working-directory: .
+        run: npm ci
 
       - name: Signing key (optional secret)
         env:
@@ -116,7 +134,7 @@ jobs:
           name: fake-eversense-test-double-apk
           path: apks
 
-      # The app shows Meanwhile, so the emulator test needs the site: this commit's,
+      # The emulator test backs up to a Meanwhile server: this commit's website version,
       # built and served here, reached from the emulator through adb reverse.
       - uses: actions/setup-node@v4
         with:

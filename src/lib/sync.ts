@@ -1,6 +1,7 @@
 "use client";
 
 import { db } from "./db";
+import { apiUrl, NO_SERVER_MESSAGE } from "./native";
 
 // Multi-device sync via the built-in /api/sync route (Netlify Blobs in
 // production, in-memory fallback during local dev). The server never
@@ -96,8 +97,10 @@ export async function applyPull(pull: Partial<Record<TableName, unknown[]>>): Pr
 export async function syncOnce(syncKey: string): Promise<SyncResult> {
   if (!syncKey) throw new Error("Missing sync key");
   const since = lastSync();
+  const url = apiUrl("/api/sync");
+  if (!url) throw new Error(NO_SERVER_MESSAGE);
   const push = await buildPush(since);
-  const res = await fetch("/api/sync", {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sync_key: syncKey, since, push }),

@@ -12,24 +12,33 @@ const buildId =
   process.env.VERCEL_GIT_COMMIT_SHA ||
   Date.now().toString(36);
 
+// EVERBRIDGE_APP=1 (npm run build:app, scripts/build-app-web.mjs) builds the
+// pages that go inside the EverBridge Android app: plain files in out/, no
+// server. The API routes are set aside for that build; the app calls them on
+// the Meanwhile server instead (see lib/native.ts apiUrl).
+const app = process.env.EVERBRIDGE_APP === "1";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  env: { NEXT_PUBLIC_BUILD_ID: buildId },
+  env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_EVERBRIDGE_APP: app ? "1" : "" },
   experimental: {
     optimizePackageImports: ["dexie", "dexie-react-hooks"],
   },
-  async headers() {
-    return [
-      {
-        source: "/sw.js",
-        headers: [
-          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
-          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "Service-Worker-Allowed", value: "/" },
-        ],
-      },
-    ];
-  },
+  ...(app ? { output: "export" as const, trailingSlash: true } : {}),
+  ...(app ? {} : { headers }),
 };
+
+async function headers() {
+  return [
+    {
+      source: "/sw.js",
+      headers: [
+        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+  ];
+}
 
 export default nextConfig;
