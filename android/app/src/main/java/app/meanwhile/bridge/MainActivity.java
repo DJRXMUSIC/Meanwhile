@@ -595,7 +595,7 @@ public class MainActivity extends Activity {
         if (web != null && !page.isEmpty()) open(AppPages.HOME + page);
         final String click = intent.getStringExtra(EXTRA_CLICK);
         final String until = intent.getStringExtra(EXTRA_UNTIL);
-        webCheck(click != null && CLICKABLE.contains(click) ? click : null, until, 0);
+        webCheck(click != null && CLICKABLE.contains(click) ? click : null, until, 0, String.valueOf(System.nanoTime()));
     }
 
     /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */
@@ -621,12 +621,14 @@ public class MainActivity extends Activity {
      * text when it contains {@code until} (by default, the reading tile's countdown), or
      * after 90 s regardless.
      */
-    private void webCheck(String click, String until, int attempt) {
+    private void webCheck(String click, String until, int attempt, String checkId) {
         if (web == null || isFinishing()) return;
+        // once per check (an earlier check on the same page may have pressed another button)
+        final String id = JSONObject.quote(checkId);
         final String script = "(function(){"
-                + (click == null ? "" : "if(!window.__ebClicked){var b=[].slice.call(document.querySelectorAll('button'))"
+                + (click == null ? "" : "if(window.__ebClicked!==" + id + "){var b=[].slice.call(document.querySelectorAll('button'))"
                 + ".filter(function(x){return x.textContent.trim()===" + JSONObject.quote(click) + "})[0];"
-                + "if(b){window.__ebClicked=1;b.click();}}")
+                + "if(b){window.__ebClicked=" + id + ";b.click();}}")
                 + "return document.body?document.body.innerText:''})()";
         web.evaluateJavascript(script, text -> {
             final String t = text == null ? "" : text;
@@ -644,7 +646,7 @@ public class MainActivity extends Activity {
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
                         + match + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
-                handler.postDelayed(() -> webCheck(click, until, attempt + 1), 1_000);
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, checkId), 1_000);
             }
         });
     }
