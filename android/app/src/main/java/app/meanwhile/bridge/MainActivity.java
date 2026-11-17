@@ -677,16 +677,31 @@ public class MainActivity extends Activity {
      * after 90 s regardless.
      */
     private void webCheck(String click, String until, int attempt, String checkId) {
+        webCheck(click, until, attempt, new boolean[]{false});
+    }
+
+    /**
+     * Presses {@code click} (once) with a real tap on the button, as a finger would: a script
+     * click isn't a user gesture, and the page's file picker only opens for one.
+     */
+    private void webCheck(String click, String until, int attempt, boolean[] tapped) {
         if (web == null || isFinishing()) return;
-        // once per check (an earlier check on the same page may have pressed another button)
-        final String id = JSONObject.quote(checkId);
+        final boolean findButton = click != null && !tapped[0];
         final String script = "(function(){"
-                + (click == null ? "" : "if(window.__ebClicked!==" + id + "){var b=[].slice.call(document.querySelectorAll('button'))"
+                + (findButton ? "var b=[].slice.call(document.querySelectorAll('button'))"
                 + ".filter(function(x){return x.textContent.trim()===" + JSONObject.quote(click) + "})[0];"
-                + "if(b){window.__ebClicked=" + id + ";b.click();}}")
+                + "if(b){b.scrollIntoView({block:'center'});var r=b.getBoundingClientRect();"
+                + "return 'TAP '+(r.left+r.width/2)+' '+(r.top+r.height/2);}" : "")
                 + "return document.body?document.body.innerText:''})()";
         web.evaluateJavascript(script, text -> {
             final String t = text == null ? "" : text;
+            if (findButton && t.startsWith("\"TAP ")) {
+                final String[] xy = t.substring(5, t.length() - 1).split(" ");
+                tap(Float.parseFloat(xy[0]), Float.parseFloat(xy[1]));
+                tapped[0] = true;
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, tapped), 1_000);
+                return;
+            }
             final boolean done = until != null ? t.contains(until) : (t.contains("next in") || t.contains("due now"));
             if (done || attempt >= 90) {
                 // the line that matched first (it can be far down a long page), then the start of the page
@@ -699,11 +714,32 @@ public class MainActivity extends Activity {
                     }
                 }
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
-                        + match + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
+                        + (click != null ? " tapped=" + tapped[0] : "") + match
+                        + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
-                handler.postDelayed(() -> webCheck(click, until, attempt + 1, checkId), 1_000);
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, tapped), 1_000);
             }
         });
+    }
+
+    /** A finger tap on the page at CSS pixel (x, y). */
+    private void tap(float cssX, float cssY) {
+        if (web == null) return;
+        final float d = getResources().getDisplayMetrics().density;
+        final float x = cssX * d;
+        final float y = cssY * d;
+        final long down = android.os.SystemClock.uptimeMillis();
+        final android.view.MotionEvent press = android.view.MotionEvent.obtain(down, down,
+                android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        web.dispatchTouchEvent(press);
+        press.recycle();
+        handler.postDelayed(() -> {
+            if (web == null) return;
+            final android.view.MotionEvent lift = android.view.MotionEvent.obtain(down, android.os.SystemClock.uptimeMillis(),
+                    android.view.MotionEvent.ACTION_UP, x, y, 0);
+            web.dispatchTouchEvent(lift);
+            lift.recycle();
+        }, 80);
     }
 
     // ------------------------------------------------------------------ view helpers
