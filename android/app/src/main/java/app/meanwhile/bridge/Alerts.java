@@ -328,6 +328,15 @@ final class Alerts {
         schedule(c, s, now);
     }
 
+    /** Cancels a snooze (or a snooze set before the alert fired): it sounds again at once if it still applies. */
+    static synchronized void unsnooze(Context c, String why) {
+        final ActiveAlert a = active(c);
+        if (a == null || !a.snoozed) return;
+        saveActive(c, null);
+        EventLog.log(c, "ALERT", "snooze cancelled (" + why + ")");
+        checkNow(c, "unsnoozed");
+    }
+
     /** A swipe on the notification snoozes it, as in xDrip+, unless it came straight after posting. */
     static void dismissed(Context c, long raisedAt) {
         if (System.currentTimeMillis() - raisedAt < MINIMUM_CANCEL_DELAY) {

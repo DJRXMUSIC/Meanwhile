@@ -72,6 +72,9 @@ adb install -r -g "$APP_APK" >/dev/null
 adb install -r -g "$FAKE_APK" >/dev/null
 adb shell cmd notification allow_listener "$APP/$APP.EversenseListenerService"
 adb shell dumpsys deviceidle whitelist +$APP >/dev/null
+# "display over other apps" off until the alarm checks: otherwise a built-in alert's alarm would
+# cover the Meanwhile page the checks below use (install -g may already allow it)
+adb shell appops set "$APP" SYSTEM_ALERT_WINDOW deny
 # the app icon: with no Meanwhile address yet it asks for one, and brings the bridge up
 adb shell am start -W -n "$APP/.MainActivity" >/dev/null
 adb forward tcp:$PORT tcp:$PORT >/dev/null

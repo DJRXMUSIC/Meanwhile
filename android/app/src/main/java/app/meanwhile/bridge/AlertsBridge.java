@@ -142,6 +142,23 @@ final class AlertsBridge {
         }, null);
     }
 
+    static void unsnooze(Context c, Runnable done) {
+        Alerts.post(c, x -> {
+            Alerts.unsnooze(x, "Alerts tab");
+            if (done != null) done.run();
+        }, null);
+    }
+
+    /** Turns one alert on or off. */
+    static void setActive(Context c, String uuid, boolean on, Runnable done) {
+        Alerts.post(c, x -> {
+            final AlertConfig cfg = Alerts.config(x);
+            final AlertRule r = cfg.rule(uuid);
+            if (r != null && r.active != on) Alerts.update(x, cfg.withRule(r.withActive(on)), Alerts.title(r) + (on ? " on" : " off"));
+            if (done != null) done.run();
+        }, null);
+    }
+
     static void disable(Context c, String which, int minutes, Runnable done) {
         if (!"low".equals(which) && !"high".equals(which) && !"all".equals(which)) return;
         Alerts.post(c, x -> {
