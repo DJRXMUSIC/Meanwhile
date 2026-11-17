@@ -19,6 +19,7 @@ import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 import { apiUrl, NO_SERVER_MESSAGE } from "@/lib/native";
+import { SHOW_NOW } from "@/lib/alerts";
 
 export default function HomePage() {
   const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
@@ -37,6 +38,13 @@ export default function HomePage() {
     overlay24, setOverlay24,
     overlay48, setOverlay48,
   } = useChartView();
+
+  // Back to Now after a snooze: the chart shows the present, from the top.
+  useEffect(() => {
+    const show = () => { setPanMs(0); window.scrollTo({ top: 0 }); };
+    window.addEventListener(SHOW_NOW, show);
+    return () => window.removeEventListener(SHOW_NOW, show);
+  }, [setPanMs]);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

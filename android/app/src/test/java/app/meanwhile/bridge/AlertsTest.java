@@ -507,6 +507,11 @@ public class AlertsTest {
         assertTrue(Alerts.active(app).snoozed);
         assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
 
+        // when it was snoozed reaches the tab (it goes back to Now 2 minutes later if left alone)
+        final long at = Alerts.snoozedAt(app);
+        assertTrue(Math.abs(System.currentTimeMillis() - at) < 10_000);
+        assertTrue(AlertsBridge.state(app).contains("\"snoozed_at\":" + at));
+
         AlertsBridge.unsnooze(app, null);
         idleAlertThread();
         assertFalse(Alerts.active(app).snoozed);

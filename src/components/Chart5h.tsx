@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { BgReading, InsulinDose } from "@/lib/types";
 
 // Five-zone bolus chart with a piecewise-linear y-axis:
@@ -47,6 +47,19 @@ function yOf(mgdl: number): number {
 // itself is always drawn at full fidelity; only the per-point circles are
 // thinned, and only on the wide windows where they'd overlap anyway.
 const MAX_BG_DOTS = 150;
+
+// Readings further apart than this are not joined: a gap in the data is drawn as a gap,
+// not as a straight line across the missed readings.
+const GAP_MS = 15 * 60_000;
+
+// Colors by range: below the target, in it, above it.
+const LOW_COLOR = "#ff5c7c";
+const IN_COLOR = "#5cd0ff";
+const HIGH_COLOR = "#ffb84d";
+
+function rangeColor(mgdl: number, low: number, high: number): string {
+  return mgdl < low ? LOW_COLOR : mgdl > high ? HIGH_COLOR : IN_COLOR;
+}
 
 // Ghost trace from `offsetMs` in the past, shifted forward so it overlays
 // the current window at the same wall-clock time.
@@ -112,6 +125,14 @@ function Chart5hImpl({
   // Declared up here because the overlay memos below skip their work while
   // a pan gesture is in flight.
   const [dragging, setDragging] = useState(false);
+  // A tapped point: its reading, shown until the next tap (or 8 s).
+  const [inspect, setInspect] = useState<BgReading | null>(null);
+  useEffect(() => {
+    if (!inspect) return;
+    const t = setTimeout(() => setInspect(null), 8_000);
+    return () => clearTimeout(t);
+  }, [inspect]);
+  const clipId = useId().replace(/:/g, "");
 
   const bgInWin = useMemo(
     () => readings.filter((r) => r.ts >= minT && r.ts <= maxT).sort((a, b) => a.ts - b.ts),
@@ -127,6 +148,7 @@ function Chart5hImpl({
   // BG dots. The line is always drawn from every reading; the circles are
   // thinned on wide windows, where at 5-minute CGM cadence they would
   // otherwise put ~288 nodes in the DOM to draw a solid smear.
+  const latest = bgInWin.length ? bgInWin[bgInWin.length - 1] : null;
   const bgDots = useMemo(() => {
     const step = Math.max(1, Math.ceil(bgInWin.length / MAX_BG_DOTS));
     return step === 1 ? bgInWin : bgInWin.filter((_, i) => i % step === 0);
@@ -152,7 +174,10 @@ function Chart5hImpl({
     (pts: { ts: number; mgdl: number }[]) =>
       pts.length
         ? pts
-            .map((r, i) => `${i === 0 ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`)
+            .map((r, i) => {
+              const jump = i === 0 || r.ts - pts[i - 1].ts > GAP_MS;
+              return `${jump ? "M" : "L"} ${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`;
+            })
             .join(" ")
         : "",
     [xOf]
@@ -293,6 +318,16 @@ function Chart5hImpl({
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current) {
       try { e.currentTarget.releasePointerCapture(dragRef.current.pid); } catch {}
+      // a tap (no real movement): show the reading nearest that time
+      const moved = Math.hypot(e.clientX - dragRef.current.startX, e.clientY - dragRef.current.startY);
+      if (moved < DIRECTION_THRESHOLD_PX && e.type === "pointerup" && containerRef.current && bgInWin.length) {
+        const box = containerRef.current.getBoundingClientRect();
+        const x = ((e.clientX - box.left) / (box.width || 1)) * view.w;
+        const t = minT + ((x - pad.l) / plotW) * (maxT - minT);
+        let best = bgInWin[0];
+        for (const r of bgInWin) if (Math.abs(r.ts - t) < Math.abs(best.ts - t)) best = r;
+        setInspect(inspect && inspect.ts === best.ts ? null : best);
+      }
     }
     // Land on the final position even if the gesture ended between frames.
     if (rafRef.current != null) {
@@ -355,16 +390,28 @@ function Chart5hImpl({
         // directional-intent check in onPointerMove, vertical scrolls
         // never get hijacked by the chart.
         className={`relative select-none rounded-2xl overflow-hidden ${dragging ? "cursor-grabbing" : "cursor-grab"} ${isHistorical ? "ring-2 ring-warn/40" : "ring-1 ring-white/5"}`}
-        style={{ touchAction: "pan-y", backgroundColor: "#0a0a0c" }}
+        style={{ touchAction: "pan-y", backgroundColor: "rgb(var(--c-surface))" }}
       >
         <svg
           viewBox={`0 0 ${view.w} ${view.h}`}
-          className="w-full h-[400px]"
+          className="w-full h-[400px] text-ink"
           preserveAspectRatio="none"
         >
+          {/* Clips for coloring the line by range */}
+          <defs>
+            <clipPath id={`${clipId}-hi`}>
+              <rect x={0} y={0} width={view.w} height={yOf(targetHigh)} />
+            </clipPath>
+            <clipPath id={`${clipId}-in`}>
+              <rect x={0} y={yOf(targetHigh)} width={view.w} height={yOf(targetLow) - yOf(targetHigh)} />
+            </clipPath>
+            <clipPath id={`${clipId}-lo`}>
+              <rect x={0} y={yOf(targetLow)} width={view.w} height={view.h - yOf(targetLow)} />
+            </clipPath>
+          </defs>
           {/* Compressed-zone tints */}
-          <rect x={pad.l} y={pad.t} width={plotW} height={highH} fill="rgba(255,255,255,0.025)" />
-          <rect x={pad.l} y={pad.t + highH + midH} width={plotW} height={lowH} fill="rgba(255,255,255,0.025)" />
+          <rect x={pad.l} y={pad.t} width={plotW} height={highH} fill="currentColor" fillOpacity={0.03} />
+          <rect x={pad.l} y={pad.t + highH + midH} width={plotW} height={lowH} fill="currentColor" fillOpacity={0.03} />
 
           {/* In-range band */}
           <rect
@@ -372,7 +419,8 @@ function Chart5hImpl({
             y={yOf(targetHigh)}
             width={plotW}
             height={yOf(targetLow) - yOf(targetHigh)}
-            fill="rgba(92,208,255,0.07)"
+            fill={IN_COLOR}
+            fillOpacity={0.08}
           />
 
           {/* Y reference lines (labels rendered as HTML overlay below) */}
@@ -384,11 +432,8 @@ function Chart5hImpl({
                 key={`yl-${v}`}
                 x1={pad.l} x2={pad.l + plotW}
                 y1={yOf(v)} y2={yOf(v)}
-                stroke={
-                  isBoundary ? "rgba(255,255,255,0.22)" :
-                  isTarget ? "rgba(255,184,77,0.40)" :
-                  "rgba(255,255,255,0.08)"
-                }
+                stroke={isTarget ? HIGH_COLOR : "currentColor"}
+                strokeOpacity={isBoundary ? 0.22 : isTarget ? 0.45 : 0.09}
                 strokeDasharray={isTarget ? "6 5" : isBoundary ? "0" : "2 6"}
                 strokeWidth={isBoundary ? 1.6 : 1.4}
               />
@@ -401,7 +446,8 @@ function Chart5hImpl({
               key={`xt-${t}`}
               x1={xOf(t)} x2={xOf(t)}
               y1={pad.t} y2={pad.t + plotH}
-              stroke="rgba(255,255,255,0.05)"
+              stroke="currentColor"
+              strokeOpacity={0.06}
               strokeWidth={1.2}
             />
           ))}
@@ -433,32 +479,61 @@ function Chart5hImpl({
           )}
 
           {/* BG line + dots */}
-          {bgPath && (
+          {bgPath && ([["hi", HIGH_COLOR], ["in", IN_COLOR], ["lo", LOW_COLOR]] as const).map(([zone, color]) => (
             <path
+              key={`bgl-${zone}`}
               d={bgPath}
+              clipPath={`url(#${clipId}-${zone})`}
               fill="none"
-              stroke="#5cd0ff"
+              stroke={color}
               strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-          )}
+          ))}
           {bgDots.map((r) => (
             <circle
               key={`bg-${r.ts}`}
               cx={xOf(r.ts)}
               cy={yOf(r.mgdl)}
               r="4.5"
-              fill={r.mgdl < 70 ? "#ff5c7c" : r.mgdl > 250 ? "#ff5c7c" : "#5cd0ff"}
+              fill={rangeColor(r.mgdl, targetLow, targetHigh)}
             />
           ))}
+          {/* the newest reading, ringed */}
+          {showNowLine && latest && (
+            <circle
+              cx={xOf(latest.ts)}
+              cy={yOf(latest.mgdl)}
+              r="11"
+              fill="none"
+              stroke={rangeColor(latest.mgdl, targetLow, targetHigh)}
+              strokeOpacity={0.6}
+              strokeWidth={3}
+            />
+          )}
+          {/* the tapped reading */}
+          {inspect && inspect.ts >= minT && inspect.ts <= maxT && (
+            <>
+              <line
+                x1={xOf(inspect.ts)} x2={xOf(inspect.ts)}
+                y1={pad.t} y2={pad.t + plotH}
+                stroke="currentColor"
+                strokeOpacity={0.35}
+                strokeWidth={1.5}
+              />
+              <circle cx={xOf(inspect.ts)} cy={yOf(inspect.mgdl)} r="8"
+                fill={rangeColor(inspect.mgdl, targetLow, targetHigh)} stroke="rgb(var(--c-surface))" strokeWidth={3} />
+            </>
+          )}
 
           {/* Now line — only when not panned */}
           {showNowLine && (
             <line
               x1={xOf(now)} x2={xOf(now)}
               y1={pad.t} y2={pad.t + plotH}
-              stroke="rgba(255,255,255,0.32)"
+              stroke="currentColor"
+              strokeOpacity={0.32}
               strokeDasharray="4 4"
               strokeWidth={1.5}
             />
@@ -479,7 +554,7 @@ function Chart5hImpl({
                   key={`dm-${d.id ?? d.ts}-${d.units}`}
                   points={`${cx},${cy - s} ${cx + s},${cy} ${cx},${cy + s} ${cx - s},${cy}`}
                   fill={fill}
-                  stroke="#0a0a0c"
+                  style={{ stroke: "rgb(var(--c-surface))" }}
                   strokeWidth={2.5}
                 />
               );
@@ -491,7 +566,7 @@ function Chart5hImpl({
                 cy={cy}
                 r={7}
                 fill={fill}
-                stroke="#0a0a0c"
+                style={{ stroke: "rgb(var(--c-surface))" }}
                 strokeWidth={2.5}
               />
             );
@@ -509,7 +584,7 @@ function Chart5hImpl({
             return (
               <div
                 key={`ylabel-${v}`}
-                className="num absolute text-[13px] text-white/65 font-medium"
+                className="num absolute text-[13px] text-muted font-medium"
                 style={{
                   top: `${pctY}%`,
                   left: 0,
@@ -532,7 +607,7 @@ function Chart5hImpl({
             return (
               <div
                 key={`xlabel-${t}`}
-                className="num absolute text-[13px] text-white/65"
+                className="num absolute text-[13px] text-muted"
                 style={{
                   left: `${pctX}%`,
                   bottom: 4,
@@ -546,11 +621,12 @@ function Chart5hImpl({
 
           {/* Legend (top-right) */}
           <div
-            className="absolute right-2 flex items-center gap-2.5 px-2.5 py-1 rounded-lg bg-black/55 ring-1 ring-white/10 text-[12px] text-white/85"
+            className="absolute right-2 flex items-center gap-2.5 px-2.5 py-1 rounded-lg bg-surface/85 ring-1 ring-white/10 text-[12px] text-ink/85"
             style={{ top: 6 }}
           >
             <span className="flex items-center gap-1">
-              <span className="block w-4 h-[3px] rounded-full" style={{ background: "#5cd0ff" }} />
+              <span className="block w-4 h-[3px] rounded-full"
+                style={{ background: `linear-gradient(90deg, ${LOW_COLOR}, ${IN_COLOR}, ${HIGH_COLOR})` }} />
               BG
             </span>
             <span className="flex items-center gap-1">
@@ -575,6 +651,43 @@ function Chart5hImpl({
             )}
           </div>
 
+          {/* The newest reading's value, beside it */}
+          {showNowLine && latest && !inspect && (
+            <div
+              className="num absolute text-sm font-bold"
+              style={{
+                left: `${(xOf(latest.ts) / view.w) * 100}%`,
+                top: `${(yOf(latest.mgdl) / view.h) * 100}%`,
+                transform: "translate(-120%, -150%)",
+                color: rangeColor(latest.mgdl, targetLow, targetHigh),
+              }}
+            >
+              {latest.mgdl}
+            </div>
+          )}
+
+          {/* The tapped reading: value and time */}
+          {inspect && inspect.ts >= minT && inspect.ts <= maxT && (() => {
+            const pctX = (xOf(inspect.ts) / view.w) * 100;
+            return (
+              <div
+                className="num absolute rounded-lg bg-surface/95 ring-1 ring-white/15 px-2.5 py-1.5 shadow-lg shadow-black/30 text-center"
+                style={{
+                  left: `${pctX}%`,
+                  top: 34,
+                  transform: pctX > 75 ? "translateX(-100%)" : pctX < 25 ? "none" : "translateX(-50%)",
+                }}
+              >
+                <div className="text-lg font-bold leading-none" style={{ color: rangeColor(inspect.mgdl, targetLow, targetHigh) }}>
+                  {inspect.mgdl} <span className="text-[11px] font-normal text-muted">mg/dL</span>
+                </div>
+                <div className="text-[11px] text-muted mt-0.5">
+                  {String(new Date(inspect.ts).getHours()).padStart(2, "0")}:{String(new Date(inspect.ts).getMinutes()).padStart(2, "0")}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bolus / basal unit labels above their markers */}
           {dosesInWin.map((d) => {
             const interpolated = bgAt(d.ts, bgInWin);
@@ -590,7 +703,7 @@ function Chart5hImpl({
                                   "translate(-50%, -100%)";
             const isBasal = d.kind === "basal";
             const ringColor = isBasal ? "#3ddc97" : "#ff9d4d";
-            const textColor = isBasal ? "#bff5d2" : "#ffd6a8";
+            const textColor = ringColor;
             const tag = isBasal ? "basal" : null;
             return (
               <div
@@ -603,7 +716,7 @@ function Chart5hImpl({
                 }}
               >
                 <div
-                  className="num leading-none px-2 py-1 rounded-md bg-black/85 ring-1 text-base font-bold whitespace-nowrap shadow-lg shadow-black/40 flex items-center gap-1.5"
+                  className="num leading-none px-2 py-1 rounded-md bg-surface/90 ring-1 text-base font-bold whitespace-nowrap shadow-lg shadow-black/30 flex items-center gap-1.5"
                   style={{ borderColor: ringColor, color: textColor, boxShadow: `0 0 0 1px ${ringColor} inset` }}
                 >
                   {tag && (

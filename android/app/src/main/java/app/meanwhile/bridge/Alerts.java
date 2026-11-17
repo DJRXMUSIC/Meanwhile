@@ -52,6 +52,8 @@ final class Alerts {
     private static final String PREFS = "alerts";
     private static final String KEY_CONFIG = "config";
     private static final String KEY_ACTIVE = "active";
+    /** When the latest snooze was pressed (the app returns to Now 2 minutes after one, if left alone). */
+    private static final String KEY_SNOOZED_AT = "snoozed_at";
     static final double MGDL_PER_MMOL = 18.0182;
 
     /** Makes the sound and vibration. Replaced in tests. */
@@ -128,6 +130,10 @@ final class Alerts {
 
     static AlertConfig config(Context c) {
         return AlertConfig.fromJson(prefs(c).getString(KEY_CONFIG, null));
+    }
+
+    static long snoozedAt(Context c) {
+        return prefs(c).getLong(KEY_SNOOZED_AT, 0);
     }
 
     static ActiveAlert active(Context c) {
@@ -324,6 +330,7 @@ final class Alerts {
         final long now = System.currentTimeMillis();
         final ActiveAlert s = AlertEngine.snooze(a, minutes, now);
         saveActive(c, s);
+        prefs(c).edit().putLong(KEY_SNOOZED_AT, now).commit();
         EventLog.log(c, "ALERT", "snoozed for " + minutes + " min (" + why + ")");
         schedule(c, s, now);
     }
