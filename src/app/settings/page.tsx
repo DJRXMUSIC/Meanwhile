@@ -109,7 +109,12 @@ export default function SettingsPage() {
       {inApp && (
         <Section title="Glucose alerts">
           <button
-            onClick={() => (everBridge()?.openAlerts ?? everBridge()?.openStatus)?.()}
+            onClick={() => {
+              // call each as a method of the app's object: Android refuses one taken off it
+              const app = everBridge();
+              if (app?.openAlerts) app.openAlerts();
+              else app?.openStatus?.();
+            }}
             className="w-full rounded-xl bg-accent text-white px-3 py-2.5 text-sm font-medium"
           >
             Open glucose alerts

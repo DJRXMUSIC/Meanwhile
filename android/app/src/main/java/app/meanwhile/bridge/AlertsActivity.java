@@ -2,6 +2,7 @@ package app.meanwhile.bridge;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.TimePickerDialog;
 import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -28,6 +29,7 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -39,6 +41,7 @@ import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.UUID;
 
 import app.meanwhile.bridge.core.ActiveAlert;
 import app.meanwhile.bridge.core.AlertConfig;
@@ -48,9 +51,10 @@ import app.meanwhile.bridge.core.Reading;
 import app.meanwhile.bridge.core.XdripAlertImport;
 
 /**
- * Glucose alerts: what is going on now (snooze it, or turn alerts off for a while, as on
- * xDrip+'s snooze screen), the alerts imported from xDrip+ (on/off, edit, sound, test), the
- * options for all alerts, and the import itself.
+ * Glucose alerts, laid out like xDrip+'s: its Snooze screen (the alert going on, Snooze,
+ * Disable / Re-Enable alerts), its Glucose Level Alerts List with the Edit Alert screen (same
+ * fields), and its Glucose Alerts Settings, with one addition: the Alert volume level. Then
+ * the optional import of an xDrip+ settings file.
  *
  * Automation (the emulator test, from adb only): {@code --es action import_file} imports
  * {@code xdrip-import.xml} from the app's external files folder; {@code --es action snooze}
@@ -64,11 +68,11 @@ public class AlertsActivity extends Activity {
     static final String AUTOMATION_TOKEN = "automation-token";
     private static final int REQ_IMPORT = 1;
     private static final int REQ_SOUND = 2;
-    private static final String STATE_SOUND_FOR = "sound_for";
     private static final long REFRESH_MS = 5_000L;
     private static final int RED = Color.rgb(211, 47, 47);
     private static final int AMBER = Color.rgb(239, 152, 0);
     private static final int GREEN = Color.rgb(46, 160, 120);
+    private static final int GREY = Color.rgb(140, 140, 140);
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refresher = new Runnable() {
@@ -83,12 +87,12 @@ public class AlertsActivity extends Activity {
     private LinearLayout nowBox;
     private LinearLayout listBox;
     private LinearLayout optionsBox;
-    private String soundFor;
+    /** The snooze length picked on this screen (0: the alert's own). */
+    private int snoozeChoice;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (savedInstanceState != null) soundFor = savedInstanceState.getString(STATE_SOUND_FOR);
         showOverLockScreen(getIntent());
         final TypedValue tv = new TypedValue();
         getTheme().resolveAttribute(android.R.attr.textColorPrimary, tv, true);
@@ -104,12 +108,6 @@ public class AlertsActivity extends Activity {
         setIntent(intent);
         showOverLockScreen(intent);
         renderNow();
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle out) {
-        super.onSaveInstanceState(out);
-        out.putString(STATE_SOUND_FOR, soundFor);
     }
 
     @Override
@@ -173,61 +171,58 @@ public class AlertsActivity extends Activity {
         renderOptions();
     }
 
+    /** xDrip+'s Snooze screen: the alert going on, Snooze, and Disable / Re-Enable alerts. */
     private void renderNow() {
         nowBox.removeAllViews();
         final AlertConfig cfg = Alerts.config(this);
         final long now = System.currentTimeMillis();
-        if (cfg.rules.isEmpty()) {
-            nowBox.addView(text("No alerts set up yet. Import them from xDrip+ below.", 15, true));
-            return;
-        }
         final ActiveAlert a = Alerts.active(this);
         final AlertRule rule = a == null ? null : cfg.rule(a.uuid);
-        if (rule == null) {
-            final TextView t = text("No alert going on", 17, true);
+        if (cfg.rules.isEmpty()) {
+            nowBox.addView(text("No alerts set up. Create one below.", 15, true));
+        } else if (rule == null) {
+            final TextView t = text("No active alert", 17, true);
             t.setTextColor(GREEN);
             nowBox.addView(t);
         } else if (a.snoozed && !a.ready(now)) {
-            nowBox.addView(text(title(rule) + " — snoozed until " + clock(a.nextAlertAt), 17, true));
+            nowBox.addView(text(title(rule) + " snoozed until " + clock(a.nextAlertAt), 17, true));
         } else {
             final Reading last = Bridge.get(this).latest();
-            final TextView t = text(title(rule) + (last != null ? ": " + Alerts.bgText(last.mgdl, cfg.units)
-                    + " " + unitLabel(cfg.units) : ""), 20, true);
+            final TextView t = text("Active alert: " + title(rule) + (last != null ? " · " + Alerts.bgText(last.mgdl, cfg.units)
+                    + " " + unitLabel(cfg.units) : ""), 19, true);
             t.setTextColor(rule.above ? AMBER : RED);
             nowBox.addView(t);
+            if (snoozeChoice == 0) snoozeChoice = rule.snoozeMinutes();
             final LinearLayout row = new LinearLayout(this);
-            row.addView(button("Snooze " + rule.snoozeMinutes() + " min", v ->
-                    Alerts.post(this, x -> Alerts.snoozeDefault(x, "alerts screen"), this::renderNow)), weight());
-            row.addView(button("Snooze for…", v -> pickMinutes("Snooze for", m ->
-                    Alerts.post(this, x -> Alerts.snooze(x, m, "alerts screen"), this::renderNow))), weight());
-            nowBox.addView(row);
+            row.addView(button("Snooze", v -> {
+                final int m = snoozeChoice;
+                Alerts.post(this, x -> Alerts.snooze(x, m, "alerts screen"), this::renderNow);
+            }), weight());
+            row.addView(button("for " + minutesLabel(snoozeChoice) + " ▾", v -> pickMinutes("Snooze for", m -> {
+                snoozeChoice = m;
+                renderNow();
+            })), weight());
+            nowBox.addView(row, marginTop(4));
         }
 
         final AlertSettings s = cfg.settings;
-        addDisabledRow(s.allDisabledUntil, "All alerts", "all", now);
-        addDisabledRow(s.lowDisabledUntil, "Low alerts", "low", now);
-        addDisabledRow(s.highDisabledUntil, "High alerts", "high", now);
-        final LinearLayout off = new LinearLayout(this);
-        off.addView(smallButton("All off for…", v -> pickMinutes("Turn all alerts off for", m -> disable("all", m))), weight());
-        off.addView(smallButton("Lows off for…", v -> pickMinutes("Turn low alerts off for", m -> disable("low", m))), weight());
-        off.addView(smallButton("Highs off for…", v -> pickMinutes("Turn high alerts off for", m -> disable("high", m))), weight());
-        nowBox.addView(off, marginTop(6));
+        nowBox.addView(disableRow(s.lowDisabledUntil, "Low", "low", now), marginTop(8));
+        nowBox.addView(disableRow(s.highDisabledUntil, "High", "high", now));
+        nowBox.addView(disableRow(s.allDisabledUntil, "All", "all", now));
 
         final NotificationManager dnd = getSystemService(NotificationManager.class);
         if (dnd != null && !dnd.isNotificationPolicyAccessGranted()) {
-            final TextView hint = text("Critical alerts sound on silent and through Do Not Disturb, except its "
-                    + "\"total silence\" setting. To get through that too, allow Meanwhile v5 to manage Do Not Disturb.", 13, false);
+            final TextView hint = text("Alerts with Override phone Silent Mode sound on silent and through Do Not Disturb, "
+                    + "except its \"total silence\" setting. To get through that too, allow Meanwhile v5 to manage Do Not Disturb.", 13, false);
             hint.setAlpha(0.75f);
-            nowBox.addView(hint, marginTop(8));
+            nowBox.addView(hint, marginTop(10));
             nowBox.addView(smallButton("Allow through Do Not Disturb", v ->
                     open(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))));
         }
-
         if (Build.VERSION.SDK_INT >= 34) {
-            final NotificationManager nm = getSystemService(NotificationManager.class);
             boolean allowed = true;
             try {
-                allowed = nm == null || nm.canUseFullScreenIntent();
+                allowed = dnd == null || dnd.canUseFullScreenIntent();
             } catch (RuntimeException ignored) {
                 // can't tell: say nothing
             }
@@ -241,127 +236,208 @@ public class AlertsActivity extends Activity {
         }
     }
 
-    private void addDisabledRow(long until, String label, String which, long now) {
-        if (until <= now) return;
-        final LinearLayout row = new LinearLayout(this);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        final TextView t = text(label + " off until " + clock(until), 14, true);
-        t.setTextColor(AMBER);
-        row.addView(t, weight());
-        row.addView(smallButton("Turn back on", v -> disable(which, 0)));
-        nowBox.addView(row, marginTop(6));
+    /** xDrip+'s "Disable Low alerts" / "Re-Enable Low Alerts" (and High, All). */
+    private View disableRow(long until, String label, String which, long now) {
+        if (until > now) {
+            final LinearLayout row = new LinearLayout(this);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            final TextView t = text(label + " alerts off until " + clock(until), 14, true);
+            t.setTextColor(AMBER);
+            row.addView(t, weight());
+            row.addView(smallButton("Re-Enable " + label + " Alerts", v -> disable(which, 0)));
+            return row;
+        }
+        return smallButton("Disable " + label + " alerts", v ->
+                pickMinutes("Disable " + label.toLowerCase(Locale.ROOT) + " alerts for", m -> disable(which, m)));
     }
 
     private void disable(String which, int minutes) {
         Alerts.post(this, x -> Alerts.disable(x, which, minutes), this::renderNow);
     }
 
+    /** xDrip+'s Glucose Level Alerts List: create buttons, then the low alerts and the high alerts. */
     private void renderList() {
         listBox.removeAllViews();
         final AlertConfig cfg = Alerts.config(this);
-        for (AlertRule r : cfg.rules) listBox.addView(ruleCard(cfg, r), marginTop(8));
-        if (cfg.rules.isEmpty()) {
-            final TextView t = text("None yet.", 14, false);
-            t.setAlpha(0.7f);
-            listBox.addView(t);
+        final LinearLayout create = new LinearLayout(this);
+        create.addView(button("Create low alert", v -> edit(null, false)), weight());
+        create.addView(button("Create high alert", v -> edit(null, true)), weight());
+        listBox.addView(create);
+        final TextView hint = text("Tap an alert to edit it.", 12, false);
+        hint.setAlpha(0.6f);
+        listBox.addView(hint);
+        for (boolean above : new boolean[]{false, true}) {
+            final TextView h = text(above ? "HIGH ALERTS" : "LOW ALERTS", 12, true);
+            h.setAlpha(0.6f);
+            listBox.addView(h, marginTop(10));
+            boolean any = false;
+            for (AlertRule r : cfg.rules) {
+                if (r.above != above) continue;
+                any = true;
+                listBox.addView(ruleRow(cfg, r), marginTop(6));
+            }
+            if (!any) {
+                final TextView none = text("None", 14, false);
+                none.setAlpha(0.6f);
+                listBox.addView(none);
+            }
         }
     }
 
-    private View ruleCard(AlertConfig cfg, AlertRule r) {
+    private View ruleRow(AlertConfig cfg, AlertRule r) {
         final LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(14), dp(10), dp(14), dp(10));
         card.setBackground(rounded(Color.argb(22, Color.red(textColor), Color.green(textColor), Color.blue(textColor))));
-
-        final LinearLayout top = new LinearLayout(this);
-        top.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        final TextView name = text(title(r), 16, true);
-        name.setTextColor(r.above ? AMBER : RED);
-        top.addView(name, weight());
-        final CheckBox on = new CheckBox(this);
-        on.setText("On");
-        on.setChecked(r.active);
-        on.setOnCheckedChangeListener((b, checked) -> {
-            final AlertConfig c = Alerts.config(this);
-            final AlertRule cur = c.rule(r.uuid);
-            if (cur == null || cur.active == checked) return;
-            save(c.withRule(cur.withActive(checked)), title(cur) + (checked ? " on" : " off"), true);
-        });
-        top.addView(on);
-        card.addView(top);
-
+        final TextView name = text(title(r) + (r.active ? "" : " (disabled)"), 16, true);
+        name.setTextColor(!r.active ? GREY : r.above ? AMBER : RED);
+        card.addView(name);
         card.addView(text(describe(r, cfg.units), 13, false));
-        final TextView sound = text("Sound: …", 13, false);
-        card.addView(sound);
-        describeSound(r.soundUri, sound);
-
-        final LinearLayout row = new LinearLayout(this);
-        row.addView(smallButton("Edit", v -> edit(r.uuid)), weight());
-        row.addView(smallButton("Sound", v -> chooseSound(r.uuid)), weight());
-        row.addView(smallButton("Test", v -> test(r.uuid)), weight());
-        card.addView(row);
+        final TextView tone = text("Alert Tone: …", 13, false);
+        card.addView(tone);
+        describeSound(r.soundUri, tone);
+        card.setOnClickListener(v -> edit(r.uuid, r.above));
+        card.setOnLongClickListener(v -> {
+            edit(r.uuid, r.above);
+            return true;
+        });
         return card;
     }
 
+    /** xDrip+'s Glucose Alerts Settings, with this app's volume level added. */
     private void renderOptions() {
         optionsBox.removeAllViews();
         final AlertSettings s = Alerts.config(this).settings;
-        optionsBox.addView(text("Volume", 14, true));
+
+        optionsBox.addView(text("Alert Volume Profile", 15, true));
         final RadioGroup profile = new RadioGroup(this);
-        final String[][] profiles = {
-                {AlertSettings.ASCENDING, "Ascending: vibrate first, then louder each minute"},
-                {AlertSettings.HIGH, "High: full volume"},
-                {AlertSettings.MEDIUM, "Medium"},
-                {AlertSettings.VIBRATE_ONLY, "Vibrate only"},
-                {AlertSettings.SILENT, "Silent"},
-        };
-        for (int i = 0; i < profiles.length; i++) {
+        for (int i = 0; i < PROFILES.length; i++) {
             final RadioButton b = new RadioButton(this);
             b.setId(i + 1);
-            b.setText(profiles[i][1]);
+            b.setText(PROFILES[i][1]);
             profile.addView(b);
-            if (profiles[i][0].equals(s.profile)) profile.check(i + 1);
+            if (PROFILES[i][0].equals(s.profile)) profile.check(i + 1);
         }
         profile.setOnCheckedChangeListener((g, id) -> {
-            final String p = profiles[id - 1][0];
+            final String p = PROFILES[id - 1][0];
             final AlertConfig c = Alerts.config(this);
-            if (!p.equals(c.settings.profile)) save(c.withSettings(c.settings.withProfile(p)), "volume " + p, false);
+            if (!p.equals(c.settings.profile)) save(c.withSettings(c.settings.withProfile(p)), "volume profile " + p, false);
         });
         optionsBox.addView(profile);
 
-        optionsBox.addView(option("Ascending: vibration only for the first 3 minutes", s.delayAscending3min,
-                (c, v) -> with(c, v, c.smartSnoozing, c.smartAlerting, c.startSnoozed, c.ascendingToMedium, c.noAlarmsDuringCalls)));
-        optionsBox.addView(option("Ascending: go no louder than medium", s.ascendingToMedium,
-                (c, v) -> with(c, c.delayAscending3min, c.smartSnoozing, c.smartAlerting, c.startSnoozed, v, c.noAlarmsDuringCalls)));
-        optionsBox.addView(option("Smart snoozing: don't repeat while glucose is already heading back", s.smartSnoozing,
-                (c, v) -> with(c, c.delayAscending3min, v, c.smartAlerting, c.startSnoozed, c.ascendingToMedium, c.noAlarmsDuringCalls)));
-        optionsBox.addView(option("Smart alerting: don't start while glucose is already heading back", s.smartAlerting,
-                (c, v) -> with(c, c.delayAscending3min, c.smartSnoozing, v, c.startSnoozed, c.ascendingToMedium, c.noAlarmsDuringCalls)));
-        optionsBox.addView(option("Start snoozed: a new alert starts silent", s.startSnoozed,
-                (c, v) -> with(c, c.delayAscending3min, c.smartSnoozing, c.smartAlerting, v, c.ascendingToMedium, c.noAlarmsDuringCalls)));
-        optionsBox.addView(option("No sound or vibration during a phone call", s.noAlarmsDuringCalls,
-                (c, v) -> with(c, c.delayAscending3min, c.smartSnoozing, c.smartAlerting, c.startSnoozed, c.ascendingToMedium, v)));
+        final TextView volumeLabel = text(volumeText(s.volumePercent), 15, true);
+        optionsBox.addView(volumeLabel, marginTop(10));
+        // 1% to 100%, every percent: the slider, ±1% for fine tuning, and quick picks
+        final SeekBar volume = new SeekBar(this);
+        volume.setMax(100 - AlertSettings.MIN_VOLUME);
+        volume.setProgress(s.volumePercent - AlertSettings.MIN_VOLUME);
+        volume.setContentDescription("Alert volume");
+        volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar b, int progress, boolean fromUser) {
+                volumeLabel.setText(volumeText(AlertSettings.MIN_VOLUME + progress));
+            }
 
-        final CheckBox stale = new CheckBox(this);
-        stale.setText("No alerts when the latest reading is older than (minutes):");
-        stale.setChecked(s.disableStale);
-        optionsBox.addView(stale);
+            @Override
+            public void onStartTrackingTouch(SeekBar b) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar b) {
+                setVolume(AlertSettings.MIN_VOLUME + b.getProgress());
+            }
+        });
+        optionsBox.addView(volume);
+        final LinearLayout steps = new LinearLayout(this);
+        for (int delta : new int[]{-5, -1, 1, 5}) {
+            steps.addView(smallButton((delta > 0 ? "+" : "−") + Math.abs(delta) + "%", v -> {
+                volume.setProgress(Math.max(0, Math.min(volume.getMax(), volume.getProgress() + delta)));
+                setVolume(AlertSettings.MIN_VOLUME + volume.getProgress());
+            }), weight());
+        }
+        optionsBox.addView(steps);
+        final LinearLayout picks = new LinearLayout(this);
+        for (int p : new int[]{10, 25, 50, 75, 100}) {
+            picks.addView(smallButton(p + "%", v -> {
+                volume.setProgress(p - AlertSettings.MIN_VOLUME);
+                setVolume(p);
+            }), weight());
+        }
+        optionsBox.addView(picks);
+        optionsBox.addView(button("Test volume", v -> testVolume()));
+        optionsBox.addView(summary("Any level from 1% to 100%. How loud alerts get, as a share of the phone's alarm (or media) volume. High plays at "
+                + "this level, Medium at 70% of it, and Ascending climbs to it. xDrip+ has no such setting: it always "
+                + "plays at 100%."));
+
+        optionsBox.addView(option("Smart Snoozing", "Keep snoozing if glucose is heading in the right direction",
+                s.smartSnoozing, (c, v) -> c.withOptions(v, c.smartAlerting, c.disableStale,
+                        c.staleMinutes, c.startSnoozed, c.delayAscending3min, c.ascendingToMedium, c.noAlarmsDuringCalls)));
+        optionsBox.addView(option("Smart Alerting", "Don't alert if glucose is heading in the right direction",
+                s.smartAlerting, (c, v) -> c.withOptions(c.smartSnoozing, v, c.disableStale, c.staleMinutes, c.startSnoozed,
+                        c.delayAscending3min, c.ascendingToMedium, c.noAlarmsDuringCalls)));
+        optionsBox.addView(option("Don't alarm during phone calls", "Alarms silenced during telephone calls",
+                s.noAlarmsDuringCalls, (c, v) -> c.withOptions(c.smartSnoozing, c.smartAlerting, c.disableStale, c.staleMinutes,
+                        c.startSnoozed, c.delayAscending3min, c.ascendingToMedium, v)));
+        optionsBox.addView(option("Start Snoozed", "Alerts start out snoozed and must persist for a while to actually trigger",
+                s.startSnoozed, (c, v) -> c.withOptions(c.smartSnoozing, c.smartAlerting, c.disableStale, c.staleMinutes, v,
+                        c.delayAscending3min, c.ascendingToMedium, c.noAlarmsDuringCalls)));
+        optionsBox.addView(option("Suppress Alerts if missed readings",
+                "Suppress snoozed and active alerts after predefined period of missed readings",
+                s.disableStale, (c, v) -> c.withOptions(c.smartSnoozing, c.smartAlerting, v, c.staleMinutes, c.startSnoozed,
+                        c.delayAscending3min, c.ascendingToMedium, c.noAlarmsDuringCalls)));
+        optionsBox.addView(summary("Suppress snoozed and active alerts after .. minutes (minimum 10)"));
         final EditText staleMin = field(InputType.TYPE_CLASS_NUMBER);
         staleMin.setText(String.valueOf(s.staleMinutes));
-        optionsBox.addView(staleMin);
-        final Runnable saveStale = () -> {
-            final AlertConfig c = Alerts.config(this);
-            final int m = clamp(parseInt(staleMin.getText().toString(), c.settings.staleMinutes), 5, 1440);
-            if (c.settings.disableStale == stale.isChecked() && c.settings.staleMinutes == m) return;
-            final AlertSettings o = c.settings;
-            save(c.withSettings(new AlertSettings(o.profile, o.smartSnoozing, o.smartAlerting, stale.isChecked(), m,
-                    o.startSnoozed, o.delayAscending3min, o.ascendingToMedium, o.noAlarmsDuringCalls,
-                    o.allDisabledUntil, o.lowDisabledUntil, o.highDisabledUntil)), "stale data " + stale.isChecked() + " " + m + " min", false);
-        };
-        stale.setOnCheckedChangeListener((b, v) -> saveStale.run());
         staleMin.setOnFocusChangeListener((v, focused) -> {
-            if (!focused) saveStale.run();
+            if (focused) return;
+            final AlertConfig c = Alerts.config(this);
+            final int m = clamp(parseInt(staleMin.getText().toString(), c.settings.staleMinutes), 10, 1440);
+            staleMin.setText(String.valueOf(m));
+            if (c.settings.staleMinutes == m) return;
+            final AlertSettings o = c.settings;
+            save(c.withSettings(o.withOptions(o.smartSnoozing, o.smartAlerting, o.disableStale, m, o.startSnoozed,
+                    o.delayAscending3min, o.ascendingToMedium, o.noAlarmsDuringCalls)), "suppress after " + m + " min", false);
         });
+        optionsBox.addView(staleMin);
+
+        final TextView asc = text("Ascending Volume settings", 15, true);
+        optionsBox.addView(asc, marginTop(12));
+        optionsBox.addView(option("Delay Ascending Volume", "For ascending volume profile, delay the start of the alert "
+                        + "sound by 3 minutes. The vibration (if enabled) starts as soon as the alert triggers regardless of this setting.",
+                s.delayAscending3min, (c, v) -> c.withOptions(c.smartSnoozing, c.smartAlerting, c.disableStale, c.staleMinutes,
+                        c.startSnoozed, v, c.ascendingToMedium, c.noAlarmsDuringCalls)));
+        optionsBox.addView(option("Ascend to medium", "When enabled, ascending volume profile will ascend to medium volume "
+                        + "instead of maximum",
+                s.ascendingToMedium, (c, v) -> c.withOptions(c.smartSnoozing, c.smartAlerting, c.disableStale, c.staleMinutes,
+                        c.startSnoozed, c.delayAscending3min, v, c.noAlarmsDuringCalls)));
+    }
+
+    /** xDrip+'s profiles, in its order and with its names. */
+    static final String[][] PROFILES = {
+            {AlertSettings.HIGH, "High"},
+            {AlertSettings.MEDIUM, "Medium"},
+            {AlertSettings.ASCENDING, "Ascending"},
+            {AlertSettings.VIBRATE_ONLY, "Vibrate only"},
+            {AlertSettings.SILENT, "Silent"},
+    };
+
+    static String volumeText(int percent) {
+        return "Alert volume: " + percent + "%";
+    }
+
+    private void setVolume(int percent) {
+        final AlertConfig c = Alerts.config(this);
+        if (c.settings.volumePercent == percent) return;
+        save(c.withSettings(c.settings.withVolume(percent)), "alert volume " + percent + "%", false);
+    }
+
+    /** Plays the first alert's sound (or the beep) at the level set. */
+    private void testVolume() {
+        final AlertConfig c = Alerts.config(this);
+        final AlertRule r = c.rules.isEmpty()
+                ? new AlertRule("test", "Test", true, false, 0, true, 0, 0, 1, 0, false, true, true, AlertConfig.SOUND_BEEP)
+                : c.rules.get(0);
+        playTest(r, "Playing " + title(r) + "'s sound at " + c.settings.volumePercent + "%.");
     }
 
     /** Stores a change on the alert thread (which checks again with it), then redraws. */
@@ -377,21 +453,26 @@ public class AlertsActivity extends Activity {
         AlertSettings apply(AlertSettings current, boolean value);
     }
 
-    private CheckBox option(String label, boolean checked, Change change) {
+    private View option(String title, String summary, boolean checked, Change change) {
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
         final CheckBox b = new CheckBox(this);
-        b.setText(label);
+        b.setText(title);
         b.setChecked(checked);
         b.setOnCheckedChangeListener((v, value) -> {
             final AlertConfig c = Alerts.config(this);
-            save(c.withSettings(change.apply(c.settings, value)), label + ": " + value, false);
+            save(c.withSettings(change.apply(c.settings, value)), title + ": " + value, false);
         });
-        return b;
+        box.addView(b);
+        box.addView(summary(summary));
+        return box;
     }
 
-    private static AlertSettings with(AlertSettings o, boolean delay, boolean smartSnoozing, boolean smartAlerting,
-                                      boolean startSnoozed, boolean toMedium, boolean calls) {
-        return new AlertSettings(o.profile, smartSnoozing, smartAlerting, o.disableStale, o.staleMinutes, startSnoozed,
-                delay, toMedium, calls, o.allDisabledUntil, o.lowDisabledUntil, o.highDisabledUntil);
+    private TextView summary(String s) {
+        final TextView t = text(s, 12, false);
+        t.setAlpha(0.65f);
+        t.setPadding(dp(4), 0, 0, dp(6));
+        return t;
     }
 
     // ---------------------------------------------------------------- texts
@@ -403,13 +484,12 @@ public class AlertsActivity extends Activity {
 
     static String describe(AlertRule r, String units) {
         final StringBuilder sb = new StringBuilder();
-        sb.append(r.above ? "High: at or above " : "Low: at or below ").append(threshold(r.threshold, units))
-                .append(' ').append(unitLabel(units));
+        sb.append(r.above ? "≥ " : "≤ ").append(threshold(r.threshold, units)).append(' ').append(unitLabel(units));
         sb.append(r.allDay ? " · all day" : " · " + hhmm(r.startMinutes) + "–" + hhmm(r.endMinutes));
-        sb.append("\nRepeats every ").append(r.minutesBetween).append(" min · snooze ").append(r.snoozeMinutes()).append(" min");
+        sb.append("\nRe-raise every ").append(r.minutesBetween).append(" min · Default Snooze ").append(r.snoozeMinutes()).append(" min");
         sb.append("\nVibrate ").append(r.vibrate ? "on" : "off");
-        sb.append(r.overrideSilent ? " · critical: sounds on silent and Do Not Disturb" : " · quiet when the phone is on silent");
-        sb.append(r.forceSpeaker ? " · alarm volume" : " · media volume");
+        sb.append(r.overrideSilent ? " · Override Silent Mode" : " · quiet in silent mode");
+        sb.append(r.forceSpeaker ? " · Force Speaker" : "");
         return sb.toString();
     }
 
@@ -422,6 +502,11 @@ public class AlertsActivity extends Activity {
         return "mmol".equals(units) ? "mmol/L" : "mg/dL";
     }
 
+    static String minutesLabel(int m) {
+        return m < 60 ? m + " minutes" : m % 60 == 0 ? (m / 60) + (m == 60 ? " hour" : " hours")
+                : (m / 60) + " h " + (m % 60) + " min";
+    }
+
     private static String hhmm(int minutes) {
         return String.format(Locale.ROOT, "%02d:%02d", (minutes / 60) % 24, minutes % 60);
     }
@@ -432,8 +517,8 @@ public class AlertsActivity extends Activity {
 
     /** Fills in the sound's name, and whether this app can open it, off the main thread. */
     private void describeSound(String uri, TextView into) {
-        if (uri == null) {
-            into.setText("Sound: the phone's alarm sound");
+        if (uri == null || AlertConfig.SOUND_BEEP.equals(uri) || AlertConfig.SOUND_VIBRATION.equals(uri)) {
+            into.setText("Alert Tone: " + (uri == null ? "the phone's alarm sound" : soundName(this, uri)));
             return;
         }
         final Context app = getApplicationContext();
@@ -442,10 +527,10 @@ public class AlertsActivity extends Activity {
             final boolean opens = canOpen(app, uri);
             handler.post(() -> {
                 if (opens) {
-                    into.setText("Sound: " + name);
+                    into.setText("Alert Tone: " + name);
                 } else {
-                    into.setText("Sound: " + name + " — Meanwhile v5 can't open this file, so it plays the phone's alarm "
-                            + "sound. Tap Sound to pick the file again.");
+                    into.setText("Alert Tone: " + name + " — Meanwhile v5 can't open this file, so it plays the phone's "
+                            + "alarm sound. Edit the alert and choose the file again.");
                     into.setTextColor(AMBER);
                 }
             });
@@ -479,72 +564,230 @@ public class AlertsActivity extends Activity {
         return last != null ? last : uri;
     }
 
-    // ---------------------------------------------------------------- actions
+    // ---------------------------------------------------------------- the alert editor (xDrip+'s Edit Alert)
 
-    private void edit(String uuid) {
+    /** The alert being edited, before Save alert. */
+    private static final class Draft {
+        String uuid;
+        boolean isNew;
+        boolean above;
+        String sound;
+        int defaultSnooze;
+        boolean allDay;
+        int start;
+        int end;
+        TextView toneLabel;
+        Button snoozeButton;
+        Button startButton;
+        Button endButton;
+    }
+
+    private Draft draft;
+
+    /** @param uuid the alert to edit, or null to create one ({@code above}: high or low) */
+    private void edit(String uuid, boolean above) {
         final AlertConfig cfg = Alerts.config(this);
-        final AlertRule r = cfg.rule(uuid);
-        if (r == null) return;
+        final AlertRule existing = uuid == null ? null : cfg.rule(uuid);
+        if (uuid != null && existing == null) return;
+        final AlertRule r = existing != null ? existing : new AlertRule(UUID.randomUUID().toString(),
+                above ? "High alert" : "Low alert", true, above, above ? 180 : 70, true, 0, 0, above ? 3 : 1,
+                above ? 120 : 35, true, true, true, above ? AlertConfig.SOUND_VIBRATION : AlertConfig.SOUND_BEEP);
+        final Draft d = new Draft();
+        d.uuid = r.uuid;
+        d.isNew = existing == null;
+        d.above = r.above;
+        d.sound = r.soundUri;
+        d.defaultSnooze = r.snoozeMinutes();
+        d.allDay = r.allDay;
+        d.start = r.startMinutes;
+        d.end = r.endMinutes;
+        draft = d;
+
         final LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), 0);
-        box.addView(text((r.above ? "Alert at or above (" : "Alert at or below (") + unitLabel(cfg.units) + ")", 13, false));
+        box.setPadding(dp(20), dp(8), dp(20), dp(8));
+
+        box.addView(label("Alert Name:"));
+        final EditText name = field(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        name.setText(r.name.trim());
+        box.addView(name);
+
+        box.addView(label("Threshold (" + (r.above ? "at or above, " : "at or below, ") + unitLabel(cfg.units) + "):"));
         final EditText threshold = field(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         threshold.setText(threshold(r.threshold, cfg.units));
         box.addView(threshold);
-        box.addView(text("Repeat every (minutes)", 13, false));
-        final EditText repeat = field(InputType.TYPE_CLASS_NUMBER);
-        repeat.setText(String.valueOf(r.minutesBetween));
-        box.addView(repeat);
-        box.addView(text("Snooze for (minutes)", 13, false));
-        final EditText snooze = field(InputType.TYPE_CLASS_NUMBER);
-        snooze.setText(String.valueOf(r.snoozeMinutes()));
-        box.addView(snooze);
-        final CheckBox vibrate = new CheckBox(this);
-        vibrate.setText("Vibrate");
-        vibrate.setChecked(r.vibrate);
-        box.addView(vibrate);
+
+        box.addView(label("Default Snooze:"));
+        d.snoozeButton = smallButton(minutesLabel(d.defaultSnooze), v -> pickMinutes("Default Snooze", m -> {
+            d.defaultSnooze = m;
+            d.snoozeButton.setText(minutesLabel(m));
+        }));
+        box.addView(d.snoozeButton);
+
+        box.addView(label("Re-raise every x minutes if unacknowledged:"));
+        final EditText reraise = field(InputType.TYPE_CLASS_NUMBER);
+        reraise.setText(String.valueOf(r.minutesBetween));
+        box.addView(reraise);
+
+        box.addView(label("Alert Tone:"));
+        d.toneLabel = text("", 14, false);
+        describeSound(d.sound, d.toneLabel);
+        box.addView(d.toneLabel);
+        box.addView(smallButton("Choose file", v -> chooseSound(d)));
+
+        box.addView(label("Select time for alert:"));
+        final CheckBox allDay = new CheckBox(this);
+        allDay.setText("all day");
+        allDay.setChecked(d.allDay);
+        box.addView(allDay);
+        final LinearLayout times = new LinearLayout(this);
+        d.startButton = smallButton(hhmm(d.start), v -> pickTime(d.start, m -> {
+            d.start = m;
+            d.startButton.setText(hhmm(m));
+        }));
+        d.endButton = smallButton(hhmm(d.end), v -> pickTime(d.end, m -> {
+            d.end = m;
+            d.endButton.setText(hhmm(m));
+        }));
+        times.addView(d.startButton, weight());
+        times.addView(text("  –  ", 14, false));
+        times.addView(d.endButton, weight());
+        times.setVisibility(d.allDay ? View.GONE : View.VISIBLE);
+        allDay.setOnCheckedChangeListener((b, on) -> {
+            d.allDay = on;
+            times.setVisibility(on ? View.GONE : View.VISIBLE);
+        });
+        box.addView(times);
+
         final CheckBox override = new CheckBox(this);
-        override.setText("Critical: sound even on silent and Do Not Disturb");
+        override.setText("Override phone Silent Mode");
         override.setChecked(r.overrideSilent);
         box.addView(override);
+        final TextView silentWarning = text("Warning, no alert will be played when phone in silent/vibrate mode!!!", 13, true);
+        silentWarning.setTextColor(RED);
+        silentWarning.setVisibility(r.overrideSilent ? View.GONE : View.VISIBLE);
+        override.setOnCheckedChangeListener((b, on) -> silentWarning.setVisibility(on ? View.GONE : View.VISIBLE));
+        box.addView(silentWarning);
+        final CheckBox speaker = new CheckBox(this);
+        speaker.setText("Force Speaker");
+        speaker.setChecked(r.forceSpeaker);
+        box.addView(speaker);
+        box.addView(summary("Plays on the alarm volume (else the media volume)."));
+        final CheckBox vibrate = new CheckBox(this);
+        vibrate.setText("Vibrate on alert");
+        vibrate.setChecked(r.vibrate);
+        box.addView(vibrate);
+        final CheckBox disabled = new CheckBox(this);
+        disabled.setText("Disable alert");
+        disabled.setChecked(!r.active);
+        box.addView(disabled);
+
+        final LinearLayout tests = new LinearLayout(this);
+        tests.addView(smallButton("Test alert", v -> playTest(new AlertRule(d.uuid, name.getText().toString(), true, d.above,
+                r.threshold, true, 0, 0, 1, 0, vibrate.isChecked(), true, speaker.isChecked(), d.sound),
+                "Playing the alert's tone at " + Alerts.config(this).settings.volumePercent + "% (Alert volume).")), weight());
+        if (!d.isNew) {
+            tests.addView(smallButton("Snooze alert before it fires", v -> pickMinutes("Snooze before it fires, for", m ->
+                    Alerts.post(this, x -> Alerts.preSnooze(x, d.uuid, m), this::renderNow))), weight());
+        }
+        box.addView(tests, marginTop(8));
+
         final ScrollView scroll = new ScrollView(this);
         scroll.addView(box);
-
-        final AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(title(r))
+        final AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle((d.isNew ? "Adding " : "Editing ") + (d.above ? "high" : "low") + " alert")
                 .setView(scroll)
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-        d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            final double mgdl = parseThreshold(threshold.getText().toString(), cfg.units);
-            final int rep = parseInt(repeat.getText().toString(), -1);
-            final int sn = parseInt(snooze.getText().toString(), -1);
-            if (mgdl < 40 || mgdl > 400) {
-                threshold.setError("Between " + threshold(40, cfg.units) + " and " + threshold(400, cfg.units));
-                return;
+                .setPositiveButton("Save alert", null)
+                .setNegativeButton("Cancel", null);
+        if (!d.isNew) b.setNeutralButton("Remove alert", null);
+        final AlertDialog dialog = b.create();
+        dialog.setOnDismissListener(x -> {
+            if (draft == d) draft = null;
+        });
+        dialog.setOnShowListener(x -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                final double mgdl = parseThreshold(threshold.getText().toString(), cfg.units);
+                final int rep = parseInt(reraise.getText().toString(), -1);
+                if (mgdl < 40 || mgdl > 400) {
+                    threshold.setError("Between " + threshold(40, cfg.units) + " and " + threshold(400, cfg.units));
+                    return;
+                }
+                if (rep < 1 || rep > 120) {
+                    reraise.setError("1 to 120 minutes");
+                    return;
+                }
+                final String n = name.getText().toString().trim();
+                final AlertRule saved = new AlertRule(d.uuid, n.isEmpty() ? (d.above ? "High alert" : "Low alert") : n,
+                        !disabled.isChecked(), d.above, mgdl, d.allDay, d.start, d.end, rep, d.defaultSnooze,
+                        vibrate.isChecked(), override.isChecked(), speaker.isChecked(), d.sound);
+                save(Alerts.config(this).withSaved(saved), (d.isNew ? "added " : "saved ") + saved + " re-raise " + rep
+                        + " snooze " + d.defaultSnooze + " vibrate " + saved.vibrate + " override silent " + saved.overrideSilent
+                        + " force speaker " + saved.forceSpeaker + " tone " + saved.soundUri, true);
+                dialog.dismiss();
+            });
+            if (!d.isNew) {
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> new AlertDialog.Builder(this)
+                        .setTitle("Remove " + title(r) + "?")
+                        .setPositiveButton("Remove alert", (q, w) -> {
+                            save(Alerts.config(this).without(d.uuid), "removed " + r, true);
+                            dialog.dismiss();
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show());
             }
-            if (rep < 1 || rep > 120) {
-                repeat.setError("1 to 120 minutes");
-                return;
-            }
-            if (sn < 1 || sn > 1440) {
-                snooze.setError("1 to 1440 minutes");
-                return;
-            }
-            final AlertConfig c = Alerts.config(this);
-            final AlertRule cur = c.rule(uuid);
-            if (cur == null) {
-                d.dismiss();
-                return;
-            }
-            final AlertRule changed = cur.withSettings(mgdl, rep, sn, vibrate.isChecked(), override.isChecked());
-            save(c.withRule(changed), title(changed) + ": " + changed + " repeat " + rep + " snooze " + sn
-                    + " vibrate " + changed.vibrate + " override silent " + changed.overrideSilent, true);
-            d.dismiss();
-        }));
-        d.show();
+        });
+        dialog.show();
+    }
+
+    private TextView label(String s) {
+        final TextView t = text(s, 13, true);
+        t.setPadding(0, dp(10), 0, 0);
+        return t;
+    }
+
+    private interface MinuteOfDay {
+        void picked(int minuteOfDay);
+    }
+
+    private void pickTime(int minuteOfDay, MinuteOfDay then) {
+        new TimePickerDialog(this, (v, h, m) -> then.picked(h * 60 + m), minuteOfDay / 60 % 24, minuteOfDay % 60, true).show();
+    }
+
+    private void chooseSound(Draft d) {
+        new AlertDialog.Builder(this)
+                .setTitle("Alert Tone")
+                .setItems(new String[]{"Beep (built in)", "Vibration sound (built in)", "Choose your own sound file…",
+                        "The phone's alarm sound"}, (q, which) -> {
+                    if (which == 0) {
+                        setDraftSound(d, AlertConfig.SOUND_BEEP);
+                    } else if (which == 1) {
+                        setDraftSound(d, AlertConfig.SOUND_VIBRATION);
+                    } else if (which == 2) {
+                        final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                .addCategory(Intent.CATEGORY_OPENABLE)
+                                .setType("audio/*");
+                        startForResult(i, REQ_SOUND);
+                    } else {
+                        setDraftSound(d, null);
+                    }
+                })
+                .show();
+    }
+
+    private void setDraftSound(Draft d, String uri) {
+        d.sound = uri;
+        d.toneLabel.setTextColor(textColor);
+        describeSound(uri, d.toneLabel);
+    }
+
+    private void playTest(AlertRule r, String message) {
+        Alerts.test(this, r);
+        new AlertDialog.Builder(this)
+                .setTitle("Testing " + title(r))
+                .setMessage(message)
+                .setPositiveButton("Stop", (q, w) -> Alerts.stopTest(this))
+                .setOnCancelListener(q -> Alerts.stopTest(this))
+                .show();
     }
 
     static double parseThreshold(String s, String units) {
@@ -554,47 +797,6 @@ public class AlertsActivity extends Activity {
         } catch (NumberFormatException e) {
             return -1;
         }
-    }
-
-    private void chooseSound(String uuid) {
-        new AlertDialog.Builder(this)
-                .setTitle("Sound")
-                .setItems(new String[]{"Beep (built in)", "Vibration sound (built in)", "Choose your own sound file…",
-                        "The phone's alarm sound"}, (d, which) -> {
-                    if (which == 0) {
-                        setSound(uuid, AlertConfig.SOUND_BEEP);
-                    } else if (which == 1) {
-                        setSound(uuid, AlertConfig.SOUND_VIBRATION);
-                    } else if (which == 2) {
-                        soundFor = uuid;
-                        final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
-                                .addCategory(Intent.CATEGORY_OPENABLE)
-                                .setType("audio/*");
-                        if (!startForResult(i, REQ_SOUND)) soundFor = null;
-                    } else {
-                        setSound(uuid, null);
-                    }
-                })
-                .show();
-    }
-
-    private void setSound(String uuid, String uri) {
-        final AlertConfig c = Alerts.config(this);
-        final AlertRule cur = c.rule(uuid);
-        if (cur == null) return;
-        save(c.withRule(cur.withSound(uri)), title(cur) + " sound " + (uri == null ? "phone alarm" : uri), true);
-    }
-
-    private void test(String uuid) {
-        final AlertRule r = Alerts.config(this).rule(uuid);
-        if (r == null) return;
-        Alerts.test(this, r);
-        new AlertDialog.Builder(this)
-                .setTitle("Testing " + title(r))
-                .setMessage("Playing the alert's sound at full " + (r.forceSpeaker ? "alarm" : "media") + " volume.")
-                .setPositiveButton("Stop", (d, w) -> Alerts.stopTest(this))
-                .setOnCancelListener(d -> Alerts.stopTest(this))
-                .show();
     }
 
     private void startImport() {
@@ -619,15 +821,17 @@ public class AlertsActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         final Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
         if (requestCode == REQ_SOUND) {
-            final String uuid = soundFor;
-            soundFor = null;
-            if (uri == null || uuid == null) return;
+            if (uri == null) return;
             try {
                 getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } catch (SecurityException e) {
                 EventLog.log(this, "ALERT", "no lasting access to " + uri + ": " + e.getMessage());
             }
-            setSound(uuid, uri.toString());
+            if (draft != null) {
+                setDraftSound(draft, uri.toString());
+            } else {
+                Toast.makeText(this, "Open the alert again and choose the file", Toast.LENGTH_LONG).show();
+            }
         } else if (requestCode == REQ_IMPORT && uri != null) {
             final Context app = getApplicationContext();
             new Thread(() -> {
@@ -694,11 +898,7 @@ public class AlertsActivity extends Activity {
 
     private void pickMinutes(String title, Minutes then) {
         final String[] labels = new String[Alerts.SNOOZE_CHOICES.length];
-        for (int i = 0; i < labels.length; i++) {
-            final int m = Alerts.SNOOZE_CHOICES[i];
-            labels[i] = m < 60 ? m + " minutes" : m % 60 == 0 ? (m / 60) + (m == 60 ? " hour" : " hours")
-                    : (m / 60) + " h " + (m % 60) + " min";
-        }
+        for (int i = 0; i < labels.length; i++) labels[i] = minutesLabel(Alerts.SNOOZE_CHOICES[i]);
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setItems(labels, (d, which) -> then.picked(Alerts.SNOOZE_CHOICES[which]))
@@ -721,19 +921,20 @@ public class AlertsActivity extends Activity {
         final int pad = dp(16);
         col.setPadding(pad, pad, pad, pad);
         col.addView(text("Glucose alerts", 20, true));
+        col.addView(header("Snooze"));
 
         nowBox = new LinearLayout(this);
         nowBox.setOrientation(LinearLayout.VERTICAL);
         nowBox.setPadding(dp(16), dp(12), dp(16), dp(12));
         nowBox.setBackground(rounded(Color.argb(22, Color.red(textColor), Color.green(textColor), Color.blue(textColor))));
-        col.addView(nowBox, marginTop(12));
+        col.addView(nowBox);
 
-        col.addView(header("Alerts"));
+        col.addView(header("Glucose Level Alerts List"));
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
         col.addView(listBox);
 
-        col.addView(header("For all alerts"));
+        col.addView(header("Glucose Alerts Settings"));
         optionsBox = new LinearLayout(this);
         optionsBox.setOrientation(LinearLayout.VERTICAL);
         col.addView(optionsBox);
@@ -741,7 +942,8 @@ public class AlertsActivity extends Activity {
         col.addView(header("Import from xDrip+ (optional)"));
         final TextView how = text("The alerts above start out as your xDrip+ ones. To bring over a different xDrip+ setup: "
                 + "in xDrip+, menu → Import / Export Features → Save settings, then tap Import and pick "
-                + "com.eveningoutpost.dexdrip_preferences.xml from Downloads/xDrip-export. It replaces the alerts above.", 13, false);
+                + "com.eveningoutpost.dexdrip_preferences.xml from Downloads/xDrip-export. It replaces the alerts above "
+                + "(the Alert volume stays as set here).", 13, false);
         how.setAlpha(0.75f);
         col.addView(how);
         col.addView(button("Import xDrip+ settings file", v -> startImport()));

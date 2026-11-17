@@ -96,10 +96,14 @@ Meanwhile v5 has xDrip+'s low and high glucose alerts built in, and starts with 
 | LOW WARNING | at or below 90 mg/dL, all day | every 1 min | 60 min | Beep (built in) | off |
 | Elevated Alert | at or above 155 mg/dL, all day | every 3 min | 90 min | Vibration sound (built in) | on |
 
-Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High (full volume), smart snoozing and smart alerting off, no alarms during phone calls.
+Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High, smart snoozing and smart alerting off, no alarms during phone calls. **Alert volume 50%** (see below).
 
 * **Find them:** Meanwhile → **Settings** → **Open glucose alerts** (the first item), or press and hold the app icon → **Glucose alerts**, or the bridge screen's **Glucose alerts** button under the last reading.
-* **Change them:** on the alerts screen. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; Meanwhile v5 keeps access to it.
+* **The screen is laid out like xDrip+'s**, with its names:
+  * **Snooze:** the alert going on, **Snooze** for a chosen time, **Disable / Re-Enable Low, High, All alerts**.
+  * **Glucose Level Alerts List:** **Create low alert**, **Create high alert**, the low and high alerts. Tap one for xDrip+'s Edit Alert fields: Alert Name, Threshold, Default Snooze, Re-raise every x minutes, Alert Tone (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound), Select time for alert (all day or a window), Override phone Silent Mode, Force Speaker, Vibrate on alert, Disable alert, then **Test alert**, **Snooze alert before it fires**, **Remove alert**, **Save alert**.
+  * **Glucose Alerts Settings:** Alert Volume Profile (High, Medium, Ascending, Vibrate only, Silent), Smart Snoozing, Smart Alerting, Don't alarm during phone calls, Start Snoozed, Suppress Alerts if missed readings, Ascending Volume settings (Delay Ascending Volume, Ascend to medium).
+* **Alert volume (not in xDrip+):** any level from 1% to 100%: a slider, **−5% −1% +1% +5%** buttons, quick picks (10%, 25%, 50%, 75%, 100%) and **Test volume**. xDrip+ always plays at 100% of the alarm volume; here High plays at this level, Medium at 70% of it, and Ascending climbs to it. The stream is set to the step at or just above the level and the sound itself is turned down the rest of the way, so even 1% steps change the sound even though the phone's alarm volume has only a few steps.
 * **Do Not Disturb:** the alarm volume gets through Do Not Disturb except its "total silence" setting. To get through that too, tap **Allow through Do Not Disturb** on the alerts screen; then a critical alert switches total silence to alarms only.
 * **Turn the alerts off in xDrip+**, or both apps will alarm.
 * **Optional import:** to bring over another xDrip+ setup, in xDrip+ use menu → **Import / Export Features** → **Save settings**, then **Import xDrip+ settings file** on the alerts screen and pick `com.eveningoutpost.dexdrip_preferences.xml` (a zip with it inside works too). If an imported sound can't be opened (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick it again.
@@ -111,7 +115,7 @@ How they behave, as in xDrip+: checked on every reading and again at each repeat
 ## The screen
 
 * **Last reading:** big value and trend arrow. Green means the reading is under 6 minutes old, amber under 15, red older. It also shows how long ago the reading was, its exact time to the millisecond, the rate per 5 minutes, and where the time came from.
-* **Glucose alerts:** the alerts imported from xDrip+ (see above).
+* **Glucose alerts:** the alerts screen (see above).
 * **Status:** Eversense app, notification access, listener, battery, app notifications, keep-alive service, data endpoint, and last Eversense update. Anything red has a button that fixes it.
 * **Run self-test:** checks the endpoint answers, a test notification reaches the listener and parses, storage works, and the keep-alive service is running. It doesn't need the Eversense app and stores nothing.
 * **Save log file / Share log** (see below).

@@ -23,6 +23,9 @@ public final class AlertConfig {
     public static final String SOUND_BEEP = "android.resource://app.meanwhile.bridge/raw/alert_beep";
     public static final String SOUND_VIBRATION = "android.resource://app.meanwhile.bridge/raw/alert_vibration";
 
+    /** The app's alert volume level unless changed: half the alarm volume, not xDrip+'s maximum. */
+    public static final int DEFAULT_VOLUME = 50;
+
     /** No alerts at all. */
     public static AlertConfig empty() {
         return new AlertConfig(Collections.emptyList(), AlertSettings.defaults(), "mgdl");
@@ -40,7 +43,7 @@ public final class AlertConfig {
         rules.add(new AlertRule("33de0538-00bb-4057-9e4c-cbd61bbbea4c", "Elevated Alert", true, true, 155,
                 true, 0, 0, 3, 90, true, true, true, SOUND_VIBRATION));
         final AlertSettings s = new AlertSettings(AlertSettings.HIGH, false, false, false, 15, false, true, false, true,
-                0, 0, 0);
+                0, 0, 0, DEFAULT_VOLUME);
         return new AlertConfig(rules, s, "mgdl");
     }
 
@@ -50,6 +53,20 @@ public final class AlertConfig {
 
     public AlertConfig withSettings(AlertSettings s) {
         return new AlertConfig(rules, s, units);
+    }
+
+    /** Adds an alert, or replaces the one with its uuid. */
+    public AlertConfig withSaved(AlertRule rule) {
+        if (rule(rule.uuid) != null) return withRule(rule);
+        final List<AlertRule> r = new ArrayList<>(rules);
+        r.add(rule);
+        return withRules(r);
+    }
+
+    public AlertConfig without(String uuid) {
+        final List<AlertRule> r = new ArrayList<>();
+        for (AlertRule x : rules) if (!x.uuid.equals(uuid)) r.add(x);
+        return withRules(r);
     }
 
     /** Replaces one alert (by uuid). */
@@ -81,6 +98,7 @@ public final class AlertConfig {
                 .field("alerts_disabled_until", settings.allDisabledUntil)
                 .field("low_alerts_disabled_until", settings.lowDisabledUntil)
                 .field("high_alerts_disabled_until", settings.highDisabledUntil)
+                .field("alert_volume_percent", settings.volumePercent)
                 .endObject();
         j.name("alerts").beginArray();
         for (AlertRule r : rules) r.writeTo(j);
@@ -105,7 +123,8 @@ public final class AlertConfig {
                     bool(s, "ascending_volume_to_medium", d.ascendingToMedium),
                     bool(s, "no_alarms_during_calls", d.noAlarmsDuringCalls),
                     num(s, "alerts_disabled_until", 0), num(s, "low_alerts_disabled_until", 0),
-                    num(s, "high_alerts_disabled_until", 0));
+                    num(s, "high_alerts_disabled_until", 0),
+                    (int) num(s, "alert_volume_percent", DEFAULT_VOLUME));
             final List<AlertRule> rules = new ArrayList<>();
             if (m.get("alerts") instanceof List) {
                 for (Object o : (List<Object>) m.get("alerts")) {

@@ -97,10 +97,19 @@ disable_device_https() {
 }
 
 for d in $DEVICES; do
-  start_sim
-  echo "--- unit tests on $d"
-  timeout 180 monkeydo "/tmp/test-$d.prg" "$d" -t > "/tmp/result-$d.txt" 2>&1
-  cat "/tmp/result-$d.txt"
+  for attempt in 1 2; do
+    start_sim
+    echo "--- unit tests on $d"
+    timeout 180 monkeydo "/tmp/test-$d.prg" "$d" -t > "/tmp/result-$d.txt" 2>&1
+    cat "/tmp/result-$d.txt"
+    # Now and then the simulator never starts the app at all (no output, then the
+    # timeout). Start it again, once. A test that ran and failed is not retried.
+    if [ $attempt = 1 ] && ! grep -q "Executing test" "/tmp/result-$d.txt"; then
+      echo "the simulator ran nothing on $d; restarting it"
+      continue
+    fi
+    break
+  done
   tail -1 "/tmp/result-$d.txt" | grep -q '^PASSED' || fail "unit tests on $d"
 done
 

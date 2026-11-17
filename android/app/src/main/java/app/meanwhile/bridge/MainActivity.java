@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_API = "api";
     /** The only buttons automation may press: both harmless to press any time. */
     static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
-            java.util.Arrays.asList("Download backup", "Sync now"));
+            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
@@ -301,6 +301,11 @@ public class MainActivity extends Activity {
         @Override
         public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
             trusted = AppPages.isAppUrl(url);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            pagesFinished++;
         }
 
         @Override
@@ -592,10 +597,27 @@ public class MainActivity extends Activity {
         final String api = automationApi(intent);
         if (api != null) apiOverride = api;
         final String page = automationPage(intent);
-        if (web != null && !page.isEmpty()) open(AppPages.HOME + page);
+        final int loadsBefore = pagesFinished;
+        final boolean opening = web != null && !page.isEmpty();
+        if (opening) open(AppPages.HOME + page);
         final String click = intent.getStringExtra(EXTRA_CLICK);
         final String until = intent.getStringExtra(EXTRA_UNTIL);
-        webCheck(click != null && CLICKABLE.contains(click) ? click : null, until, 0);
+        final String c = click != null && CLICKABLE.contains(click) ? click : null;
+        final String id = String.valueOf(System.nanoTime());
+        // a page it opened: check that page once it has loaded, not the one it replaces
+        if (opening) afterLoad(loadsBefore, 0, () -> webCheck(c, until, 0, id));
+        else webCheck(c, until, 0, id);
+    }
+
+    /** Page loads finished so far (automation waits for the one it started). */
+    private int pagesFinished;
+
+    private void afterLoad(int loadsBefore, int waited, Runnable then) {
+        if (pagesFinished > loadsBefore || waited >= 60) {
+            then.run();
+            return;
+        }
+        handler.postDelayed(() -> afterLoad(loadsBefore, waited + 1, then), 1_000);
     }
 
     /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */
@@ -621,12 +643,14 @@ public class MainActivity extends Activity {
      * text when it contains {@code until} (by default, the reading tile's countdown), or
      * after 90 s regardless.
      */
-    private void webCheck(String click, String until, int attempt) {
+    private void webCheck(String click, String until, int attempt, String checkId) {
         if (web == null || isFinishing()) return;
+        // once per check (an earlier check on the same page may have pressed another button)
+        final String id = JSONObject.quote(checkId);
         final String script = "(function(){"
-                + (click == null ? "" : "if(!window.__ebClicked){var b=[].slice.call(document.querySelectorAll('button'))"
+                + (click == null ? "" : "if(window.__ebClicked!==" + id + "){var b=[].slice.call(document.querySelectorAll('button'))"
                 + ".filter(function(x){return x.textContent.trim()===" + JSONObject.quote(click) + "})[0];"
-                + "if(b){window.__ebClicked=1;b.click();}}")
+                + "if(b){window.__ebClicked=" + id + ";b.click();}}")
                 + "return document.body?document.body.innerText:''})()";
         web.evaluateJavascript(script, text -> {
             final String t = text == null ? "" : text;
@@ -644,7 +668,7 @@ public class MainActivity extends Activity {
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
                         + match + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
-                handler.postDelayed(() -> webCheck(click, until, attempt + 1), 1_000);
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, checkId), 1_000);
             }
         });
     }
