@@ -475,13 +475,12 @@ public class StatusActivity extends Activity {
         detail.setAlpha(0.75f);
         card.addView(detail);
         col.addView(card, marginTop(12));
+        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
 
         col.addView(header("Status"));
         statusList = new LinearLayout(this);
         statusList.setOrientation(LinearLayout.VERTICAL);
         col.addView(statusList);
-
-        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
 
         col.addView(header("Check & troubleshoot"));
         selfTestButton = button("Run self-test", v -> runSelfTest());

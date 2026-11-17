@@ -503,6 +503,11 @@ public class MainActivity extends Activity {
         public void openStatus() {
             if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, StatusActivity.class)));
         }
+
+        @JavascriptInterface
+        public void openAlerts() {
+            if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, AlertsActivity.class)));
+        }
     }
 
     private void startSpeech() {

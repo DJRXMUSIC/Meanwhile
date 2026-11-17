@@ -230,6 +230,13 @@ print("backup:", len(d["bg"]), "readings", sgvs)
 PYB
 ok "backup file saved to Downloads/EverBridge/$BK with the readings and profile"
 
+# Settings starts with the way into the glucose alerts
+adb logcat -c
+webcheck --es page settings/ --es until "Open glucose alerts"
+wait_until 60 reported || fail "the settings page never reported"
+webcheck_line | grep -q "Open glucose alerts" || fail "no glucose alerts entry in Settings: $(webcheck_line)"
+ok "Meanwhile Settings shows 'Open glucose alerts'"
+
 # cloud backup: Settings > Sync now sends the data to a Meanwhile server
 curl -fsS --max-time 10 -o /dev/null "$SERVER_URL" || fail "the Meanwhile server isn't running at $SERVER_URL"
 adb reverse "tcp:$SERVER_PORT" "tcp:$SERVER_PORT" >/dev/null

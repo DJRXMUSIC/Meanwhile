@@ -21,6 +21,8 @@ export interface EverBridgeNative {
   /** The result arrives as window.__everbridgeSpeech(text, error). */
   startSpeech?(): void;
   openStatus?(): void;
+  /** The glucose alerts screen (low/high alerts, sounds, snooze). */
+  openAlerts?(): void;
   /** Address of the Meanwhile server (AI advice, cloud sync); "" if not set. */
   apiBase?(): string;
   /** Saves it. Returns the cleaned-up address, or null if it isn't usable. */

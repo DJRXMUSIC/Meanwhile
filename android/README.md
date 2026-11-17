@@ -98,7 +98,8 @@ EverBridge has xDrip+'s low and high glucose alerts built in, and starts with th
 
 Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High (full volume), smart snoozing and smart alerting off, no alarms during phone calls.
 
-* **Change them:** bridge screen → **Glucose alerts**. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; EverBridge keeps access to it.
+* **Find them:** Meanwhile → **Settings** → **Open glucose alerts** (the first item), or press and hold the app icon → **Glucose alerts**, or the bridge screen's **Glucose alerts** button under the last reading.
+* **Change them:** on the alerts screen. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; EverBridge keeps access to it.
 * **Do Not Disturb:** the alarm volume gets through Do Not Disturb except its "total silence" setting. To get through that too, tap **Allow through Do Not Disturb** on the alerts screen; then a critical alert switches total silence to alarms only.
 * **Turn the alerts off in xDrip+**, or both apps will alarm.
 * **Optional import:** to bring over another xDrip+ setup, in xDrip+ use menu → **Import / Export Features** → **Save settings**, then **Import xDrip+ settings file** on the alerts screen and pick `com.eveningoutpost.dexdrip_preferences.xml` (a zip with it inside works too). If an imported sound can't be opened (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick it again.

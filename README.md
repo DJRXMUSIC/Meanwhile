@@ -66,7 +66,7 @@ npm test            # countdown, reading sync, in-app paths, backup restore, ser
 1. Install the bridge on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk (steps in [`android/README.md`](android/README.md)).
 2. In Meanwhile → Settings → **EverBridge URL**, use `http://127.0.0.1:17590` (the default; a saved URL on xDrip+'s port 17580 moves to 17590 by itself) and tap **Test connection**.
 3. Polling runs every 60 s while the app is open.
-4. Low and high glucose alerts (your xDrip+ setup is built in: low ≤ 90 with a beep, high ≥ 155 with a vibration sound, both critical): bridge screen → **Glucose alerts**; see [`android/README.md`](android/README.md#glucose-alerts-from-xdrip).
+4. Low and high glucose alerts (your xDrip+ setup is built in: low ≤ 90 with a beep, high ≥ 155 with a vibration sound, both critical): Meanwhile → Settings → **Open glucose alerts**, or press and hold the app icon; see [`android/README.md`](android/README.md#glucose-alerts-from-xdrip).
 
 ### Garmin Instinct E watch face
 

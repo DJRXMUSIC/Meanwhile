@@ -304,6 +304,7 @@ public class MainActivityTest {
         assertNull(nativeOf(a).saveBegin("x.json"));
         assertFalse(nativeOf(a).copyText("secret"));
         nativeOf(a).openStatus();
+        nativeOf(a).openAlerts();
         nativeOf(a).startSpeech();
         shadowOf(Looper.getMainLooper()).idle();
         assertNull(shadowOf(a).getNextStartedActivity());
@@ -433,6 +434,9 @@ public class MainActivityTest {
         nativeOf(a).openStatus();
         shadowOf(Looper.getMainLooper()).idle();
         assertEquals(StatusActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
+        nativeOf(a).openAlerts();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(AlertsActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
     }
 
     // ---------------------------------------------------------------- voice and file picker

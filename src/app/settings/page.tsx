@@ -106,6 +106,21 @@ export default function SettingsPage() {
     <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Settings</h1>
 
+      {inApp && (
+        <Section title="Glucose alerts">
+          <button
+            onClick={() => (everBridge()?.openAlerts ?? everBridge()?.openStatus)?.()}
+            className="w-full rounded-xl bg-accent text-white px-3 py-2.5 text-sm font-medium"
+          >
+            Open glucose alerts
+          </button>
+          <p className="text-[11px] text-muted mt-2">
+            Low and high alerts with their sounds: change, test or snooze them, or turn them off for a while.
+            Also on the app icon: press and hold it, then tap <b>Glucose alerts</b>.
+          </p>
+        </Section>
+      )}
+
       <Section title="Theme">
         <div className="text-xs text-muted mb-1">Base</div>
         <div className="grid grid-cols-2 gap-2">
