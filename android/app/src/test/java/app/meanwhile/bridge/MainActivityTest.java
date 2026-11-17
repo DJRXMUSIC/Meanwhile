@@ -23,7 +23,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
-import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -491,17 +490,8 @@ public class MainActivityTest {
     @Test
     public void pageThatWontLoadLeavesAWayBack() {
         final MainActivity a = startWithSite();
-        client(a).onReceivedError(a.web(), request(SITE, true), new WebResourceError() {
-            @Override
-            public int getErrorCode() {
-                return WebViewClient.ERROR_HOST_LOOKUP;
-            }
-
-            @Override
-            public CharSequence getDescription() {
-                return "net::ERR_NAME_NOT_RESOLVED";
-            }
-        });
+        // (the SDK can't build a WebResourceError; this is what onReceivedError calls for a page)
+        a.pageFailed("net::ERR_NAME_NOT_RESOLVED");
         String s = screen(a);
         assertTrue(s, s.contains("Meanwhile didn't open"));
         assertTrue(s, s.contains("net::ERR_NAME_NOT_RESOLVED"));

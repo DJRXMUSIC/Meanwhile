@@ -322,9 +322,7 @@ public class MainActivity extends Activity {
 
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-            if (request.isForMainFrame()) {
-                showError("Meanwhile didn't open", String.valueOf(error.getDescription()));
-            }
+            if (request.isForMainFrame()) pageFailed(String.valueOf(error.getDescription()));
         }
 
         @Override
@@ -564,6 +562,11 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         panel = p;
         return p;
+    }
+
+    /** A page failed to load (and not just one of its images or scripts). */
+    void pageFailed(String description) {
+        showError("Meanwhile didn't open", description);
     }
 
     /** Shown instead of a page that failed to load, so the bridge's screens stay reachable. */
