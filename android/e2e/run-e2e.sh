@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end test on a running emulator:
 #   fake Eversense app (same package name as Eversense 365) posts a glucose notification
-#   -> EverBridge captures it -> http://127.0.0.1:17590/sgv.json serves it.
+#   -> Meanwhile v5 captures it -> http://127.0.0.1:17590/sgv.json serves it.
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot. Then the app as it is used: Meanwhile, packaged
 # inside the app, shows the captured reading straight from the bridge and the next one
@@ -188,7 +188,8 @@ reported() { [ -n "$(webcheck_line)" ]; }
 page_shows() { webcheck; sleep 2; webcheck_line | grep -qF -- "$1"; }
 
 adb logcat -c
-webcheck
+# the page first shows what it had saved, then the bridge's newest reading: wait for that
+webcheck --es until "155"
 wait_until 150 reported || fail "the Meanwhile page never reported"
 W=$(webcheck_line)
 echo "$W" | grep -q "url=https://appassets.androidplatform.net/" || fail "not the packaged page: $W"
@@ -214,11 +215,11 @@ ok "endpoint still serving on :$PORT with the app open"
 adb logcat -c
 webcheck --es page settings/ --es click "Download backup" --es until "Backup saved to"
 wait_until 60 reported || fail "the backup never reported"
-webcheck_line | grep -q "Backup saved to Downloads/EverBridge/meanwhile-" || fail "backup not saved: $(webcheck_line)"
-BK=$(adb shell ls /sdcard/Download/EverBridge/ | tr -d '\r' | grep '^meanwhile-.*\.json$' | tail -1)
-[ -n "$BK" ] || fail "no backup file in Downloads/EverBridge"
+webcheck_line | grep -q "Backup saved to Downloads/Meanwhile/meanwhile-" || fail "backup not saved: $(webcheck_line)"
+BK=$(adb shell ls /sdcard/Download/Meanwhile/ | tr -d '\r' | grep '^meanwhile-.*\.json$' | tail -1)
+[ -n "$BK" ] || fail "no backup file in Downloads/Meanwhile"
 mkdir -p e2e-out
-adb pull "/sdcard/Download/EverBridge/$BK" e2e-out/ >/dev/null
+adb pull "/sdcard/Download/Meanwhile/$BK" e2e-out/ >/dev/null
 python3 - "e2e-out/$BK" <<'PYB' || fail "backup file is wrong"
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -228,7 +229,7 @@ assert len(d["profile"]) == 1 and d["profile"][0]["xdrip_url"] == "http://127.0.
 for t in ("insulin", "decisions", "context"): assert isinstance(d[t], list), t
 print("backup:", len(d["bg"]), "readings", sgvs)
 PYB
-ok "backup file saved to Downloads/EverBridge/$BK with the readings and profile"
+ok "backup file saved to Downloads/Meanwhile/$BK with the readings and profile"
 
 # Settings starts with the way into the glucose alerts
 adb logcat -c
@@ -257,11 +258,11 @@ ok "self-test PASS: $(selftest_line | sed 's/.*SELFTEST: //' | cut -c1-200)"
 
 # ------------------------------------------------------------------ log file export
 adb shell am start -W -n "$APP/.StatusActivity" --es action export_log >/dev/null
-log_saved() { adb shell ls /sdcard/Download/EverBridge/ 2>/dev/null | grep -q "everbridge-log-"; }
-wait_until 60 log_saved || fail "log file not saved to Downloads/EverBridge"
+log_saved() { adb shell ls /sdcard/Download/Meanwhile/ 2>/dev/null | grep -q "meanwhile-log-"; }
+wait_until 60 log_saved || fail "log file not saved to Downloads/Meanwhile"
 mkdir -p e2e-out
-LOGFILE=$(adb shell ls /sdcard/Download/EverBridge/ | tr -d '\r' | grep everbridge-log- | tail -1)
-adb pull "/sdcard/Download/EverBridge/$LOGFILE" e2e-out/ >/dev/null
+LOGFILE=$(adb shell ls /sdcard/Download/Meanwhile/ | tr -d '\r' | grep meanwhile-log- | tail -1)
+adb pull "/sdcard/Download/Meanwhile/$LOGFILE" e2e-out/ >/dev/null
 L="e2e-out/$LOGFILE"
 for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag: $FAKE" \
     "parse result: 162 mg/dL" "[CAPTURE] STORED 155 mg/dL" "[CAPTURE] STORED 162 mg/dL" "[LISTENER] connected" "[BOOT]" \

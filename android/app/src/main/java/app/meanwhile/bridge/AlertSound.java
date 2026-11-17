@@ -67,7 +67,7 @@ final class AlertSound implements Alerts.Noise {
     /**
      * A critical alert (one that sounds on silent) plays on the alarm volume, which Do Not
      * Disturb lets through unless it is set to total silence. Then, if allowed to manage Do
-     * Not Disturb, EverBridge switches it to "alarms only" so the alert is heard.
+     * Not Disturb, the app switches it to "alarms only" so the alert is heard.
      */
     static void throughDoNotDisturb(Context c) {
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
@@ -75,7 +75,7 @@ final class AlertSound implements Alerts.Noise {
         try {
             if (nm.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_NONE) return;
             if (!nm.isNotificationPolicyAccessGranted()) {
-                EventLog.log(c, "SOUND", "Do Not Disturb is on total silence and EverBridge may not change it: "
+                EventLog.log(c, "SOUND", "Do Not Disturb is on total silence and Meanwhile v5 may not change it: "
                         + "allow it on the alerts screen");
                 return;
             }

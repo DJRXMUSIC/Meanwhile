@@ -129,7 +129,7 @@ export function useXdripPolling(profile: Profile | null): XdripControl {
   const refresh = useCallback(async () => {
     const poller = pollerRef.current;
     if (!poller) {
-      flashNote("No EverBridge URL set");
+      flashNote("No glucose source address set");
       return;
     }
     setSyncing(true);

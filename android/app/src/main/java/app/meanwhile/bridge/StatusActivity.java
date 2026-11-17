@@ -443,7 +443,7 @@ public class StatusActivity extends Activity {
 
         final LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(text("EverBridge", 20, true),
+        header.addView(text("Eversense connection", 20, true),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         final TextView version = text("v" + bridge.versionName(), 12, false);
         version.setAlpha(0.6f);

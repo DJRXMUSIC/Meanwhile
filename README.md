@@ -10,7 +10,7 @@ A lightning-fast PWA decision-support harness for Type 1 Diabetes. The home scre
 | UI | Tailwind, system fonts | No webfont round-trip, instant render |
 | Local store | IndexedDB via Dexie | Offline-first, fast queries, multi-tab safe |
 | AI | Pluggable: Anthropic (Claude) primary, OpenAI fallback | Redundancy across vendors |
-| BG source | EverBridge (`android/`) on the phone, polled every 60s | Direct, no cloud middleman |
+| BG source | Meanwhile v5 (`android/`) on the phone, polled every 60s | Direct, no cloud middleman |
 | PWA | Hand-rolled service worker (`/sw.js`) | Cache shell, never cache AI calls |
 | Sync | Generic `POST /sync` to user's own endpoint | Privacy: bring-your-own backend |
 
@@ -52,25 +52,25 @@ Visit http://localhost:3000. The profile is seeded with **ISF 1:40** and **targe
 
 ### The Android app (APK)
 
-The `android/` app is the way to use Meanwhile on the phone: one app with Meanwhile's pages packaged inside it and the EverBridge reading bridge built in. Download it from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk. The website version keeps working and serves the app's AI advice and cloud backup (`/api/ai/decide`, `/api/sync`). See [`android/README.md`](android/README.md).
+The `android/` app is the way to use Meanwhile on the phone: one app with Meanwhile's pages packaged inside it and the Eversense reading bridge built in. Download it from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v5.apk. The website version keeps working and serves the app's AI advice and cloud backup (`/api/ai/decide`, `/api/sync`). See [`android/README.md`](android/README.md).
 
 ```bash
 npm run build:app   # Meanwhile's pages for the app → android/app/src/main/assets/web (the Android build runs this itself)
 npm test            # countdown, reading sync, in-app paths, backup restore, server sync route
 ```
 
-### Glucose source: EverBridge
+### Glucose source: Meanwhile v5
 
-`android/` contains **EverBridge**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification and serves it at `http://127.0.0.1:17590`. It is Meanwhile's only glucose source. xDrip+ can stay installed, with its own web service on port 17580, and nothing here reads it.
+`android/` contains **Meanwhile v5**, a small Android app that captures each Eversense 365 reading from the Eversense app's notification and serves it at `http://127.0.0.1:17590`. It is Meanwhile's only glucose source. xDrip+ can stay installed, with its own web service on port 17580, and nothing here reads it.
 
-1. Install the bridge on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk (steps in [`android/README.md`](android/README.md)).
-2. In Meanwhile → Settings → **EverBridge URL**, use `http://127.0.0.1:17590` (the default; a saved URL on xDrip+'s port 17580 moves to 17590 by itself) and tap **Test connection**.
+1. Install the bridge on the phone from https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v5.apk (steps in [`android/README.md`](android/README.md)).
+2. Inside the app there is nothing to set: readings come straight from the bridge. (The website version reads `http://127.0.0.1:17590`, set under Settings → **Glucose source**.)
 3. Polling runs every 60 s while the app is open.
 4. Low and high glucose alerts (your xDrip+ setup is built in: low ≤ 90 with a beep, high ≥ 155 with a vibration sound, both critical): Meanwhile → Settings → **Open glucose alerts**, or press and hold the app icon; see [`android/README.md`](android/README.md#glucose-alerts-from-xdrip).
 
 ### Garmin Instinct E watch face
 
-`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and a countdown to the next reading. It reads EverBridge on the phone through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
+`garmin/` contains a Connect IQ watch face showing the time, date, steps, heart rate, and your glucose with its trend arrow and a countdown to the next reading. It reads Meanwhile v5 on the phone through Garmin Connect. See [`garmin/README.md`](garmin/README.md) to install it.
 
 ## Insulin math
 

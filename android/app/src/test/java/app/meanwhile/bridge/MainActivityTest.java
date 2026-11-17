@@ -505,7 +505,7 @@ public class MainActivityTest {
         assertTrue(s, s.contains("Readings are still being collected"));
         assertEquals(View.GONE, a.web().getVisibility());
 
-        tap(a, "EverBridge status and setup");
+        tap(a, "Eversense connection and setup");
         assertEquals(StatusActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
 
         tap(a, "Try again");

@@ -1,4 +1,4 @@
-name: EverBridge (Android)
+name: Meanwhile v5 (Android)
 
 on:
   push:
@@ -98,7 +98,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: everbridge-apk
+          name: meanwhile-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
@@ -126,7 +126,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: everbridge-apk
+          name: meanwhile-apk
           path: apks
 
       - uses: actions/download-artifact@v4
@@ -186,7 +186,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: everbridge-apk
+          name: meanwhile-apk
           path: apks
 
       - name: Replace the bridge-latest release
@@ -194,13 +194,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cp apks/app-release.apk everbridge.apk
+          cp apks/app-release.apk meanwhile-v5.apk
           gh release delete bridge-latest --cleanup-tag --yes || true
-          gh release create bridge-latest everbridge.apk \
+          gh release create bridge-latest meanwhile-v5.apk \
             --target "$GITHUB_SHA" \
-            --title "EverBridge (build ${{ github.run_number }})" \
-            --notes "Tap **everbridge.apk** below on your phone to download, then open it to install or update.
+            --title "Meanwhile v5 (build ${{ github.run_number }})" \
+            --notes "Tap **meanwhile-v5.apk** below on your phone to download, then open it to install or update.
 
           Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed all unit, Robolectric, lint and Android 15 emulator end-to-end tests.
 
-          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/everbridge.apk"
+          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/meanwhile-v5.apk"
