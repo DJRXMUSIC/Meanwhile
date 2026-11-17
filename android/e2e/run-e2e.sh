@@ -254,8 +254,9 @@ webcheck_line | grep -q "Open glucose alerts" || fail "no glucose alerts entry i
 wait_until 20 alerts_on_top || { shot no-alerts-screen; fail "pressing 'Open glucose alerts' did not open the alerts screen: $(adb shell dumpsys activity activities | grep -E 'ResumedActivity' | head -3)"; }
 shot alerts-from-settings
 adb shell input keyevent KEYCODE_BACK
-sleep 2
-ok "Meanwhile Settings: 'Open glucose alerts' opens the alerts screen"
+main_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity" | grep -q "MainActivity"; }
+wait_until 10 main_on_top || fail "back from the alerts screen didn't return to Meanwhile"
+ok "Meanwhile Settings: 'Open glucose alerts' opens the alerts screen, and back returns to Meanwhile"
 
 # cloud backup: Settings > Sync now sends the data to a Meanwhile server
 curl -fsS --max-time 10 -o /dev/null "$SERVER_URL" || fail "the Meanwhile server isn't running at $SERVER_URL"

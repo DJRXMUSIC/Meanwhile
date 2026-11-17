@@ -99,6 +99,7 @@ Meanwhile v5 has xDrip+'s low and high glucose alerts built in, and starts with 
 Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High, smart snoozing and smart alerting off, no alarms during phone calls. **Alert volume 50%** (see below).
 
 * **Find them:** Meanwhile → **Settings** → **Open glucose alerts** (the first item), or press and hold the app icon → **Glucose alerts**, or the bridge screen's **Glucose alerts** button under the last reading.
+* **Back:** the **← Meanwhile** button at the top (or the phone's back gesture) always returns to Meanwhile, even when the screen was opened from the app icon's shortcut or an alert.
 * **The screen is laid out like xDrip+'s**, with its names:
   * **Snooze:** the alert going on, **Snooze** for a chosen time, **Disable / Re-Enable Low, High, All alerts**.
   * **Glucose Level Alerts List:** **Create low alert**, **Create high alert**, the low and high alerts. Tap one for xDrip+'s Edit Alert fields: Alert Name, Threshold, Default Snooze, Re-raise every x minutes, Alert Tone (Phone sounds: Android's own ringtones, notification and alarm sounds such as Kernel; Beep or Vibration sound built in; any sound file of your own; or the phone's alarm sound), Select time for alert (all day or a window), Override phone Silent Mode, Force Speaker, Vibrate on alert, Disable alert, then **Test alert**, **Snooze alert before it fires**, **Remove alert**, **Save alert**.

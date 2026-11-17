@@ -125,6 +125,12 @@ public class AlertsActivity extends Activity {
         super.onPause();
     }
 
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        BackToMeanwhile.go(this);
+    }
+
     /** Opened by an alert that overrides silent mode: show over the lock screen so it can be snoozed. */
     private void showOverLockScreen(Intent intent) {
         if (Build.VERSION.SDK_INT >= 27 && intent != null && intent.getBooleanExtra(EXTRA_FROM_ALERT, false)) {
@@ -950,7 +956,13 @@ public class AlertsActivity extends Activity {
         col.setOrientation(LinearLayout.VERTICAL);
         final int pad = dp(16);
         col.setPadding(pad, pad, pad, pad);
-        col.addView(text("Glucose alerts", 20, true));
+        final LinearLayout top = new LinearLayout(this);
+        top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        top.addView(smallButton("← Meanwhile", v -> BackToMeanwhile.go(this)));
+        final TextView heading = text("Glucose alerts", 20, true);
+        heading.setPadding(dp(12), 0, 0, 0);
+        top.addView(heading);
+        col.addView(top);
         col.addView(header("Snooze"));
 
         nowBox = new LinearLayout(this);
