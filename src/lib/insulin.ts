@@ -14,7 +14,7 @@ import type { InsulinDose, Profile } from "./types";
 //   tau = peak * (1 - peak/dia) / (1 - 2*peak/dia)
 //   a   = 2 * tau / dia
 //   S   = 1 / (1 - a + (1+a) * exp(-dia/tau))
-//   IOB(t) = 1 - S*(1-a) * ((t^2/(tau*dia*(1-a)) - t/dia - 1) * exp(-t/tau) + 1)
+//   IOB(t) = 1 - S*(1-a) * ((t^2/(tau*dia*(1-a)) - t/tau - 1) * exp(-t/tau) + 1)
 export function iobFraction(
   tMin: number,
   diaHours: number,
@@ -34,7 +34,7 @@ export function iobFraction(
   const iob =
     1 -
     S * (1 - a) *
-      (((t * t) / (tau * dia * (1 - a)) - t / dia - 1) * Math.exp(-t / tau) + 1);
+      (((t * t) / (tau * dia * (1 - a)) - t / tau - 1) * Math.exp(-t / tau) + 1);
   return Math.max(0, Math.min(1, iob));
 }
 

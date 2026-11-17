@@ -163,7 +163,7 @@ test("an existing install is brought up to date without losing its settings", as
   const seeded = await getProfile();
   await db().profile.put({ ...seeded, isf: 62, basal_u_per_hr: 0.9, xdrip_url: "http://127.0.0.1:17580", schema_version: 4 });
   const p = await getProfile();
-  assert.equal(p.schema_version, 5);
+  assert.equal(p.schema_version, 6);
   assert.equal(p.xdrip_url, "http://127.0.0.1:17590");
   assert.equal(p.isf, 62);
   assert.equal(p.basal_u_per_hr, 0.9);
@@ -171,6 +171,21 @@ test("an existing install is brought up to date without losing its settings", as
   // and it sticks
   assert.equal((await db().profile.get("current"))!.xdrip_url, "http://127.0.0.1:17590");
   assert.equal(profileNeedsMigration(p), false);
+});
+
+test("both upgrades run: insulin retune (v5, from main) and the bridge port (v6)", async () => {
+  await freshDatabase();
+  const seeded = await getProfile();
+  // a profile from before either: old insulin defaults, xDrip+'s port
+  await db().profile.put({ ...seeded, dia_hours: 6, peak_min: 75, xdrip_url: "http://127.0.0.1:17580", schema_version: 4 });
+  let p = await getProfile();
+  assert.deepEqual([p.dia_hours, p.peak_min, p.xdrip_url, p.schema_version], [5.5, 64, "http://127.0.0.1:17590", 6]);
+
+  // a profile the deployed web app already moved to v5 (likely yours): only the port moves,
+  // and a hand-tuned insulin action is left alone
+  await db().profile.put({ ...seeded, dia_hours: 5, peak_min: 70, xdrip_url: "http://127.0.0.1:17580", schema_version: 5 });
+  p = await getProfile();
+  assert.deepEqual([p.dia_hours, p.peak_min, p.xdrip_url, p.schema_version], [5, 70, "http://127.0.0.1:17590", 6]);
 });
 
 test("duplicate removal only touches exact repeats of bridge readings", async () => {

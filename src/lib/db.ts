@@ -56,9 +56,9 @@ export function db(): MeanwhileDB {
 }
 
 // Schema version bumps trigger one-shot, non-destructive migrations.
-const CURRENT_SCHEMA = 5;
+const CURRENT_SCHEMA = 6;
 
-// v5: glucose comes only from EverBridge, on port 17590. Port 17580 is
+// v6: glucose comes only from EverBridge, on port 17590. Port 17580 is
 // xDrip+'s local web service, which is never read, so a URL on it moves to 17590.
 export function bridgeUrl(url: string | undefined): string | undefined {
   if (url === undefined) return DEFAULT_PROFILE.xdrip_url;
@@ -122,7 +122,15 @@ export async function getProfile(): Promise<Profile> {
       // v4 fields — sync
       sync_key: existing.sync_key ?? newSyncKey(),
       sync_auto: existing.sync_auto ?? true,
-      // v5: off xDrip+'s port
+      // v5 — insulin action retuned to 5.5h / 64 min peak. Only profiles
+      // still on the old 6h / 75 min defaults move; a hand-tuned value
+      // is left alone.
+      ...((existing.schema_version ?? 1) < 5 &&
+      (existing.dia_hours === 4 || existing.dia_hours === 6) &&
+      (existing.peak_min ?? 75) === 75
+        ? { dia_hours: 5.5, peak_min: 64 }
+        : {}),
+      // v6: off xDrip+'s port
       xdrip_url: bridgeUrl(existing.xdrip_url),
       // theme split
       theme_mode: migratedMode,
