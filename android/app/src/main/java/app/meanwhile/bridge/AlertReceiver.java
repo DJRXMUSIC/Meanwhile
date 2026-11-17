@@ -31,7 +31,7 @@ public class AlertReceiver extends BroadcastReceiver {
             } catch (RuntimeException e) {
                 EventLog.log(app, "ALERT", action + " failed: " + e);
             } finally {
-                pending.finish();
+                if (pending != null) pending.finish();
             }
         });
     }

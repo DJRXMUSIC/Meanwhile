@@ -89,14 +89,21 @@ The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in a
 
 ## Glucose alerts (from xDrip+)
 
-EverBridge can take over xDrip+'s low and high glucose alerts, set up exactly as you have them in xDrip+.
+EverBridge has xDrip+'s low and high glucose alerts built in, and starts with the owner's xDrip+ setup, nothing to import:
 
-1. In xDrip+: menu → **Import / Export Features** → **Save settings**. It writes `Downloads/xDrip-export/…/com.eveningoutpost.dexdrip_preferences.xml`.
-2. In EverBridge: bridge screen → **Glucose alerts** → **Import xDrip+ settings file**, and pick that file (a zip with it inside works too). Check the list it shows and tap **Import**.
-3. Tap **Test** on each alert to hear it. If an alert's sound says EverBridge can't open the file (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick the same file once.
-4. When you're happy, turn the alerts off in xDrip+, or both apps will alarm.
+| Alert | When | Repeats | Snooze | Sound | Vibrate |
+| --- | --- | --- | --- | --- | --- |
+| LOW WARNING | at or below 90 mg/dL, all day | every 1 min | 60 min | Beep (built in) | off |
+| Elevated Alert | at or above 155 mg/dL, all day | every 3 min | 90 min | Vibration sound (built in) | on |
 
-What comes across: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence EverBridge.
+Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High (full volume), smart snoozing and smart alerting off, no alarms during phone calls.
+
+* **Change them:** bridge screen → **Glucose alerts**. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; EverBridge keeps access to it.
+* **Do Not Disturb:** the alarm volume gets through Do Not Disturb except its "total silence" setting. To get through that too, tap **Allow through Do Not Disturb** on the alerts screen; then a critical alert switches total silence to alarms only.
+* **Turn the alerts off in xDrip+**, or both apps will alarm.
+* **Optional import:** to bring over another xDrip+ setup, in xDrip+ use menu → **Import / Export Features** → **Save settings**, then **Import xDrip+ settings file** on the alerts screen and pick `com.eveningoutpost.dexdrip_preferences.xml` (a zip with it inside works too). If an imported sound can't be opened (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick it again.
+
+What an import brings: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence EverBridge.
 
 How they behave, as in xDrip+: checked on every reading and again at each repeat (an exact alarm wakes the phone, even in deep sleep). The lowest low that applies wins, else the highest high. The sound plays once per repeat at the profile's volume, and the stream volume is put back afterwards. **Snooze** on the notification, or swiping it away, snoozes for the alert's own snooze time. A lower low (or higher high) breaks through a snooze; going back in range stops the alert. The alerts screen also snoozes for a chosen time, turns all, low or high alerts off for a while, and edits each alert.
 
@@ -139,7 +146,7 @@ cd android
 CI (`.github/workflows/android-bridge.yml`) runs:
 
 * **build-test:** the core tests (including the alert engine, ported case by case, and the xDrip+ import), the Robolectric tests (glucose alerts: notification, snooze, swipe, wake-up timer, alerts screen; listener with real `RemoteViews` inflation, SQLite store, foreground service and stale alert, boot receiver, settings, screen, event log rotation, diagnostics report, log export, self-test round trip, and notification → HTTP JSON over a real socket), Android lint, and the release APK build.
-* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents. Last, it imports an xDrip+ settings file and checks that a low reading sounds the alert with its notification, that it repeats a minute later, stops when glucose is back in range, and stays quiet after Snooze.
+* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents. It checks the built-in Elevated Alert plays its built-in sound at 155. Last, it imports an xDrip+ settings file and checks that a low reading sounds the alert with its notification, that it repeats a minute later, stops when glucose is back in range, and stays quiet after Snooze.
 * **release:** only if both jobs pass, replaces the `bridge-latest` GitHub release, so the download link above always serves a fully tested build.
 
 ## Known limits

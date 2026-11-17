@@ -213,6 +213,16 @@ public class AlertsActivity extends Activity {
         off.addView(smallButton("Highs off for…", v -> pickMinutes("Turn high alerts off for", m -> disable("high", m))), weight());
         nowBox.addView(off, marginTop(6));
 
+        final NotificationManager dnd = getSystemService(NotificationManager.class);
+        if (dnd != null && !dnd.isNotificationPolicyAccessGranted()) {
+            final TextView hint = text("Critical alerts sound on silent and through Do Not Disturb, except its "
+                    + "\"total silence\" setting. To get through that too, allow EverBridge to manage Do Not Disturb.", 13, false);
+            hint.setAlpha(0.75f);
+            nowBox.addView(hint, marginTop(8));
+            nowBox.addView(smallButton("Allow through Do Not Disturb", v ->
+                    open(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))));
+        }
+
         if (Build.VERSION.SDK_INT >= 34) {
             final NotificationManager nm = getSystemService(NotificationManager.class);
             boolean allowed = true;
@@ -398,7 +408,7 @@ public class AlertsActivity extends Activity {
         sb.append(r.allDay ? " · all day" : " · " + hhmm(r.startMinutes) + "–" + hhmm(r.endMinutes));
         sb.append("\nRepeats every ").append(r.minutesBetween).append(" min · snooze ").append(r.snoozeMinutes()).append(" min");
         sb.append("\nVibrate ").append(r.vibrate ? "on" : "off");
-        sb.append(r.overrideSilent ? " · sounds even on silent" : " · quiet when the phone is on silent");
+        sb.append(r.overrideSilent ? " · critical: sounds on silent and Do Not Disturb" : " · quiet when the phone is on silent");
         sb.append(r.forceSpeaker ? " · alarm volume" : " · media volume");
         return sb.toString();
     }
@@ -451,6 +461,8 @@ public class AlertsActivity extends Activity {
     }
 
     static String soundName(Context c, String uri) {
+        if (AlertConfig.SOUND_BEEP.equals(uri)) return "Beep (built in)";
+        if (AlertConfig.SOUND_VIBRATION.equals(uri)) return "Vibration sound (built in)";
         final Uri u = Uri.parse(uri);
         try {
             final String title = u.getQueryParameter("title");
@@ -493,7 +505,7 @@ public class AlertsActivity extends Activity {
         vibrate.setChecked(r.vibrate);
         box.addView(vibrate);
         final CheckBox override = new CheckBox(this);
-        override.setText("Sound even when the phone is on silent");
+        override.setText("Critical: sound even on silent and Do Not Disturb");
         override.setChecked(r.overrideSilent);
         box.addView(override);
         final ScrollView scroll = new ScrollView(this);
@@ -547,8 +559,13 @@ public class AlertsActivity extends Activity {
     private void chooseSound(String uuid) {
         new AlertDialog.Builder(this)
                 .setTitle("Sound")
-                .setItems(new String[]{"Choose a sound file…", "The phone's alarm sound"}, (d, which) -> {
+                .setItems(new String[]{"Beep (built in)", "Vibration sound (built in)", "Choose your own sound file…",
+                        "The phone's alarm sound"}, (d, which) -> {
                     if (which == 0) {
+                        setSound(uuid, AlertConfig.SOUND_BEEP);
+                    } else if (which == 1) {
+                        setSound(uuid, AlertConfig.SOUND_VIBRATION);
+                    } else if (which == 2) {
                         soundFor = uuid;
                         final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT)
                                 .addCategory(Intent.CATEGORY_OPENABLE)
@@ -721,10 +738,10 @@ public class AlertsActivity extends Activity {
         optionsBox.setOrientation(LinearLayout.VERTICAL);
         col.addView(optionsBox);
 
-        col.addView(header("Import from xDrip+"));
-        final TextView how = text("In xDrip+: menu → Import / Export Features → Save settings. Then tap Import and pick "
-                + "com.eveningoutpost.dexdrip_preferences.xml from Downloads/xDrip-export (or the file you saved). "
-                + "The alerts, their sounds and the volume settings come across; you can change them here after.", 13, false);
+        col.addView(header("Import from xDrip+ (optional)"));
+        final TextView how = text("The alerts above start out as your xDrip+ ones. To bring over a different xDrip+ setup: "
+                + "in xDrip+, menu → Import / Export Features → Save settings, then tap Import and pick "
+                + "com.eveningoutpost.dexdrip_preferences.xml from Downloads/xDrip-export. It replaces the alerts above.", 13, false);
         how.setAlpha(0.75f);
         col.addView(how);
         col.addView(button("Import xDrip+ settings file", v -> startImport()));

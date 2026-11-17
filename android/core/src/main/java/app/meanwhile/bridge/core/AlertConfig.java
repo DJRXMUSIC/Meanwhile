@@ -19,9 +19,29 @@ public final class AlertConfig {
         this.units = "mmol".equals(units) ? "mmol" : "mgdl";
     }
 
-    /** Nothing set up yet: no alerts until the xDrip+ settings are imported. */
+    /** The app's built-in sounds (res/raw). */
+    public static final String SOUND_BEEP = "android.resource://app.meanwhile.bridge/raw/alert_beep";
+    public static final String SOUND_VIBRATION = "android.resource://app.meanwhile.bridge/raw/alert_vibration";
+
+    /** No alerts at all. */
     public static AlertConfig empty() {
         return new AlertConfig(Collections.emptyList(), AlertSettings.defaults(), "mgdl");
+    }
+
+    /**
+     * What the app starts with: the owner's xDrip+ alerts, as in their settings export, with
+     * the app's own beep and vibration sounds. Both are critical: they sound on silent and
+     * through Do Not Disturb, on the alarm volume.
+     */
+    public static AlertConfig defaults() {
+        final List<AlertRule> rules = new ArrayList<>();
+        rules.add(new AlertRule("570e659e-467b-4990-94f7-b92425a11a3f", "LOW WARNING", true, false, 90,
+                true, 0, 0, 1, 60, false, true, true, SOUND_BEEP));
+        rules.add(new AlertRule("33de0538-00bb-4057-9e4c-cbd61bbbea4c", "Elevated Alert", true, true, 155,
+                true, 0, 0, 3, 90, true, true, true, SOUND_VIBRATION));
+        final AlertSettings s = new AlertSettings(AlertSettings.HIGH, false, false, false, 15, false, true, false, true,
+                0, 0, 0);
+        return new AlertConfig(rules, s, "mgdl");
     }
 
     public AlertConfig withRules(List<AlertRule> r) {
@@ -68,10 +88,10 @@ public final class AlertConfig {
         return j.endObject().toString();
     }
 
-    /** Never throws: damaged or missing data gives {@link #empty()}. */
+    /** Never throws: missing or damaged data gives {@link #defaults()}, so alerts always work. */
     @SuppressWarnings("unchecked")
     public static AlertConfig fromJson(String text) {
-        if (text == null || text.isEmpty()) return empty();
+        if (text == null || text.isEmpty()) return defaults();
         try {
             final Map<String, Object> m = (Map<String, Object>) JsonReader.parse(text);
             final Map<String, Object> s = m.get("settings") instanceof Map ? (Map<String, Object>) m.get("settings") : Collections.emptyMap();
@@ -96,7 +116,7 @@ public final class AlertConfig {
             }
             return new AlertConfig(rules, settings, m.get("units") instanceof String ? (String) m.get("units") : "mgdl");
         } catch (RuntimeException e) {
-            return empty();
+            return defaults();
         }
     }
 

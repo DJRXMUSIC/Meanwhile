@@ -1,5 +1,6 @@
 package app.meanwhile.bridge;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
@@ -48,6 +49,7 @@ final class AlertSound implements Alerts.Noise {
         final AudioManager am = c.getSystemService(AudioManager.class);
         final boolean inCall = settings.noAlarmsDuringCalls && am != null && am.getMode() == AudioManager.MODE_IN_CALL;
         final int ringer = am != null ? am.getRingerMode() : AudioManager.RINGER_MODE_NORMAL;
+        if (rule.overrideSilent && !inCall && (sound.volume > 0 || sound.vibrate)) throughDoNotDisturb(c);
         if (sound.volume > 0) {
             if (inCall) {
                 EventLog.log(c, "SOUND", "no sound: on a call");
@@ -59,6 +61,28 @@ final class AlertSound implements Alerts.Noise {
         }
         if (sound.vibrate && !inCall && (rule.overrideSilent || ringer != AudioManager.RINGER_MODE_SILENT)) {
             vibrate(c);
+        }
+    }
+
+    /**
+     * A critical alert (one that sounds on silent) plays on the alarm volume, which Do Not
+     * Disturb lets through unless it is set to total silence. Then, if allowed to manage Do
+     * Not Disturb, EverBridge switches it to "alarms only" so the alert is heard.
+     */
+    static void throughDoNotDisturb(Context c) {
+        final NotificationManager nm = c.getSystemService(NotificationManager.class);
+        if (nm == null) return;
+        try {
+            if (nm.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_NONE) return;
+            if (!nm.isNotificationPolicyAccessGranted()) {
+                EventLog.log(c, "SOUND", "Do Not Disturb is on total silence and EverBridge may not change it: "
+                        + "allow it on the alerts screen");
+                return;
+            }
+            nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS);
+            EventLog.log(c, "SOUND", "Do Not Disturb was on total silence: switched to alarms only for a critical alert");
+        } catch (RuntimeException e) {
+            EventLog.log(c, "SOUND", "could not change Do Not Disturb: " + e);
         }
     }
 

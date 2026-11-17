@@ -164,6 +164,14 @@ wait_until 20 count_is 6 || fail "no capture after reboot"
 [ "$(newest date)" = "$(last_fake_when)" ] || fail "timestamp mismatch after reboot"
 ok "after reboot: endpoint + listener back by themselves, history kept, capture works"
 
+# the built-in alerts (the owner's xDrip+ setup) work with nothing set up: 155 is the Elevated Alert
+bridge_log() { adb logcat -d -s EversenseBridge:I; }
+wait_until 20 sh -c 'adb logcat -d -s EversenseBridge:I | grep -q "reading 155: PLAY high Elevated Alert"' \
+  || fail "155 did not start the built-in Elevated Alert: $(bridge_log | grep -E 'ALERT:|SOUND:')"
+wait_until 15 sh -c "adb logcat -d -s EversenseBridge:I | grep -q \"SOUND: playing the alert's sound\"" \
+  || fail "the built-in vibration sound did not play: $(bridge_log | grep -E 'ALERT:|SOUND:')"
+ok "built-in alerts: 155 -> Elevated Alert plays its built-in vibration sound on the alarm volume"
+
 # ------------------------------------------------------------------ Meanwhile inside the app
 # webcheck [extras...]: ask the app to report what its page shows (optionally on another
 # page, after pressing a button, once some text appears); webcheck_line is the report.
@@ -311,6 +319,10 @@ wait_until 20 count_is 9 || fail "reading 120 not captured"
 wait_until 20 has_log "reading 120: STOP" || fail "the alert did not stop at 120: $(alert_log)"
 wait_until 10 alert_gone || fail "alert notification still shown at 120"
 ok "back to 120 -> the alert stops and its notification goes"
+# as in xDrip+, the stopped alert's record lasts until its repeat time, then a check clears it
+STOPS=$(alert_log | grep -c "STOP (no alert applies)" || true)
+cleared() { [ "$(alert_log | grep -c "STOP (no alert applies)" || true)" -gt "$STOPS" ]; }
+wait_until 80 cleared || fail "the stopped alert was never cleared: $(alert_log)"
 
 # low again, then Snooze: quiet for the alert's 15 minutes even as readings stay low
 sleep 11

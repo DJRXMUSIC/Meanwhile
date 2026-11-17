@@ -32,6 +32,7 @@ import org.robolectric.shadows.ShadowAlarmManager;
 import org.robolectric.shadows.ShadowNotificationManager;
 
 import app.meanwhile.bridge.core.ActiveAlert;
+import app.meanwhile.bridge.core.AlertConfig;
 import app.meanwhile.bridge.core.AlertEngine;
 import app.meanwhile.bridge.core.AlertRule;
 import app.meanwhile.bridge.core.AlertSettings;
@@ -113,11 +114,42 @@ public class AlertsTest {
     }
 
     @Test
-    public void nothingSetUpMeansNoAlertAndNoTimer() {
+    public void builtInAlertsWorkWithoutAnyImport() {
+        storeReading(System.currentTimeMillis(), 85);
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
+        assertEquals("alert 570e659e-467b-4990-94f7-b92425a11a3f volume 100%", noise.calls.get(noise.calls.size() - 1));
+        final Notification n = nm.getNotification(Alerts.NOTIFICATION_ID);
+        assertEquals("85 LOW WARNING", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString());
+        assertEquals("Snooze 60 min", n.actions[0].title.toString());
+        assertNotNull(n.fullScreenIntent);
+        assertEquals("Beep (built in)", AlertsActivity.soundName(app, AlertConfig.SOUND_BEEP));
+        assertEquals("Vibration sound (built in)", AlertsActivity.soundName(app, AlertConfig.SOUND_VIBRATION));
+    }
+
+    @Test
+    public void builtInHighIsTheVibrationSoundAt155() {
+        storeReading(System.currentTimeMillis(), 155);
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
+        final AlertRule rule = Alerts.config(app).rule(Alerts.active(app).uuid);
+        assertEquals(AlertConfig.SOUND_VIBRATION, rule.soundUri);
+        assertEquals("155 Elevated Alert", nm.getNotification(Alerts.NOTIFICATION_ID).extras
+                .getCharSequence(Notification.EXTRA_TITLE).toString());
+    }
+
+    @Test
+    public void noAlertsAtAllMeansNoTimer() {
+        Alerts.update(app, AlertConfig.empty(), "none");
         storeReading(System.currentTimeMillis(), 50);
         assertNull(Alerts.checkNow(app, "test"));
         assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
         assertNull(alarms.peekNextScheduledAlarm());
+    }
+
+    /** As if the alert's repeat time has come. */
+    private void makeRepeatDue() {
+        final ActiveAlert a = Alerts.active(app);
+        app.getSharedPreferences("alerts", 0).edit().putString("active", AlertConfig.activeToJson(
+                new ActiveAlert(a.uuid, a.snoozed, System.currentTimeMillis() - 1000, a.startedAt))).commit();
     }
 
     @Test
@@ -171,8 +203,12 @@ public class AlertsTest {
         storeReading(now, 110);
         assertEquals(AlertEngine.Action.STOP, Alerts.checkNow(app, "test").action);
         assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
-        assertNull(Alerts.active(app));
         assertEquals("stop", noise.calls.get(noise.calls.size() - 1));
+        // as in xDrip+, the alert's record stays until its repeat time, then goes
+        assertNotNull(Alerts.active(app));
+        makeRepeatDue();
+        assertEquals(AlertEngine.Action.STOP, Alerts.checkNow(app, "test").action);
+        assertNull(Alerts.active(app));
         // nothing going on: the next check is a plain wake-up, not an alarm clock
         assertNull(alarms.peekNextScheduledAlarm().getAlarmClockInfo());
     }
@@ -216,9 +252,11 @@ public class AlertsTest {
         Alerts.disable(app, "low", 30);
         assertTrue(Alerts.config(app).settings.lowDisabledUntil > System.currentTimeMillis());
         assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
-        assertNull(Alerts.active(app));
+        assertEquals("stop", noise.calls.get(noise.calls.size() - 1));
         Alerts.disable(app, "low", 0);
         assertEquals(0, Alerts.config(app).settings.lowDisabledUntil);
+        makeRepeatDue();
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
         assertNotNull(nm.getNotification(Alerts.NOTIFICATION_ID));
     }
 

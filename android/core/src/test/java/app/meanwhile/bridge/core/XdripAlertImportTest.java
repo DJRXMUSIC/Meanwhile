@@ -205,8 +205,11 @@ public class XdripAlertImportTest {
         assertEquals(r.rules.get(1).soundUri, back.rules.get(1).soundUri);
         assertEquals(3, back.settings.highDisabledUntil);
 
-        assertEquals(0, AlertConfig.fromJson("garbage").rules.size());
-        assertEquals(0, AlertConfig.fromJson(null).rules.size());
+        // nothing stored, or damaged: the built-in setup, never no alerts
+        assertEquals(AlertConfig.defaults().toJson(), AlertConfig.fromJson("garbage").toJson());
+        assertEquals(AlertConfig.defaults().toJson(), AlertConfig.fromJson(null).toJson());
+        // an explicitly empty list stays empty
+        assertEquals(0, AlertConfig.fromJson(AlertConfig.empty().toJson()).rules.size());
 
         final ActiveAlert a = new ActiveAlert("bbbb-low", true, 1_790_000_000_123L, 1_790_000_000_000L);
         final ActiveAlert a2 = AlertConfig.activeFromJson(AlertConfig.activeToJson(a));
@@ -215,6 +218,35 @@ public class XdripAlertImportTest {
         assertNull(AlertConfig.activeFromJson(""));
         assertNull(AlertConfig.activeFromJson("{]"));
         assertEquals("", AlertConfig.activeToJson(null));
+    }
+
+    @Test
+    public void builtInSetupIsTheOwnersXdripAlerts() {
+        final AlertConfig d = AlertConfig.defaults();
+        assertEquals(2, d.rules.size());
+        final AlertRule low = d.rules.get(0);
+        assertFalse(low.above);
+        assertEquals(90, low.threshold, 0);
+        assertEquals(1, low.minutesBetween);
+        assertEquals(60, low.snoozeMinutes());
+        assertFalse(low.vibrate);
+        assertTrue(low.overrideSilent);
+        assertTrue(low.forceSpeaker);
+        assertEquals(AlertConfig.SOUND_BEEP, low.soundUri);
+        final AlertRule high = d.rules.get(1);
+        assertTrue(high.above);
+        assertEquals(155, high.threshold, 0);
+        assertEquals(3, high.minutesBetween);
+        assertEquals(90, high.snoozeMinutes());
+        assertTrue(high.vibrate);
+        assertTrue(high.overrideSilent);
+        assertTrue(high.forceSpeaker);
+        assertEquals(AlertConfig.SOUND_VIBRATION, high.soundUri);
+        assertEquals(AlertSettings.HIGH, d.settings.profile);
+        assertFalse(d.settings.smartSnoozing);
+        assertFalse(d.settings.smartAlerting);
+        assertTrue(d.settings.noAlarmsDuringCalls);
+        assertEquals("mgdl", d.units);
     }
 
     @Test
