@@ -175,7 +175,7 @@ export class XdripPoller {
   // and lets failures through so the UI can say what went wrong: someone who
   // just tapped refresh is owed an answer either way.
   async refreshNow(): Promise<number> {
-    if (!this.base) throw new Error("No EverBridge URL configured");
+    if (!this.base) throw new Error("No glucose source address configured");
     return this.run(CATCHUP_COUNT);
   }
 

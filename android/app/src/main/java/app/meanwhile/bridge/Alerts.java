@@ -251,7 +251,7 @@ final class Alerts {
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm == null || nm.getNotificationChannel(CHANNEL) != null) return;
         final NotificationChannel ch = new NotificationChannel(CHANNEL, "Glucose alerts", NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Low and high alerts. EverBridge plays the alert's own sound and vibration itself.");
+        ch.setDescription("Low and high alerts. Meanwhile v5 plays the alert's own sound and vibration itself.");
         ch.setSound(null, null);
         ch.enableVibration(false);
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);

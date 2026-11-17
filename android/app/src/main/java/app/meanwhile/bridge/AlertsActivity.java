@@ -216,7 +216,7 @@ public class AlertsActivity extends Activity {
         final NotificationManager dnd = getSystemService(NotificationManager.class);
         if (dnd != null && !dnd.isNotificationPolicyAccessGranted()) {
             final TextView hint = text("Critical alerts sound on silent and through Do Not Disturb, except its "
-                    + "\"total silence\" setting. To get through that too, allow EverBridge to manage Do Not Disturb.", 13, false);
+                    + "\"total silence\" setting. To get through that too, allow Meanwhile v5 to manage Do Not Disturb.", 13, false);
             hint.setAlpha(0.75f);
             nowBox.addView(hint, marginTop(8));
             nowBox.addView(smallButton("Allow through Do Not Disturb", v ->
@@ -444,7 +444,7 @@ public class AlertsActivity extends Activity {
                 if (opens) {
                     into.setText("Sound: " + name);
                 } else {
-                    into.setText("Sound: " + name + " — EverBridge can't open this file, so it plays the phone's alarm "
+                    into.setText("Sound: " + name + " — Meanwhile v5 can't open this file, so it plays the phone's alarm "
                             + "sound. Tap Sound to pick the file again.");
                     into.setTextColor(AMBER);
                 }
@@ -660,7 +660,7 @@ public class AlertsActivity extends Activity {
                     .append(describe(rule, r.units)).append("\n\n");
         }
         sb.append("Volume: ").append(r.settings.profile).append('\n');
-        sb.append("This replaces the alerts set up in EverBridge.");
+        sb.append("This replaces the alerts set up in Meanwhile v5.");
         new AlertDialog.Builder(this)
                 .setTitle("Import " + r.rules.size() + (r.rules.size() == 1 ? " alert" : " alerts") + " from xDrip+?")
                 .setMessage(sb.toString())

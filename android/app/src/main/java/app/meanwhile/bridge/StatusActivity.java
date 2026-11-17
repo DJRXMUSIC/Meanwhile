@@ -443,7 +443,7 @@ public class StatusActivity extends Activity {
 
         final LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(text("EverBridge", 20, true),
+        header.addView(text("Eversense connection", 20, true),
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         final TextView version = text("v" + bridge.versionName(), 12, false);
         version.setAlpha(0.6f);
@@ -475,13 +475,12 @@ public class StatusActivity extends Activity {
         detail.setAlpha(0.75f);
         card.addView(detail);
         col.addView(card, marginTop(12));
+        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
 
         col.addView(header("Status"));
         statusList = new LinearLayout(this);
         statusList.setOrientation(LinearLayout.VERTICAL);
         col.addView(statusList);
-
-        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
 
         col.addView(header("Check & troubleshoot"));
         selfTestButton = button("Run self-test", v -> runSelfTest());

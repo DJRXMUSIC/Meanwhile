@@ -1,4 +1,4 @@
-# EverBridge (Android)
+# Meanwhile v5 (Android)
 
 One Android app for the Pixel 9a: **Meanwhile**, with the Eversense bridge built in. The app icon opens Meanwhile; its pages are packaged inside the APK (built from this repository's web app), so it opens instantly and works with no internet. Underneath, the bridge runs whether Meanwhile is open or not.
 
@@ -6,7 +6,7 @@ The bridge captures each Eversense 365 glucose reading (value and timestamp) fro
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
-  EverBridge (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
+  Meanwhile v5 (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
 ```
 
 ## Why it reads the notification instead of Bluetooth
@@ -56,22 +56,22 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 ## Meanwhile inside the app
 
 * **Pages:** built by `npm run build:app` (a static export of the web app) into `app/src/main/assets/web`, which the Gradle build does by itself, and served from `https://appassets.androidplatform.net/`, an address Android reserves for exactly this. Links anywhere else open in the browser.
-* **Readings:** the page reads the bridge's store directly (`window.EverBridgeNative.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
+* **Readings:** the page reads the bridge's store directly (`window.Meanwhile v5Native.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
 * **Data:** Meanwhile's database lives in the app's own storage, separate from Chrome's. To move it, see *Moving from the Chrome version* below.
 * **AI advice and cloud backup** go to your Meanwhile server (the website version, e.g. on Netlify), whose address you enter once in Meanwhile → Settings → **Meanwhile server**. Everything else works without it. The server's `/api/sync` and `/api/ai/decide` accept requests from the app's address and no other site.
-* **Backup file:** Settings → **Download backup** saves `Downloads/EverBridge/meanwhile-<date>.json`; **Restore from file** opens the phone's file picker.
+* **Backup file:** Settings → **Download backup** saves `Downloads/Meanwhile/meanwhile-<date>.json`; **Restore from file** opens the phone's file picker.
 * **Voice:** the mic button uses the phone's voice input.
-* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **EverBridge status & setup**. It also opens by itself until notification access is on.
+* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **Meanwhile v5 status & setup**. It also opens by itself until notification access is on.
 * **Safety:** if the page's renderer crashes, the app replaces it instead of going down, so capture never stops because of the page.
 
 ## Install on the Pixel 9a
 
 **Download link (always the newest build that passed every test):**
-https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/everbridge.apk
+https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v5.apk
 
 1. Open that link in Chrome on the phone and open the downloaded file. If asked, allow Chrome to install apps. Updates install the same way, on top of the old version, and keep your history.
-2. Open **EverBridge**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
-   * **Turn on: Notification access** → enable EverBridge. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → EverBridge → ⋮ → **Allow restricted settings**, then try again.
+2. Open **Meanwhile v5**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
+   * **Turn on: Notification access** → enable Meanwhile v5. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → Meanwhile v5 → ⋮ → **Allow restricted settings**, then try again.
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
 4. Tap **Run self-test**: it should say PASS. Press Back to get to Meanwhile.
@@ -89,7 +89,7 @@ The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in a
 
 ## Glucose alerts (from xDrip+)
 
-EverBridge has xDrip+'s low and high glucose alerts built in, and starts with the owner's xDrip+ setup, nothing to import:
+Meanwhile v5 has xDrip+'s low and high glucose alerts built in, and starts with the owner's xDrip+ setup, nothing to import:
 
 | Alert | When | Repeats | Snooze | Sound | Vibrate |
 | --- | --- | --- | --- | --- | --- |
@@ -98,12 +98,13 @@ EverBridge has xDrip+'s low and high glucose alerts built in, and starts with th
 
 Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High (full volume), smart snoozing and smart alerting off, no alarms during phone calls.
 
-* **Change them:** bridge screen → **Glucose alerts**. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; EverBridge keeps access to it.
+* **Find them:** Meanwhile → **Settings** → **Open glucose alerts** (the first item), or press and hold the app icon → **Glucose alerts**, or the bridge screen's **Glucose alerts** button under the last reading.
+* **Change them:** on the alerts screen. Each alert has **Edit** (threshold, repeat, snooze, vibrate, critical), **Sound** (Beep, Vibration sound, any sound file of your own, or the phone's alarm sound) and **Test**. Your own file is picked once with Android's file picker; Meanwhile v5 keeps access to it.
 * **Do Not Disturb:** the alarm volume gets through Do Not Disturb except its "total silence" setting. To get through that too, tap **Allow through Do Not Disturb** on the alerts screen; then a critical alert switches total silence to alarms only.
 * **Turn the alerts off in xDrip+**, or both apps will alarm.
 * **Optional import:** to bring over another xDrip+ setup, in xDrip+ use menu → **Import / Export Features** → **Save settings**, then **Import xDrip+ settings file** on the alerts screen and pick `com.eveningoutpost.dexdrip_preferences.xml` (a zip with it inside works too). If an imported sound can't be opened (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick it again.
 
-What an import brings: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence EverBridge.
+What an import brings: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence Meanwhile v5.
 
 How they behave, as in xDrip+: checked on every reading and again at each repeat (an exact alarm wakes the phone, even in deep sleep). The lowest low that applies wins, else the highest high. The sound plays once per repeat at the profile's volume, and the stream volume is put back afterwards. **Snooze** on the notification, or swiping it away, snoozes for the alert's own snooze time. A lower low (or higher high) breaks through a snooze; going back in range stops the alert. The alerts screen also snoozes for a chosen time, turns all, low or high alerts off for a while, and edits each alert.
 
@@ -118,7 +119,7 @@ How they behave, as in xDrip+: checked on every reading and again at each repeat
 
 ## When something isn't working: the log file
 
-Tap **Save log file**. It writes `Downloads/EverBridge/everbridge-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
+Tap **Save log file**. It writes `Downloads/Meanwhile/meanwhile-log-<date>-<time>.txt`, or use **Share log** to send it anywhere. Upload that file to Claude and ask what's wrong. It contains:
 
 * **App and device:** app version, device, Android version, and process uptime.
 * **Health:** notification access and enabled listeners, listener state, keep-alive service, battery optimisation, power-save/doze, app standby bucket, notification permission, and endpoint state.

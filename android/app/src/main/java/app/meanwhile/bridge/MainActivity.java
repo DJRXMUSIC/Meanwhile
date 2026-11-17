@@ -503,6 +503,11 @@ public class MainActivity extends Activity {
         public void openStatus() {
             if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, StatusActivity.class)));
         }
+
+        @JavascriptInterface
+        public void openAlerts() {
+            if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, AlertsActivity.class)));
+        }
     }
 
     private void startSpeech() {
@@ -576,7 +581,7 @@ public class MainActivity extends Activity {
         EventLog.log(this, "WEB", title + ": " + detail);
         final LinearLayout p = newPanel(title, detail + "\n\nReadings are still being collected.");
         p.addView(button("Try again", v -> open(AppPages.HOME)), marginTop(16));
-        p.addView(button("EverBridge status and setup", v -> startActivity(new Intent(this, StatusActivity.class))),
+        p.addView(button("Eversense connection and setup", v -> startActivity(new Intent(this, StatusActivity.class))),
                 marginTop(8));
     }
 

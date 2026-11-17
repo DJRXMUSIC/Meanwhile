@@ -106,6 +106,21 @@ export default function SettingsPage() {
     <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Settings</h1>
 
+      {inApp && (
+        <Section title="Glucose alerts">
+          <button
+            onClick={() => (everBridge()?.openAlerts ?? everBridge()?.openStatus)?.()}
+            className="w-full rounded-xl bg-accent text-white px-3 py-2.5 text-sm font-medium"
+          >
+            Open glucose alerts
+          </button>
+          <p className="text-[11px] text-muted mt-2">
+            Low and high alerts with their sounds: change, test or snooze them, or turn them off for a while.
+            Also on the app icon: press and hold it, then tap <b>Glucose alerts</b>.
+          </p>
+        </Section>
+      )}
+
       <Section title="Theme">
         <div className="text-xs text-muted mb-1">Base</div>
         <div className="grid grid-cols-2 gap-2">
@@ -209,61 +224,69 @@ export default function SettingsPage() {
         </p>
       </Section>
 
-      <Section title="EverBridge URL">
-        <input
-          type="url"
-          placeholder="http://127.0.0.1:17590"
-          value={profile.xdrip_url ?? ""}
-          onChange={(e) => update({ xdrip_url: e.target.value })}
-          className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
-        />
-        <div className="flex gap-2 mt-2 flex-wrap">
-          <button
-            onClick={async () => {
-              const url = (profile.xdrip_url || "").trim();
-              if (!url) { setStatus("Bridge: enter a URL first"); return; }
-              setStatus("Bridge: testing…");
-              try {
-                const n = await syncXdripOnce(url);
-                const msg = n > 0
-                  ? `Bridge: pulled ${n} new readings ✓`
-                  : `Bridge: connected ✓ (no new readings since last sync)`;
-                setStatus(msg);
-              } catch (e) {
-                setStatus(`Bridge error: ${(e as Error).message}. Check the EverBridge app is running (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
-              }
-            }}
-            className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
-          >
-            Test connection
-          </button>
-          {!IN_APP_BUILD && <button
-            onClick={async () => {
-              const url = (profile.xdrip_url || "").trim();
-              if (!url) return;
-              try {
-                const r = await fetch(`/api/bg/proxy?base=${encodeURIComponent(url)}&count=1`, { cache: "no-store" });
-                const t = await r.text();
-                setStatus(`Proxy ${r.status}: ${t.slice(0, 200)}`);
-              } catch (e) { setStatus(`Proxy error: ${(e as Error).message}`); }
-            }}
-            className="rounded-xl bg-surface2 px-3 py-2 text-sm"
-          >
-            Test via server proxy
-          </button>}
-          {inApp && (
+      <Section title="Glucose source">
+        {IN_APP_BUILD ? (
+          <>
+            <p className="text-sm">Readings come straight from the Eversense app on this phone. Nothing to set up here.</p>
             <button
               onClick={() => everBridge()?.openStatus?.()}
               className="rounded-xl bg-surface2 px-3 py-2 text-sm"
             >
-              EverBridge status &amp; setup
+              Eversense connection &amp; setup
             </button>
-          )}
-        </div>
-        <p className="text-[11px] text-muted mt-2">
-          {inApp && <>You are inside the EverBridge app: readings come straight from the bridge, and this address is only a fallback. </>}
-          Readings come from the <b>EverBridge</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the app falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the URL.
-        </p>
+            <p className="text-[11px] text-muted mt-2">
+              Shows the latest reading, anything that needs fixing (notification access, battery), a self-test and a log file for troubleshooting.
+            </p>
+          </>
+        ) : (
+          <>
+            <input
+              type="url"
+              placeholder="http://127.0.0.1:17590"
+              value={profile.xdrip_url ?? ""}
+              onChange={(e) => update({ xdrip_url: e.target.value })}
+              className="w-full rounded-xl bg-surface2 px-3 py-2 outline-none ring-1 ring-white/5 focus:ring-accent/60 text-sm"
+            />
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <button
+                onClick={async () => {
+                  const url = (profile.xdrip_url || "").trim();
+                  if (!url) { setStatus("Glucose: enter an address first"); return; }
+                  setStatus("Glucose: testing…");
+                  try {
+                    const n = await syncXdripOnce(url);
+                    const msg = n > 0
+                      ? `Glucose: pulled ${n} new readings ✓`
+                      : `Glucose: connected ✓ (no new readings since last sync)`;
+                    setStatus(msg);
+                  } catch (e) {
+                    setStatus(`Glucose error: ${(e as Error).message}. Check the Meanwhile v5 app is running on the phone (its self-test should PASS). From another device, turn on its Wi-Fi/LAN option and use the phone's LAN IP instead of 127.0.0.1.`);
+                  }
+                }}
+                className="rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium"
+              >
+                Test connection
+              </button>
+              <button
+                onClick={async () => {
+                  const url = (profile.xdrip_url || "").trim();
+                  if (!url) return;
+                  try {
+                    const r = await fetch(`/api/bg/proxy?base=${encodeURIComponent(url)}&count=1`, { cache: "no-store" });
+                    const t = await r.text();
+                    setStatus(`Proxy ${r.status}: ${t.slice(0, 200)}`);
+                  } catch (e) { setStatus(`Proxy error: ${(e as Error).message}`); }
+                }}
+                className="rounded-xl bg-surface2 px-3 py-2 text-sm"
+              >
+                Test via server proxy
+              </button>
+            </div>
+            <p className="text-[11px] text-muted mt-2">
+              Readings come from the <b>Meanwhile v5</b> app on your phone, at <code>http://127.0.0.1:17590</code>. xDrip+ (port 17580) is not used. Direct browser fetches work when this page is open on the same phone. Otherwise the site falls back to the server proxy at <code>/api/bg/proxy</code>, which requires the deployed server to be able to reach the address.
+            </p>
+          </>
+        )}
       </Section>
 
       <Section title="Manual BG entry">
