@@ -327,14 +327,15 @@ public class AlertsActivity extends Activity {
 
         final TextView volumeLabel = text(volumeText(s.volumePercent), 15, true);
         optionsBox.addView(volumeLabel, marginTop(10));
+        // 1% to 100%, every percent: the slider, ±1% for fine tuning, and quick picks
         final SeekBar volume = new SeekBar(this);
-        volume.setMax((100 - AlertSettings.MIN_VOLUME) / 5);
-        volume.setProgress((s.volumePercent - AlertSettings.MIN_VOLUME) / 5);
+        volume.setMax(100 - AlertSettings.MIN_VOLUME);
+        volume.setProgress(s.volumePercent - AlertSettings.MIN_VOLUME);
         volume.setContentDescription("Alert volume");
         volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar b, int progress, boolean fromUser) {
-                volumeLabel.setText(volumeText(AlertSettings.MIN_VOLUME + progress * 5));
+                volumeLabel.setText(volumeText(AlertSettings.MIN_VOLUME + progress));
             }
 
             @Override
@@ -343,22 +344,28 @@ public class AlertsActivity extends Activity {
 
             @Override
             public void onStopTrackingTouch(SeekBar b) {
-                setVolume(AlertSettings.MIN_VOLUME + b.getProgress() * 5);
+                setVolume(AlertSettings.MIN_VOLUME + b.getProgress());
             }
         });
         optionsBox.addView(volume);
         final LinearLayout steps = new LinearLayout(this);
-        steps.addView(smallButton("− 5%", v -> {
-            volume.setProgress(Math.max(0, volume.getProgress() - 1));
-            setVolume(AlertSettings.MIN_VOLUME + volume.getProgress() * 5);
-        }), weight());
-        steps.addView(smallButton("+ 5%", v -> {
-            volume.setProgress(Math.min(volume.getMax(), volume.getProgress() + 1));
-            setVolume(AlertSettings.MIN_VOLUME + volume.getProgress() * 5);
-        }), weight());
-        steps.addView(smallButton("Test volume", v -> testVolume()), weight());
+        for (int delta : new int[]{-5, -1, 1, 5}) {
+            steps.addView(smallButton((delta > 0 ? "+" : "−") + Math.abs(delta) + "%", v -> {
+                volume.setProgress(Math.max(0, Math.min(volume.getMax(), volume.getProgress() + delta)));
+                setVolume(AlertSettings.MIN_VOLUME + volume.getProgress());
+            }), weight());
+        }
         optionsBox.addView(steps);
-        optionsBox.addView(summary("How loud alerts get, as a share of the phone's alarm (or media) volume. High plays at "
+        final LinearLayout picks = new LinearLayout(this);
+        for (int p : new int[]{10, 25, 50, 75, 100}) {
+            picks.addView(smallButton(p + "%", v -> {
+                volume.setProgress(p - AlertSettings.MIN_VOLUME);
+                setVolume(p);
+            }), weight());
+        }
+        optionsBox.addView(picks);
+        optionsBox.addView(button("Test volume", v -> testVolume()));
+        optionsBox.addView(summary("Any level from 1% to 100%. How loud alerts get, as a share of the phone's alarm (or media) volume. High plays at "
                 + "this level, Medium at 70% of it, and Ascending climbs to it. xDrip+ has no such setting: it always "
                 + "plays at 100%."));
 

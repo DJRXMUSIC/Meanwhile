@@ -35,13 +35,13 @@ public final class AlertSettings {
     public final long lowDisabledUntil;
     public final long highDisabledUntil;
     /**
-     * How loud "full volume" is, percent of the stream's maximum, in 5% steps (this app's
+     * How loud "full volume" is, percent of the stream's maximum, 1% to 100% (this app's
      * addition; xDrip+ always uses the maximum). High plays at it, Medium at 70% of it,
      * Ascending climbs to it.
      */
     public final int volumePercent;
 
-    public static final int MIN_VOLUME = 5;
+    public static final int MIN_VOLUME = 1;
 
     /** Full volume (100%), as xDrip+ has it. */
     public AlertSettings(String profile, boolean smartSnoozing, boolean smartAlerting, boolean disableStale,
@@ -70,10 +70,9 @@ public final class AlertSettings {
         this.volumePercent = normalizeVolume(volumePercent);
     }
 
-    /** 5–100, rounded to a 5% step. */
+    /** 1–100. */
     static int normalizeVolume(int v) {
-        final int r = Math.round(v / 5f) * 5;
-        return Math.max(MIN_VOLUME, Math.min(100, r));
+        return Math.max(MIN_VOLUME, Math.min(100, v));
     }
 
     public static AlertSettings defaults() {

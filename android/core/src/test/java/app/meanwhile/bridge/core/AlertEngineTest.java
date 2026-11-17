@@ -345,13 +345,14 @@ public class AlertEngineTest {
     }
 
     @Test
-    public void volumeLevelIsAFivePercentStepFromFiveToHundred() {
+    public void volumeLevelIsAnyPercentFromOneToHundred() {
         assertEquals(100, AlertSettings.defaults().volumePercent);
-        assertEquals(5, highProfile().withVolume(0).volumePercent);
-        assertEquals(5, highProfile().withVolume(-20).volumePercent);
+        assertEquals(1, highProfile().withVolume(0).volumePercent);
+        assertEquals(1, highProfile().withVolume(-20).volumePercent);
         assertEquals(100, highProfile().withVolume(250).volumePercent);
-        assertEquals(35, highProfile().withVolume(33).volumePercent);
-        assertEquals(45, highProfile().withVolume(43).volumePercent);
+        assertEquals(33, highProfile().withVolume(33).volumePercent);
+        assertEquals(43, highProfile().withVolume(43).volumePercent);
+        assertEquals(0.07f, AlertEngine.sound(LOW90, highProfile().withVolume(7), 0).volume, 1e-6);
         // other changes keep it
         assertEquals(35, highProfile().withVolume(35).withProfile(AlertSettings.MEDIUM).withDisabledUntil(1, 2, 3)
                 .withOptions(true, true, false, 15, false, true, false, false).volumePercent);

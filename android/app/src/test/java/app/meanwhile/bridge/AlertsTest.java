@@ -354,6 +354,9 @@ public class AlertsTest {
         // full volume: the top step, no reduction
         assertEquals(7, AlertSound.gainStep(7f));
         assertEquals(1f, AlertSound.gain(7f, 7), 1e-6);
+        // 1% of 7 steps: step 1, turned well down
+        assertEquals(1, AlertSound.gainStep(0.07f));
+        assertEquals(0.07f, AlertSound.gain(0.07f, 1), 1e-6);
         // 5% of 7 steps: step 1, turned down
         assertEquals(1, AlertSound.gainStep(0.35f));
         assertEquals(0.35f, AlertSound.gain(0.35f, 1), 1e-6);
