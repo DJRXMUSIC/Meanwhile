@@ -481,6 +481,8 @@ public class StatusActivity extends Activity {
         statusList.setOrientation(LinearLayout.VERTICAL);
         col.addView(statusList);
 
+        col.addView(button("Glucose alerts", v -> startActivity(new Intent(this, AlertsActivity.class))), marginTop(8));
+
         col.addView(header("Check & troubleshoot"));
         selfTestButton = button("Run self-test", v -> runSelfTest());
         col.addView(selfTestButton);

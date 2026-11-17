@@ -13,6 +13,8 @@ public class BridgeApp extends Application {
         installCrashLogger();
         // Any process start (listener bind, boot, UI) brings the endpoint up.
         Bridge.get(this).ensureServer();
+        // alert timers don't survive a reboot or a killed process: check (and re-arm) now
+        Alerts.check(this, "app start");
     }
 
     /** Records uncaught exceptions in the event log, then lets Android handle them as usual. */

@@ -28,8 +28,9 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 | `BgReading.calculateSlope`, `Dex_Constants.TREND_ARROW_VALUES` thresholds | `core/Trend` | Same direction names and thresholds |
 | `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17590 (xDrip+ keeps 17580), loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
 | `UiBasedCollectorTest` | `core/…/NotificationParserTest`, `ReadingGateTest` | Ported test-for-test |
+| `models/AlertType` (`get_highest_active_alert`, `should_alarm`, `s_in_time_frame`, `HigherAlert`, `toSettings`/`fromSettings`), `ActiveBgAlert`, `Notifications.FileBasedNotifications`, `AlertPlayer` (`startAlert`, `ClockTick`, `Snooze`, `VibrateNotifyMakeNoise`, `playFile`, volume adjust and revert), `BgReading.trendingToAlertEnd` | `core/AlertEngine`, `AlertRule`, `AlertSettings`, `ActiveAlert`, `XdripAlertImport`; `app/Alerts`, `AlertSound` | Low and high glucose alerts only, step for step (commit `10739aa`) |
 
-**Left out:** everything else, including every other collector (Dexcom, Libre, Medtronic, …), calibration, alarms, Nightscout upload, graphs, watch integration, and xDrip's ActiveAndroid database, `Pref`/`PersistentStore` and dagger plumbing. Because of those transitive dependencies, `UiBasedCollector` can't simply be copied out of xDrip. The bridge is about 2,600 lines of Java and has no third-party runtime dependencies.
+**Left out:** everything else, including every other collector (Dexcom, Libre, Medtronic, …), calibration, alerts other than low/high glucose (rising/falling, persistent high, predicted low, missed readings), Nightscout upload, graphs, watch integration, and xDrip's ActiveAndroid database, `Pref`/`PersistentStore` and dagger plumbing. Because of those transitive dependencies, `UiBasedCollector` can't simply be copied out of xDrip. The app (bridge, alerts and the Meanwhile shell) is about 7,000 lines of Java and has no third-party runtime dependencies.
 
 **Changes from xDrip+, each covered by tests:**
 
@@ -86,9 +87,23 @@ Your history in Chrome stays in Chrome until you bring it over:
 
 The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 
+## Glucose alerts (from xDrip+)
+
+EverBridge can take over xDrip+'s low and high glucose alerts, set up exactly as you have them in xDrip+.
+
+1. In xDrip+: menu → **Import / Export Features** → **Save settings**. It writes `Downloads/xDrip-export/…/com.eveningoutpost.dexdrip_preferences.xml`.
+2. In EverBridge: bridge screen → **Glucose alerts** → **Import xDrip+ settings file**, and pick that file (a zip with it inside works too). Check the list it shows and tap **Import**.
+3. Tap **Test** on each alert to hear it. If an alert's sound says EverBridge can't open the file (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick the same file once.
+4. When you're happy, turn the alerts off in xDrip+, or both apps will alarm.
+
+What comes across: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence EverBridge.
+
+How they behave, as in xDrip+: checked on every reading and again at each repeat (an exact alarm wakes the phone, even in deep sleep). The lowest low that applies wins, else the highest high. The sound plays once per repeat at the profile's volume, and the stream volume is put back afterwards. **Snooze** on the notification, or swiping it away, snoozes for the alert's own snooze time. A lower low (or higher high) breaks through a snooze; going back in range stops the alert. The alerts screen also snoozes for a chosen time, turns all, low or high alerts off for a while, and edits each alert.
+
 ## The screen
 
 * **Last reading:** big value and trend arrow. Green means the reading is under 6 minutes old, amber under 15, red older. It also shows how long ago the reading was, its exact time to the millisecond, the rate per 5 minutes, and where the time came from.
+* **Glucose alerts:** the alerts imported from xDrip+ (see above).
 * **Status:** Eversense app, notification access, listener, battery, app notifications, keep-alive service, data endpoint, and last Eversense update. Anything red has a button that fixes it.
 * **Run self-test:** checks the endpoint answers, a test notification reaches the listener and parses, storage works, and the keep-alive service is running. It doesn't need the Eversense app and stores nothing.
 * **Save log file / Share log** (see below).
@@ -123,8 +138,8 @@ cd android
 
 CI (`.github/workflows/android-bridge.yml`) runs:
 
-* **build-test:** the 69 core tests, the Robolectric tests (listener with real `RemoteViews` inflation, SQLite store, foreground service and stale alert, boot receiver, settings, screen, event log rotation, diagnostics report, log export, self-test round trip, and notification → HTTP JSON over a real socket), Android lint, and the release APK build.
-* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents.
+* **build-test:** the core tests (including the alert engine, ported case by case, and the xDrip+ import), the Robolectric tests (glucose alerts: notification, snooze, swipe, wake-up timer, alerts screen; listener with real `RemoteViews` inflation, SQLite store, foreground service and stale alert, boot receiver, settings, screen, event log rotation, diagnostics report, log export, self-test round trip, and notification → HTTP JSON over a real socket), Android lint, and the release APK build.
+* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents. Last, it imports an xDrip+ settings file and checks that a low reading sounds the alert with its notification, that it repeats a minute later, stops when glucose is back in range, and stays quiet after Snooze.
 * **release:** only if both jobs pass, replaces the `bridge-latest` GitHub release, so the download link above always serves a fully tested build.
 
 ## Known limits
@@ -133,3 +148,4 @@ CI (`.github/workflows/android-bridge.yml`) runs:
 * The timestamp is the Eversense app's reading time (or its notification post time, about a second after the Bluetooth packet arrives). It is not the transmitter's internal measurement clock; the notification doesn't expose that.
 * Readings the Eversense app backfills without showing them in its notification are not captured.
 * Not a medical device. Keep the Eversense app's own alerts on.
+* On Android 14 and later, an alert shows over the lock screen only if the phone allows it; the alerts screen has a button for that if needed. The sound and vibration work either way.

@@ -5,7 +5,8 @@
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot. Then the app as it is used: Meanwhile, packaged
 # inside the app, shows the captured reading straight from the bridge and the next one
-# when it arrives, saves a backup file, and backs up to a Meanwhile server.
+# when it arrives, saves a backup file, and backs up to a Meanwhile server. Last, the glucose
+# alerts imported from xDrip+: a low sounds and repeats, stops when back up, and snoozes.
 #
 # usage: run-e2e.sh <bridge.apk> <fake-eversense.apk> <meanwhile server url>
 #   <meanwhile server url>: the website version (next start) on the machine running adb,
@@ -253,6 +254,80 @@ for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag:
   grep -qF "$needle" "$L" || { echo "--- saved log ---"; cat "$L"; fail "saved log is missing: $needle"; }
 done
 ok "log file saved to Downloads ($(wc -c < "$L") bytes) with raw Eversense notification, events, self-test PASS and logcat"
+
+# ------------------------------------------------------------------ glucose alerts (from xDrip+)
+# An xDrip+ settings export with a low alert at 80 (repeat every minute, snooze 15, sounds
+# even on silent, no sound file: the phone's alarm sound) and a high at 300.
+cat > e2e-out/xdrip-import.xml <<'XML'
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="saved_alerts">[{&quot;above&quot;:false,&quot;active&quot;:true,&quot;all_day&quot;:true,&quot;default_snooze&quot;:15,&quot;end_time_minutes&quot;:0,&quot;force_speaker&quot;:true,&quot;light&quot;:false,&quot;minutes_between&quot;:1,&quot;mp3_file&quot;:&quot;&quot;,&quot;name&quot;:&quot;E2E LOW&quot;,&quot;override_silent_mode&quot;:true,&quot;predictive&quot;:false,&quot;start_time_minutes&quot;:0,&quot;threshold&quot;:80.0,&quot;time_until_threshold_crossed&quot;:0.0,&quot;uuid&quot;:&quot;e2e-low-80&quot;,&quot;vibrate&quot;:true,&quot;volume&quot;:0},{&quot;above&quot;:true,&quot;active&quot;:true,&quot;all_day&quot;:true,&quot;default_snooze&quot;:90,&quot;force_speaker&quot;:true,&quot;minutes_between&quot;:3,&quot;name&quot;:&quot;E2E HIGH&quot;,&quot;override_silent_mode&quot;:true,&quot;threshold&quot;:300.0,&quot;uuid&quot;:&quot;e2e-high-300&quot;,&quot;vibrate&quot;:true}]</string>
+    <string name="bg_alert_profile">High</string>
+    <boolean name="smart_snoozing" value="false" />
+    <boolean name="smart_alerting" value="false" />
+    <boolean name="no_alarms_during_calls" value="true" />
+    <long name="alerts_disabled_until" value="99999999999999" />
+</map>
+XML
+alert_log() { adb logcat -d -s EversenseBridge:I | grep -E "ALERT:|SOUND:" || true; }
+has_log() { alert_log | grep -qF -- "$1"; }
+plays() { alert_log | grep -c "PLAY low" || true; }
+alert_shown() { adb shell cmd notification list 2>/dev/null | tr -d '\r' | grep -q "|$APP|3|"; }
+alert_gone() { ! alert_shown; }
+
+# automation on the alerts screen needs a token that only adb can put in the app's folder
+TOKEN=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+printf '%s' "$TOKEN" > e2e-out/automation-token
+adb logcat -c
+adb shell mkdir -p "/sdcard/Android/data/$APP/files"
+adb push e2e-out/xdrip-import.xml "/sdcard/Android/data/$APP/files/xdrip-import.xml" >/dev/null
+adb push e2e-out/automation-token "/sdcard/Android/data/$APP/files/automation-token" >/dev/null
+adb shell am start -W -n "$APP/.AlertsActivity" --es action snooze --es token wrong-token-0123456789 >/dev/null
+wait_until 10 has_log "ignored automation 'snooze'" || fail "automation with a wrong token was not refused: $(alert_log)"
+adb shell am start -W -n "$APP/.AlertsActivity" --es action import_file --es token "$TOKEN" >/dev/null
+wait_until 20 has_log "imported 2 alerts from xDrip+" || fail "alerts not imported: $(alert_log)"
+shot alerts-screen
+ok "xDrip+ alert settings imported (low ≤80, high ≥300, profile High)"
+
+sleep 11
+post --es value 70 --el when_offset_ms 1000
+wait_until 20 count_is 8 || fail "reading 70 not captured"
+wait_until 20 has_log "reading 70: PLAY low E2E LOW" || fail "a reading of 70 did not start the low alert: $(alert_log)"
+wait_until 15 alert_shown || fail "no alert notification: $(adb shell cmd notification list)"
+wait_until 15 sh -c 'adb logcat -d -s EversenseBridge:I | grep -qE "SOUND: (playing|.*beeping instead)"' \
+  || fail "the alert made no sound: $(alert_log)"
+SOUND=$(alert_log | grep "SOUND:" | tail -1 | sed 's/.*SOUND: //')
+shot alert-notification
+ok "70 mg/dL -> low alert sounds ($SOUND) with its notification"
+
+# it repeats every minute, by itself, while still low
+wait_until 80 has_log "PLAY low E2E LOW ≤80 (low E2E LOW ≤80 repeats)" || fail "the alert did not repeat after a minute: $(alert_log)"
+ok "still low a minute later -> the alert sounds again"
+
+# back in range: it stops
+sleep 5
+post --es value 120 --el when_offset_ms 1000
+wait_until 20 count_is 9 || fail "reading 120 not captured"
+wait_until 20 has_log "reading 120: STOP" || fail "the alert did not stop at 120: $(alert_log)"
+wait_until 10 alert_gone || fail "alert notification still shown at 120"
+ok "back to 120 -> the alert stops and its notification goes"
+
+# low again, then Snooze: quiet for the alert's 15 minutes even as readings stay low
+sleep 11
+post --es value 68 --el when_offset_ms 1000
+wait_until 20 count_is 10 || fail "reading 68 not captured"
+wait_until 20 has_log "reading 68: PLAY low" || fail "68 did not start the alert again: $(alert_log)"
+adb shell am start -W -n "$APP/.AlertsActivity" --es action snooze --es token "$TOKEN" >/dev/null
+wait_until 20 has_log "snoozed for 15 min" || fail "snooze did not work: $(alert_log)"
+wait_until 10 alert_gone || fail "alert notification still shown after snooze"
+BEFORE=$(plays)
+sleep 11
+post --es value 71 --el when_offset_ms 1000
+wait_until 20 count_is 11 || fail "reading 71 not captured"
+sleep 8
+[ "$(plays)" = "$BEFORE" ] || fail "the alert sounded while snoozed: $(alert_log)"
+alert_gone || fail "alert notification came back while snoozed"
+ok "snoozed for 15 min -> a further low reading (71) stays quiet"
 
 echo "all $PASSED end-to-end checks passed"
 get "/sgv.json?count=7"
