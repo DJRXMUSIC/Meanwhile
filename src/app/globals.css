@@ -110,3 +110,22 @@ html, body {
   100% { box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0); }
 }
 .mic-listening { animation: pulseRing 1.4s infinite; }
+
+/* Settings > Theme > Color: one slider over the colors */
+.color-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--c-ink));
+  border: 3px solid rgb(var(--c-bg));
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.3);
+}
+.color-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgb(var(--c-ink));
+  border: 3px solid rgb(var(--c-bg));
+}

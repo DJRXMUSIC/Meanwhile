@@ -8,6 +8,7 @@ import android.content.ClipboardManager;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -155,7 +156,7 @@ public class MainActivity extends Activity {
             showError("This copy of the app is incomplete", "It was built without Meanwhile's pages. "
                     + "Install the APK from the bridge-latest release.");
         } else {
-            open(AppPages.HOME + automationPage(intent));
+            open(AppPages.HOME + startPage(intent));
         }
 
         // Setup first: without notification access there are no readings to show.
@@ -168,6 +169,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (web != null && intent.getStringExtra(EXTRA_ACTION) == null && "alerts/".equals(startPage(intent))) {
+            open(AppPages.HOME + "alerts/");
+        }
         handleAutomation(intent);
     }
 
@@ -529,9 +533,138 @@ public class MainActivity extends Activity {
             if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, StatusActivity.class)));
         }
 
+        // The Alerts tab. Reads return JSON; changes return null or what's wrong, and when they
+        // have been applied the page hears window.__alertsChanged().
+
         @JavascriptInterface
-        public void openAlerts() {
-            if (trusted) runOnUiThread(() -> startActivity(new Intent(MainActivity.this, AlertsActivity.class)));
+        public String alertsState() {
+            return trusted ? AlertsBridge.state(MainActivity.this) : null;
+        }
+
+        @JavascriptInterface
+        public String alertsSaveRule(String json) {
+            return trusted ? AlertsBridge.saveRule(MainActivity.this, json, MainActivity.this::alertsChanged) : "not allowed";
+        }
+
+        @JavascriptInterface
+        public void alertsRemoveRule(String uuid) {
+            if (trusted) AlertsBridge.removeRule(MainActivity.this, uuid, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
+        public String alertsSaveSettings(String json) {
+            return trusted ? AlertsBridge.saveSettings(MainActivity.this, json, MainActivity.this::alertsChanged) : "not allowed";
+        }
+
+        @JavascriptInterface
+        public void alertsSnooze(int minutes) {
+            if (trusted) AlertsBridge.snooze(MainActivity.this, minutes, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
+        public void alertsDisable(String which, int minutes) {
+            if (trusted) AlertsBridge.disable(MainActivity.this, which, minutes, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
+        public void alertsPreSnooze(String uuid, int minutes) {
+            if (trusted) AlertsBridge.preSnooze(MainActivity.this, uuid, minutes, MainActivity.this::alertsChanged);
+        }
+
+        @JavascriptInterface
+        public String alertsTest(String json) {
+            return trusted ? AlertsBridge.test(MainActivity.this, json) : "not allowed";
+        }
+
+        @JavascriptInterface
+        public void alertsStopTest() {
+            if (trusted) Alerts.stopTest(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String alertsSoundInfo(String uri) {
+            return trusted ? AlertsBridge.soundInfo(MainActivity.this, uri == null || uri.isEmpty() ? null : uri) : null;
+        }
+
+        /** "phone": Android's sound list; "file": a sound file. The choice arrives as window.__alertsSoundPicked(uri). */
+        @JavascriptInterface
+        public void alertsPickSound(String kind, String current) {
+            if (trusted) runOnUiThread(() -> pickSound(kind, current));
+        }
+
+        /** "overlay", "full_screen", "dnd" or "notifications": opens where Android allows it. */
+        @JavascriptInterface
+        public void alertsOpenPermission(String which) {
+            if (trusted) runOnUiThread(() -> openPermission(which));
+        }
+    }
+
+    static final int REQ_PHONE_SOUND = 3;
+    static final int REQ_SOUND_FILE = 4;
+
+    private void alertsChanged() {
+        runOnUiThread(() -> {
+            if (web != null) web.evaluateJavascript("window.__alertsChanged&&window.__alertsChanged()", null);
+        });
+    }
+
+    private void pickSound(String kind, String current) {
+        final Intent i;
+        final int req;
+        if ("phone".equals(kind)) {
+            i = new Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALL)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Alert tone")
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
+            if (AlertSound.isPhoneSound(current)) {
+                i.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(current));
+            }
+            req = REQ_PHONE_SOUND;
+        } else if ("file".equals(kind)) {
+            i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*");
+            req = REQ_SOUND_FILE;
+        } else {
+            return;
+        }
+        try {
+            startActivityForResult(i, req);
+        } catch (ActivityNotFoundException e) {
+            soundPicked(null);
+        }
+    }
+
+    private void soundPicked(String uri) {
+        if (web == null) return;
+        web.evaluateJavascript("window.__alertsSoundPicked&&window.__alertsSoundPicked("
+                + (uri == null ? "null" : JSONObject.quote(uri)) + ")", null);
+    }
+
+    private void openPermission(String which) {
+        final Intent i;
+        switch (which == null ? "" : which) {
+            case "overlay":
+                i = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                break;
+            case "full_screen":
+                if (Build.VERSION.SDK_INT < 34) return;
+                i = new Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        Uri.parse("package:" + getPackageName()));
+                break;
+            case "dnd":
+                i = new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
+                break;
+            case "notifications":
+                i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+                break;
+            default:
+                return;
+        }
+        try {
+            startActivity(i);
+        } catch (ActivityNotFoundException e) {
+            EventLog.log(this, "WEB", "can't open the setting for " + which);
         }
     }
 
@@ -546,6 +679,11 @@ public class MainActivity extends Activity {
     }
 
     /** Hands the page what was heard: (text, null), (null, error), or (null, null) if cancelled. */
+    @SuppressWarnings("deprecation")
+    private static Uri legacyPickedRingtone(Intent data) {
+        return data.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
+    }
+
     private void speechResult(String text, String error) {
         if (web == null) return;
         web.evaluateJavascript("window.__everbridgeSpeech&&window.__everbridgeSpeech("
@@ -566,6 +704,24 @@ public class MainActivity extends Activity {
             final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
             EventLog.log(this, "WEB", picked == null ? "file picker: nothing chosen" : "file picker: a file was chosen");
             cb.onReceiveValue(picked == null ? null : new Uri[]{picked});
+        } else if (requestCode == REQ_PHONE_SOUND) {
+            Uri picked = null;
+            if (resultCode == RESULT_OK && data != null) {
+                picked = Build.VERSION.SDK_INT >= 33
+                        ? data.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri.class)
+                        : legacyPickedRingtone(data);
+            }
+            soundPicked(picked == null ? null : picked.toString());
+        } else if (requestCode == REQ_SOUND_FILE) {
+            final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            if (picked != null) {
+                try {
+                    getContentResolver().takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException e) {
+                    EventLog.log(this, "ALERT", "no lasting access to " + picked + ": " + e.getMessage());
+                }
+            }
+            soundPicked(picked == null ? null : picked.toString());
         } else if (requestCode == REQ_SPEECH) {
             String heard = null;
             if (resultCode == RESULT_OK && data != null) {
@@ -653,11 +809,19 @@ public class MainActivity extends Activity {
         handler.postDelayed(() -> afterLoad(loadsBefore, waited + 1, then), 1_000);
     }
 
-    /** A page of the app to open, from automation: "" (home), "settings/" or "profile/". */
+    /** A page of the app to open, from automation: "" (home), "settings/", "profile/" or "alerts/". */
     private static String automationPage(Intent intent) {
         if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return "";
         final String page = intent.getStringExtra(EXTRA_PAGE);
-        return "settings/".equals(page) || "profile/".equals(page) ? page : "";
+        return "settings/".equals(page) || "profile/".equals(page) || "alerts/".equals(page) ? page : "";
+    }
+
+    /** The page to start on: the automation's, or the Alerts tab from the app icon's shortcut. */
+    private static String startPage(Intent intent) {
+        if (intent != null && intent.getStringExtra(EXTRA_ACTION) == null && "alerts/".equals(intent.getStringExtra(EXTRA_PAGE))) {
+            return "alerts/";
+        }
+        return automationPage(intent);
     }
 
     /**
@@ -715,7 +879,7 @@ public class MainActivity extends Activity {
                 }
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
                         + (click != null ? " tapped=" + tapped[0] : "") + match
-                        + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
+                        + " text=" + (t.length() > 3000 ? t.substring(0, 3000) : t));
             } else {
                 handler.postDelayed(() -> webCheck(click, until, attempt + 1, tapped), 1_000);
             }

@@ -28,7 +28,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 | `BgReading.calculateSlope`, `Dex_Constants.TREND_ARROW_VALUES` thresholds | `core/Trend` | Same direction names and thresholds |
 | `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17590 (xDrip+ keeps 17580), loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
 | `UiBasedCollectorTest` | `core/…/NotificationParserTest`, `ReadingGateTest` | Ported test-for-test |
-| `models/AlertType` (`get_highest_active_alert`, `should_alarm`, `s_in_time_frame`, `HigherAlert`, `toSettings`/`fromSettings`), `ActiveBgAlert`, `Notifications.FileBasedNotifications`, `AlertPlayer` (`startAlert`, `ClockTick`, `Snooze`, `VibrateNotifyMakeNoise`, `playFile`, volume adjust and revert), `BgReading.trendingToAlertEnd` | `core/AlertEngine`, `AlertRule`, `AlertSettings`, `ActiveAlert`, `XdripAlertImport`; `app/Alerts`, `AlertSound` | Low and high glucose alerts only, step for step (commit `10739aa`) |
+| `models/AlertType` (`get_highest_active_alert`, `should_alarm`, `s_in_time_frame`, `HigherAlert`, `toSettings`/`fromSettings`), `ActiveBgAlert`, `Notifications.FileBasedNotifications`, `AlertPlayer` (`startAlert`, `ClockTick`, `Snooze`, `VibrateNotifyMakeNoise`, `playFile`, volume adjust and revert), `BgReading.trendingToAlertEnd` | `core/AlertEngine`, `AlertRule`, `AlertSettings`, `ActiveAlert`; `app/Alerts`, `AlertSound` | Low and high glucose alerts only, step for step (commit `10739aa`) |
 
 **Left out:** everything else, including every other collector (Dexcom, Libre, Medtronic, …), calibration, alerts other than low/high glucose (rising/falling, persistent high, predicted low, missed readings), Nightscout upload, graphs, watch integration, and xDrip's ActiveAndroid database, `Pref`/`PersistentStore` and dagger plumbing. Because of those transitive dependencies, `UiBasedCollector` can't simply be copied out of xDrip. The app (bridge, alerts and the Meanwhile shell) is about 7,000 lines of Java and has no third-party runtime dependencies.
 
@@ -87,36 +87,19 @@ Your history in Chrome stays in Chrome until you bring it over:
 
 The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 
-## Glucose alerts (from xDrip+)
+## Glucose alerts
 
-Meanwhile v5 has xDrip+'s low and high glucose alerts built in, and starts with the owner's xDrip+ setup, nothing to import:
+Low and high glucose alerts, working as xDrip+'s do (the logic is ported from xDrip+). They run in the app, so they sound with Meanwhile closed.
 
-| Alert | When | Repeats | Snooze | Sound | Vibrate |
-| --- | --- | --- | --- | --- | --- |
-| LOW WARNING | at or below 90 mg/dL, all day | every 1 min | 60 min | Beep (built in) | off |
-| Elevated Alert | at or above 155 mg/dL, all day | every 3 min | 90 min | Vibration sound (built in) | on |
-
-Both are **critical**: they sound on silent and through Do Not Disturb, on the alarm volume. Volume profile High, smart snoozing and smart alerting off, no alarms during phone calls. **Alert volume 50%** (see below).
-
-* **Find them:** Meanwhile → **Settings** → **Open glucose alerts** (the first item), or press and hold the app icon → **Glucose alerts**, or the bridge screen's **Glucose alerts** button under the last reading.
-* **Back:** the **← Meanwhile** button at the top (or the phone's back gesture) always returns to Meanwhile, even when the screen was opened from the app icon's shortcut or an alert.
-* **The screen is laid out like xDrip+'s**, with its names:
-  * **Snooze:** the alert going on, **Snooze** for a chosen time, **Disable / Re-Enable Low, High, All alerts**.
-  * **Glucose Level Alerts List:** **Create low alert**, **Create high alert**, the low and high alerts. Tap one for xDrip+'s Edit Alert fields: Alert Name, Threshold, Default Snooze, Re-raise every x minutes, Alert Tone (Phone sounds: Android's own ringtones, notification and alarm sounds such as Kernel; Beep or Vibration sound built in; any sound file of your own; or the phone's alarm sound), Select time for alert (all day or a window), Override phone Silent Mode, Force Speaker, Vibrate on alert, Disable alert, then **Test alert**, **Snooze alert before it fires**, **Remove alert**, **Save alert**.
-  * **Glucose Alerts Settings:** Alert Volume Profile (High, Medium, Ascending, Vibrate only, Silent), Smart Snoozing, Smart Alerting, Don't alarm during phone calls, Start Snoozed, Suppress Alerts if missed readings, Ascending Volume settings (Delay Ascending Volume, Ascend to medium).
-* **Alert volume (not in xDrip+):** any level from 1% to 100%: a slider, **−5% −1% +1% +5%** buttons, quick picks (10%, 25%, 50%, 75%, 100%) and **Test volume**. xDrip+ always plays at 100% of the alarm volume; here High plays at this level, Medium at 70% of it, and Ascending climbs to it. The stream is set to the step at or just above the level and the sound itself is turned down the rest of the way, so even 1% steps change the sound even though the phone's alarm volume has only a few steps.
-* **Do Not Disturb:** the alarm volume gets through Do Not Disturb except its "total silence" setting. To get through that too, tap **Allow through Do Not Disturb** on the alerts screen; then a critical alert switches total silence to alarms only.
-* **Turn the alerts off in xDrip+**, or both apps will alarm.
-* **Optional import:** to bring over another xDrip+ setup, in xDrip+ use menu → **Import / Export Features** → **Save settings**, then **Import xDrip+ settings file** on the alerts screen and pick `com.eveningoutpost.dexdrip_preferences.xml` (a zip with it inside works too). If an imported sound can't be opened (xDrip+'s permission to it doesn't carry over), tap **Sound** and pick it again.
-
-What an import brings: every low and high alert (threshold, on/off, time of day, repeat interval, snooze length, vibrate, sounds even on silent, alarm vs media volume, sound file) and the options for all alerts (volume profile, ascending ramp, smart snoozing and alerting, no alerts on stale data, start snoozed, no alarms during calls). xDrip+'s "alerts off until" times are not taken, so a snooze in xDrip+ doesn't silence Meanwhile v5.
-
-How they behave, as in xDrip+: checked on every reading and again at each repeat (an exact alarm wakes the phone, even in deep sleep). The lowest low that applies wins, else the highest high. The sound plays once per repeat at the profile's volume, and the stream volume is put back afterwards. **Snooze** on the notification, or swiping it away, snoozes for the alert's own snooze time. A lower low (or higher high) breaks through a snooze; going back in range stops the alert. The alerts screen also snoozes for a chosen time, turns all, low or high alerts off for a while, and edits each alert.
+* **Alerts tab** in Meanwhile (also: press and hold the app icon → Alerts): the alert going on with a big **Snooze**; **+ Low alert** / **+ High alert**; each alert's name, threshold, **volume (1–100%)**, tone (phone sounds such as Kernel, Beep, Vibration sound, a sound file, or the phone alarm), snooze, repeat, time window, sound on silent and Do Not Disturb, alarm volume, vibrate, on/off, Test, Snooze before it fires, Delete; turn Low / High / All off for a while; the options for all alerts (volume profile, smart snoozing and alerting, silent during calls, start snoozed, off when readings are missing, ascending settings).
+* **Built in:** LOW WARNING at or below 90 (beep, repeat 1 min, snooze 60) and Elevated Alert at or above 155 (vibration sound, repeat 3 min, snooze 90), both at 50%, sounding on silent and through Do Not Disturb.
+* **The alarm covers the screen:** when an alert sounds, a full-screen alarm with one big **SNOOZE** (and 15 min / 30 min / 1 h / 2 h) is drawn over whatever is open, like an incoming call; a volume button also snoozes, back hides it. This needs "Display over other apps" (**Allow → Alarm screen while using the phone** on the Alerts tab, once). On the lock screen, the alarm shows as Android's full-screen alarm; tapping the notification opens it too.
+* Each alert's volume is the level its sound reaches: High plays at it, Medium at 70% of it, Ascending climbs to it. The stream goes to the step at or above it and the sound itself is turned down the rest of the way, so every percent counts.
+* Turn the alerts off in xDrip+, or both apps will alarm.
 
 ## The screen
 
 * **Last reading:** big value and trend arrow. Green means the reading is under 6 minutes old, amber under 15, red older. It also shows how long ago the reading was, its exact time to the millisecond, the rate per 5 minutes, and where the time came from.
-* **Glucose alerts:** the alerts screen (see above).
 * **Status:** Eversense app, notification access, listener, battery, app notifications, keep-alive service, data endpoint, and last Eversense update. Anything red has a button that fixes it.
 * **Run self-test:** checks the endpoint answers, a test notification reaches the listener and parses, storage works, and the keep-alive service is running. It doesn't need the Eversense app and stores nothing.
 * **Save log file / Share log** (see below).
@@ -152,7 +135,7 @@ cd android
 CI (`.github/workflows/android-bridge.yml`) runs:
 
 * **build-test:** the core tests (including the alert engine, ported case by case, and the xDrip+ import), the Robolectric tests (glucose alerts: notification, snooze, swipe, wake-up timer, alerts screen; listener with real `RemoteViews` inflation, SQLite store, foreground service and stale alert, boot receiver, settings, screen, event log rotation, diagnostics report, log export, self-test round trip, and notification → HTTP JSON over a real socket), Android lint, and the release APK build.
-* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents. It checks the built-in Elevated Alert plays its built-in sound at 155. Last, it imports an xDrip+ settings file and checks that a low reading sounds the alert with its notification, that it repeats a minute later, stops when glucose is back in range, and stays quiet after Snooze.
+* **e2e:** boots an Android 15 emulator, installs the bridge and a fake Eversense app (same package name as Eversense 365), and runs `e2e/run-e2e.sh`. That script checks the exact `when` timestamp, repost dedupe, trend, mmol title-only parsing, `LO` rejection, the CORS/Private Network Access preflight, recovery after `kill -9`, and recovery after a full reboot. It then runs the self-test and the log export from the app, pulls the saved log file off the device and checks its contents. It checks the built-in Elevated Alert plays its built-in sound at 155, restores a backup through Settings, and that the Alerts tab shows the alerts. Last, it sets alerts through an adb-only control and checks that a low reading sounds the alert at its own volume with its notification and the alarm screen, that it repeats a minute later, stops when glucose is back in range, and that a volume button on the alarm screen snoozes it.
 * **release:** only if both jobs pass, replaces the `bridge-latest` GitHub release, so the download link above always serves a fully tested build.
 
 ## Known limits

@@ -109,7 +109,7 @@ export default function ProfilePage() {
             </div>
           </>
         ) : (
-          <div className="mt-2 text-sm text-muted">Log more decisions with outcomes to enable refinement.</div>
+          <div className="mt-2 text-sm text-muted">No data yet</div>
         )}
         {profile.ai_overrides?.notes && (
           <div className="mt-3 text-[11px] text-muted whitespace-pre-wrap">Last applied: {profile.ai_overrides.notes}</div>

@@ -25,10 +25,21 @@ final class Automation {
         if (Build.VERSION.SDK_INT < 30 || token == null || token.length() < 16) return false;
         final File f = new File(c.getExternalFilesDir(null), TOKEN_FILE);
         try (InputStream in = new FileInputStream(f)) {
-            return token.equals(new String(AlertsActivity.readAll(in), StandardCharsets.UTF_8).trim());
+            return token.equals(new String(readAll(in), StandardCharsets.UTF_8).trim());
         } catch (IOException e) {
             return false;
         }
+    }
+
+    static byte[] readAll(InputStream in) throws IOException {
+        final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        final byte[] buf = new byte[16384];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            if (out.size() > 4 * 1024 * 1024) throw new IOException("too big");
+        }
+        return out.toByteArray();
     }
 
     /** A file adb put in this app's folder, by plain name only; null otherwise. */

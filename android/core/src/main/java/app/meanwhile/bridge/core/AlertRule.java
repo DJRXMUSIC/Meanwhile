@@ -30,12 +30,24 @@ public final class AlertRule {
     public final boolean overrideSilent;
     /** Play on the alarm stream (through the speaker) rather than the media stream. */
     public final boolean forceSpeaker;
-    /** Sound to play (a content:// or file URI from xDrip+), or null for the default alarm. */
+    /** Sound to play (a content:// or file URI), or null for the phone's alarm sound. */
     public final String soundUri;
+    /** How loud this alert gets, percent of the stream's maximum (1-100). */
+    public final int volumePercent;
 
+    public static final int DEFAULT_VOLUME = 50;
+
+    /** Full volume (100%). */
     public AlertRule(String uuid, String name, boolean active, boolean above, double threshold,
                      boolean allDay, int startMinutes, int endMinutes, int minutesBetween, int defaultSnooze,
                      boolean vibrate, boolean overrideSilent, boolean forceSpeaker, String soundUri) {
+        this(uuid, name, active, above, threshold, allDay, startMinutes, endMinutes, minutesBetween, defaultSnooze,
+                vibrate, overrideSilent, forceSpeaker, soundUri, 100);
+    }
+
+    public AlertRule(String uuid, String name, boolean active, boolean above, double threshold,
+                     boolean allDay, int startMinutes, int endMinutes, int minutesBetween, int defaultSnooze,
+                     boolean vibrate, boolean overrideSilent, boolean forceSpeaker, String soundUri, int volumePercent) {
         this.uuid = uuid;
         this.name = name == null ? "" : name;
         this.active = active;
@@ -50,23 +62,30 @@ public final class AlertRule {
         this.overrideSilent = overrideSilent;
         this.forceSpeaker = forceSpeaker;
         this.soundUri = soundUri;
+        this.volumePercent = Math.max(1, Math.min(100, volumePercent));
     }
 
     public AlertRule withActive(boolean on) {
         return new AlertRule(uuid, name, on, above, threshold, allDay, startMinutes, endMinutes,
-                minutesBetween, defaultSnooze, vibrate, overrideSilent, forceSpeaker, soundUri);
+                minutesBetween, defaultSnooze, vibrate, overrideSilent, forceSpeaker, soundUri, volumePercent);
     }
 
     public AlertRule withSettings(double newThreshold, int newMinutesBetween, int newDefaultSnooze,
                                   boolean newVibrate, boolean newOverrideSilent) {
         return new AlertRule(uuid, name, active, above, newThreshold, allDay, startMinutes, endMinutes,
-                newMinutesBetween, newDefaultSnooze, newVibrate, newOverrideSilent, forceSpeaker, soundUri);
+                newMinutesBetween, newDefaultSnooze, newVibrate, newOverrideSilent, forceSpeaker, soundUri, volumePercent);
+    }
+
+    public AlertRule withVolume(int percent) {
+        return new AlertRule(uuid, name, active, above, threshold, allDay, startMinutes, endMinutes,
+                minutesBetween, defaultSnooze, vibrate, overrideSilent, forceSpeaker, soundUri, percent);
     }
 
     /** @param uri a sound the app can open, or null for the phone's alarm sound */
     public AlertRule withSound(String uri) {
         return new AlertRule(uuid, name, active, above, threshold, allDay, startMinutes, endMinutes,
-                minutesBetween, defaultSnooze, vibrate, overrideSilent, forceSpeaker, uri == null || uri.isEmpty() ? null : uri);
+                minutesBetween, defaultSnooze, vibrate, overrideSilent, forceSpeaker, uri == null || uri.isEmpty() ? null : uri,
+                volumePercent);
     }
 
     /** xDrip+ {@code s_in_time_frame}: inclusive, and a window may run past midnight. */
@@ -105,14 +124,19 @@ public final class AlertRule {
                 .field("override_silent_mode", overrideSilent)
                 .field("force_speaker", forceSpeaker);
         if (soundUri != null) j.field("mp3_file", soundUri);
+        j.field("volume_percent", volumePercent);
         j.endObject();
     }
 
     /**
-     * Reads one alert in xDrip+'s own JSON field names (its {@code saved_alerts} export and
-     * this app's storage use the same ones). Returns null if it has no threshold or uuid.
+     * Reads one alert, stored in xDrip+'s field names. Returns null if it has no threshold or uuid.
      */
     static AlertRule fromMap(Map<String, Object> m) {
+        return fromMap(m, DEFAULT_VOLUME);
+    }
+
+    /** @param defaultVolume for an alert stored before alerts had their own volume */
+    static AlertRule fromMap(Map<String, Object> m, int defaultVolume) {
         final Object uuid = m.get("uuid");
         final Object threshold = m.get("threshold");
         if (!(uuid instanceof String) || ((String) uuid).isEmpty() || !(threshold instanceof Number)) return null;
@@ -123,7 +147,8 @@ public final class AlertRule {
                 bool(m.get("all_day"), true), num(m.get("start_time_minutes"), 0), num(m.get("end_time_minutes"), 0),
                 num(m.get("minutes_between"), 1), num(m.get("default_snooze"), 0), bool(m.get("vibrate"), true),
                 bool(m.get("override_silent_mode"), false), bool(m.get("force_speaker"), false),
-                sound instanceof String && !((String) sound).isEmpty() ? (String) sound : null);
+                sound instanceof String && !((String) sound).isEmpty() ? (String) sound : null,
+                num(m.get("volume_percent"), defaultVolume));
     }
 
     private static String str(Object o) {

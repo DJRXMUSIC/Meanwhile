@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Press and hold the app icon: straight to the glucose alerts. -->
+<!-- Press and hold the app icon: the Alerts tab. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:enabled="true"
@@ -9,7 +9,11 @@
         android:shortcutShortLabel="@string/shortcut_alerts">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetClass="app.meanwhile.bridge.AlertsActivity"
-            android:targetPackage="app.meanwhile.bridge" />
+            android:targetClass="app.meanwhile.bridge.MainActivity"
+            android:targetPackage="app.meanwhile.bridge">
+            <extra
+                android:name="page"
+                android:value="alerts/" />
+        </intent>
     </shortcut>
 </shortcuts>

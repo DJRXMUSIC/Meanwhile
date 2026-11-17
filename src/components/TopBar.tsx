@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IN_APP_BUILD } from "@/lib/native";
 
 export function TopBar() {
   const path = usePathname();
   const tab = (href: string, label: string) => {
-    const active = path === href;
+    // the app's pages are exported with a trailing slash ("/alerts/")
+    const active = path === href || path === `${href}/`;
     return (
       <Link
         href={href}
@@ -29,6 +31,7 @@ export function TopBar() {
       </Link>
       <nav className="flex items-center gap-0.5 shrink-0">
         {tab("/", "Now")}
+        {IN_APP_BUILD && tab("/alerts", "Alerts")}
         {tab("/profile", "Profile")}
         {tab("/settings", "Settings")}
       </nav>

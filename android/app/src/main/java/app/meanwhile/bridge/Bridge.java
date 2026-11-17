@@ -42,6 +42,7 @@ public final class Bridge {
     /** Tests only: drop the singleton, its socket and its database handle. */
     static void resetForTests() {
         Alerts.resetForTests();
+        AlarmOverlay.resetForTests();
         synchronized (Bridge.class) {
             if (instance != null) {
                 instance.server.stop();

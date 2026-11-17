@@ -5,8 +5,9 @@
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot. Then the app as it is used: Meanwhile, packaged
 # inside the app, shows the captured reading straight from the bridge and the next one
-# when it arrives, saves a backup file, and backs up to a Meanwhile server. Last, the glucose
-# alerts imported from xDrip+: a low sounds and repeats, stops when back up, and snoozes.
+# when it arrives, saves and restores a backup file, and backs up to a Meanwhile server; the
+# Alerts tab. Last, the glucose alerts: a low sounds at its own volume, brings up the alarm
+# screen, repeats, stops when back up, and a volume button on the alarm screen snoozes it.
 #
 # usage: run-e2e.sh <bridge.apk> <fake-eversense.apk> <meanwhile server url>
 #   <meanwhile server url>: the website version (next start) on the machine running adb,
@@ -245,18 +246,17 @@ wait_until 60 reported || fail "the restore never reported"
 webcheck_line | grep -Eq "Restored [0-9]+ rows from restore.json" || fail "restore from file failed: $(webcheck_line | grep -o 'match=[^|]*' | head -c 300) :: $(adb logcat -d -s EversenseBridge:I | grep 'automation:' | tail -2)"
 ok "restore from file: $(webcheck_line | grep -Eo 'Restored [0-9]+ rows from restore.json')"
 
-# Settings starts with the way into the glucose alerts: pressing it opens the alerts screen
-alerts_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity|ResumedActivity" | grep -q "AlertsActivity"; }
+# the Alerts tab, inside Meanwhile: the built-in alerts are there
 adb logcat -c
-webcheck --es page settings/ --es click "Open glucose alerts" --es until "Open glucose alerts"
-wait_until 60 reported || fail "the settings page never reported"
-webcheck_line | grep -q "Open glucose alerts" || fail "no glucose alerts entry in Settings: $(webcheck_line)"
-wait_until 20 alerts_on_top || { shot no-alerts-screen; fail "pressing 'Open glucose alerts' did not open the alerts screen: $(adb shell dumpsys activity activities | grep -E 'ResumedActivity' | head -3)"; }
-shot alerts-from-settings
-adb shell input keyevent KEYCODE_BACK
-main_on_top() { adb shell dumpsys activity activities 2>/dev/null | grep -E "topResumedActivity" | grep -q "MainActivity"; }
-wait_until 10 main_on_top || fail "back from the alerts screen didn't return to Meanwhile"
-ok "Meanwhile Settings: 'Open glucose alerts' opens the alerts screen, and back returns to Meanwhile"
+webcheck --es page alerts/ --es until "Elevated Alert"
+wait_until 60 reported || fail "the Alerts tab never reported"
+W=$(webcheck_line)
+echo "$W" | grep -q "url=https://appassets.androidplatform.net/alerts/" || fail "not the Alerts tab: $W"
+for t in "LOW WARNING" "Elevated Alert" "+ Low alert" "+ High alert" "≤ 90 mg/dL · all day · 50%" "≥ 155 mg/dL · all day · 50%"; do
+  echo "$W" | grep -qF -- "$t" || fail "the Alerts tab doesn't show '$t': $W"
+done
+shot alerts-tab
+ok "Alerts tab shows the built-in alerts (LOW WARNING ≤90, Elevated Alert ≥155, each at 50%)"
 
 # cloud backup: Settings > Sync now sends the data to a Meanwhile server
 curl -fsS --max-time 10 -o /dev/null "$SERVER_URL" || fail "the Meanwhile server isn't running at $SERVER_URL"
@@ -291,36 +291,36 @@ for needle in "===== Health" "===== Active notifications (raw)" "package/id/tag:
 done
 ok "log file saved to Downloads ($(wc -c < "$L") bytes) with raw Eversense notification, events, self-test PASS and logcat"
 
-# ------------------------------------------------------------------ glucose alerts (from xDrip+)
-# An xDrip+ settings export with a low alert at 80 (repeat every minute, snooze 15, sounds
-# even on silent, no sound file: the phone's alarm sound) and a high at 300.
-cat > e2e-out/xdrip-import.xml <<'XML'
-<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
-<map>
-    <string name="saved_alerts">[{&quot;above&quot;:false,&quot;active&quot;:true,&quot;all_day&quot;:true,&quot;default_snooze&quot;:15,&quot;end_time_minutes&quot;:0,&quot;force_speaker&quot;:true,&quot;light&quot;:false,&quot;minutes_between&quot;:1,&quot;mp3_file&quot;:&quot;&quot;,&quot;name&quot;:&quot;E2E LOW&quot;,&quot;override_silent_mode&quot;:true,&quot;predictive&quot;:false,&quot;start_time_minutes&quot;:0,&quot;threshold&quot;:80.0,&quot;time_until_threshold_crossed&quot;:0.0,&quot;uuid&quot;:&quot;e2e-low-80&quot;,&quot;vibrate&quot;:true,&quot;volume&quot;:0},{&quot;above&quot;:true,&quot;active&quot;:true,&quot;all_day&quot;:true,&quot;default_snooze&quot;:90,&quot;force_speaker&quot;:true,&quot;minutes_between&quot;:3,&quot;name&quot;:&quot;E2E HIGH&quot;,&quot;override_silent_mode&quot;:true,&quot;threshold&quot;:300.0,&quot;uuid&quot;:&quot;e2e-high-300&quot;,&quot;vibrate&quot;:true}]</string>
-    <string name="bg_alert_profile">High</string>
-    <boolean name="smart_snoozing" value="false" />
-    <boolean name="smart_alerting" value="false" />
-    <boolean name="no_alarms_during_calls" value="true" />
-    <long name="alerts_disabled_until" value="99999999999999" />
-</map>
-XML
+# ------------------------------------------------------------------ glucose alerts
+# A low alert at 80 (repeat every minute, snooze 15, sounds on silent, the phone's alarm
+# sound, 60%) and a high at 300, set through the adb-only control.
+cat > e2e-out/alerts.json <<'JSON'
+{"units":"mgdl","settings":{"bg_alert_profile":"High","smart_snoozing":false,"smart_alerting":false,"no_alarms_during_calls":true},
+ "alerts":[{"uuid":"e2e-low-80","name":"E2E LOW","active":true,"above":false,"threshold":80,"all_day":true,"minutes_between":1,
+  "default_snooze":15,"vibrate":true,"override_silent_mode":true,"force_speaker":true,"volume_percent":60},
+ {"uuid":"e2e-high-300","name":"E2E HIGH","active":true,"above":true,"threshold":300,"all_day":true,"minutes_between":3,
+  "default_snooze":90,"vibrate":true,"override_silent_mode":true,"force_speaker":true,"volume_percent":60}]}
+JSON
 alert_log() { adb logcat -d -s EversenseBridge:I | grep -E "ALERT:|SOUND:" || true; }
 has_log() { alert_log | grep -qF -- "$1"; }
 plays() { alert_log | grep -c "PLAY low" || true; }
 alert_shown() { adb shell cmd notification list 2>/dev/null | tr -d '\r' | grep -q "|$APP|3|"; }
 alert_gone() { ! alert_shown; }
+# the alarm drawn over the screen (a window titled MeanwhileAlarm)
+alarm_on_top() { adb shell dumpsys window windows 2>/dev/null | grep -q "MeanwhileAlarm"; }
+alarm_gone() { ! alarm_on_top; }
+control() { adb shell am broadcast -n "$APP/.AutomationReceiver" "$@" >/dev/null; }
 
 adb logcat -c
-adb shell mkdir -p "/sdcard/Android/data/$APP/files"
-adb push e2e-out/xdrip-import.xml "/sdcard/Android/data/$APP/files/xdrip-import.xml" >/dev/null
-adb shell am start -W -n "$APP/.AlertsActivity" --es action snooze --es token wrong-token-0123456789 >/dev/null
-wait_until 10 has_log "ignored automation 'snooze'" || fail "automation with a wrong token was not refused: $(alert_log)"
-adb shell am start -W -n "$APP/.AlertsActivity" --es action import_file --es token "$TOKEN" >/dev/null
-wait_until 20 has_log "imported 2 alerts from xDrip+" || fail "alerts not imported: $(alert_log)"
-shot alerts-screen
-ok "xDrip+ alert settings imported (low ≤80, high ≥300, profile High)"
+adb push e2e-out/alerts.json "/sdcard/Android/data/$APP/files/alerts.json" >/dev/null
+control --es action alerts_snooze --es token wrong-token-0123456789
+wait_until 10 has_log "ignored automation 'alerts_snooze'" || fail "a control with a wrong token was not refused: $(alert_log)"
+control --es action alerts_config --es file alerts.json --es token "$TOKEN"
+wait_until 20 has_log "alerts set by adb: 2 alerts" || fail "alerts not set: $(alert_log)"
+ok "alerts set (low ≤80 at 60%, high ≥300), and a control without adb's token is refused"
 
+# the alarm covers the screen by itself when the app may display over other apps
+adb shell appops set "$APP" SYSTEM_ALERT_WINDOW allow
 sleep 11
 post --es value 70 --el when_offset_ms 1000
 wait_until 20 count_is 8 || fail "reading 70 not captured"
@@ -329,8 +329,11 @@ wait_until 15 alert_shown || fail "no alert notification: $(adb shell cmd notifi
 wait_until 15 sh -c 'adb logcat -d -s EversenseBridge:I | grep -qE "SOUND: (playing|.*beeping instead)"' \
   || fail "the alert made no sound: $(alert_log)"
 SOUND=$(alert_log | grep "SOUND:" | tail -1 | sed 's/.*SOUND: //')
-shot alert-notification
-ok "70 mg/dL -> low alert sounds ($SOUND) with its notification"
+echo "$SOUND" | grep -q "at 60%" || fail "the alert didn't play at its own volume (60%): $SOUND"
+wait_until 15 alarm_on_top || { shot no-alarm; fail "the alarm didn't cover the screen: $(alert_log | tail -5)"; }
+has_log "alarm shown over the screen" || fail "no log of the alarm overlay: $(alert_log)"
+shot alarm-over-the-screen
+ok "70 mg/dL -> low alert sounds ($SOUND), its notification shows, and the alarm covers the screen"
 
 # it repeats every minute, by itself, while still low
 wait_until 80 has_log "PLAY low E2E LOW ≤80 (low E2E LOW ≤80 repeats)" || fail "the alert did not repeat after a minute: $(alert_log)"
@@ -348,14 +351,16 @@ STOPS=$(alert_log | grep -c "STOP (no alert applies)" || true)
 cleared() { [ "$(alert_log | grep -c "STOP (no alert applies)" || true)" -gt "$STOPS" ]; }
 wait_until 80 cleared || fail "the stopped alert was never cleared: $(alert_log)"
 
-# low again, then Snooze: quiet for the alert's 15 minutes even as readings stay low
+# low again: the alarm covers the screen, and a volume button snoozes (for the alert's 15 minutes)
 sleep 11
 post --es value 68 --el when_offset_ms 1000
 wait_until 20 count_is 10 || fail "reading 68 not captured"
 wait_until 20 has_log "reading 68: PLAY low" || fail "68 did not start the alert again: $(alert_log)"
-adb shell am start -W -n "$APP/.AlertsActivity" --es action snooze --es token "$TOKEN" >/dev/null
-wait_until 20 has_log "snoozed for 15 min" || fail "snooze did not work: $(alert_log)"
+wait_until 15 alarm_on_top || fail "the alarm didn't cover the screen for 68"
+adb shell input keyevent KEYCODE_VOLUME_DOWN
+wait_until 20 has_log "snoozed for 15 min (alarm volume key)" || fail "the volume button did not snooze: $(alert_log)"
 wait_until 10 alert_gone || fail "alert notification still shown after snooze"
+wait_until 10 alarm_gone || fail "the alarm stayed on the screen after snooze"
 BEFORE=$(plays)
 sleep 11
 post --es value 71 --el when_offset_ms 1000
@@ -363,7 +368,7 @@ wait_until 20 count_is 11 || fail "reading 71 not captured"
 sleep 8
 [ "$(plays)" = "$BEFORE" ] || fail "the alert sounded while snoozed: $(alert_log)"
 alert_gone || fail "alert notification came back while snoozed"
-ok "snoozed for 15 min -> a further low reading (71) stays quiet"
+ok "alarm over the screen: a volume button snoozes for 15 min, it goes, and a further low (71) stays quiet"
 
 echo "all $PASSED end-to-end checks passed"
 get "/sgv.json?count=7"

@@ -304,8 +304,14 @@ public class MainActivityTest {
         assertNull(nativeOf(a).saveBegin("x.json"));
         assertFalse(nativeOf(a).copyText("secret"));
         nativeOf(a).openStatus();
-        nativeOf(a).openAlerts();
         nativeOf(a).startSpeech();
+        // the Alerts tab's functions too: nothing read, nothing changed, nothing opened
+        assertNull(nativeOf(a).alertsState());
+        assertEquals("not allowed", nativeOf(a).alertsSaveRule("{\"uuid\":\"x\",\"threshold\":80}"));
+        assertEquals("not allowed", nativeOf(a).alertsSaveSettings("{}"));
+        assertEquals("not allowed", nativeOf(a).alertsTest("{\"uuid\":\"x\",\"threshold\":80}"));
+        nativeOf(a).alertsPickSound("phone", "");
+        nativeOf(a).alertsOpenPermission("overlay");
         shadowOf(Looper.getMainLooper()).idle();
         assertNull(shadowOf(a).getNextStartedActivity());
         assertEquals(0, a.nativeReads.get());
@@ -434,9 +440,26 @@ public class MainActivityTest {
         nativeOf(a).openStatus();
         shadowOf(Looper.getMainLooper()).idle();
         assertEquals(StatusActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
-        nativeOf(a).openAlerts();
+    }
+
+    @Test
+    public void alertsTabFunctionsOnTheSite() throws Exception {
+        final MainActivity a = startWithSite();
+        pageStarted(a, SITE + "alerts/");
+        final org.json.JSONObject st = new org.json.JSONObject(nativeOf(a).alertsState());
+        assertTrue(st.getJSONObject("config").getJSONArray("alerts").length() >= 1);
+        nativeOf(a).alertsPickSound("phone", "");
         shadowOf(Looper.getMainLooper()).idle();
-        assertEquals(AlertsActivity.class.getName(), shadowOf(a).getNextStartedActivity().getComponent().getClassName());
+        assertEquals(android.media.RingtoneManager.ACTION_RINGTONE_PICKER, shadowOf(a).getNextStartedActivity().getAction());
+        nativeOf(a).alertsPickSound("file", "");
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(Intent.ACTION_OPEN_DOCUMENT, shadowOf(a).getNextStartedActivity().getAction());
+        nativeOf(a).alertsOpenPermission("overlay");
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, shadowOf(a).getNextStartedActivity().getAction());
+        nativeOf(a).alertsOpenPermission("anything else");
+        shadowOf(Looper.getMainLooper()).idle();
+        assertNull(shadowOf(a).getNextStartedActivity());
     }
 
     // ---------------------------------------------------------------- voice and file picker

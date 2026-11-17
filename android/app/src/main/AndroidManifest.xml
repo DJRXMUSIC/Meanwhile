@@ -19,6 +19,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- critical alerts: may turn Do Not Disturb from total silence to alarms only (if you allow it) -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!-- the alarm screen straight up while the phone is in use (if you allow it) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- package visibility (API 30+): only to show whether the Eversense app is installed -->
     <queries>
@@ -62,10 +64,19 @@
             android:exported="true"
             android:launchMode="singleTop" />
 
-        <!-- Glucose alerts (imported from xDrip+). Exported so the emulator test can import
-             and snooze; those automation actions only work when started from adb. -->
+        <!-- The alarm: shown over everything and the lock screen while a glucose alert sounds. -->
         <activity
-            android:name=".AlertsActivity"
+            android:name=".AlertScreenActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:taskAffinity="app.meanwhile.bridge.alarm"
+            android:turnScreenOn="true" />
+
+        <!-- The emulator test's alert controls: they do nothing without the adb-only token. -->
+        <receiver
+            android:name=".AutomationReceiver"
             android:exported="true" />
 
         <receiver
