@@ -365,6 +365,22 @@ public class AlertsTest {
     }
 
     @Test
+    public void backAlwaysLandsOnMeanwhile() {
+        // opened on its own (the app icon's shortcut, an alert): back opens Meanwhile, not nothing
+        final ActivityController<AlertsActivity> c = Robolectric.buildActivity(AlertsActivity.class).setup();
+        final String all = texts(c.get().getWindow().getDecorView());
+        assertTrue(all, all.contains("← Meanwhile"));
+        c.get().onBackPressed();
+        assertTrue(c.get().isFinishing());
+        final Intent next = shadowOf(c.get()).getNextStartedActivity();
+        if (c.get().isTaskRoot()) {
+            assertNotNull(next);
+            assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
+        }
+        c.pause().stop().destroy();
+    }
+
+    @Test
     public void automationIsIgnoredWhenNotFromAdb() {
         importExport();
         storeReading(System.currentTimeMillis(), 70);

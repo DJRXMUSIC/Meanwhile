@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_API = "api";
     /** The only buttons automation may press: both harmless to press any time. */
     static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
-            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts"));
+            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts", "Restore from file"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
@@ -361,10 +361,30 @@ public class MainActivity extends Activity {
     }
 
     private final class Chrome extends WebChromeClient {
+        /** The page's errors and warnings go into the event log (and so the saved log file). */
+        @Override
+        public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+            if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR
+                    || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING) {
+                final String text = m.message() == null ? "" : m.message();
+                EventLog.log(MainActivity.this, "PAGE", m.messageLevel() + ": "
+                        + (text.length() > 500 ? text.substring(0, 500) : text) + " (" + m.sourceId() + ":" + m.lineNumber() + ")");
+            }
+            return false;
+        }
+
         // "Restore from file" in Meanwhile's settings
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
+            final File staged = automationPick;
+            automationPick = null;
+            EventLog.log(MainActivity.this, "WEB", "file picker opened by the page");
+            if (staged != null) {
+                // the emulator test: the file adb staged, instead of the picker it can't operate
+                callback.onReceiveValue(new Uri[]{Uri.fromFile(staged)});
+                return true;
+            }
             fileCallback = callback;
             final Intent pick = new Intent(Intent.ACTION_GET_CONTENT)
                     .addCategory(Intent.CATEGORY_OPENABLE)
@@ -539,8 +559,12 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_FILE) {
             final ValueCallback<Uri[]> cb = fileCallback;
             fileCallback = null;
-            if (cb == null) return;
+            if (cb == null) {
+                EventLog.log(this, "WEB", "file picker returned, but the page was no longer waiting for it");
+                return;
+            }
             final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            EventLog.log(this, "WEB", picked == null ? "file picker: nothing chosen" : "file picker: a file was chosen");
             cb.onReceiveValue(picked == null ? null : new Uri[]{picked});
         } else if (requestCode == REQ_SPEECH) {
             String heard = null;
@@ -592,8 +616,17 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ automation
 
+    /** The emulator test: a file to give the page's next file picker (adb only). */
+    private File automationPick;
+
     private void handleAutomation(Intent intent) {
         if (intent == null || !"web_check".equals(intent.getStringExtra(EXTRA_ACTION))) return;
+        final String pick = intent.getStringExtra("pick");
+        if (pick != null) {
+            automationPick = Automation.fromAdb(this, intent.getStringExtra("token")) ? Automation.stagedFile(this, pick) : null;
+            EventLog.log(this, "WEB", automationPick != null ? "automation: next file picked is " + pick
+                    : "automation: file " + pick + " refused");
+        }
         final String api = automationApi(intent);
         if (api != null) apiOverride = api;
         final String page = automationPage(intent);
@@ -644,16 +677,31 @@ public class MainActivity extends Activity {
      * after 90 s regardless.
      */
     private void webCheck(String click, String until, int attempt, String checkId) {
+        webCheck(click, until, attempt, new boolean[]{false});
+    }
+
+    /**
+     * Presses {@code click} (once) with a real tap on the button, as a finger would: a script
+     * click isn't a user gesture, and the page's file picker only opens for one.
+     */
+    private void webCheck(String click, String until, int attempt, boolean[] tapped) {
         if (web == null || isFinishing()) return;
-        // once per check (an earlier check on the same page may have pressed another button)
-        final String id = JSONObject.quote(checkId);
+        final boolean findButton = click != null && !tapped[0];
         final String script = "(function(){"
-                + (click == null ? "" : "if(window.__ebClicked!==" + id + "){var b=[].slice.call(document.querySelectorAll('button'))"
+                + (findButton ? "var b=[].slice.call(document.querySelectorAll('button'))"
                 + ".filter(function(x){return x.textContent.trim()===" + JSONObject.quote(click) + "})[0];"
-                + "if(b){window.__ebClicked=" + id + ";b.click();}}")
+                + "if(b){b.scrollIntoView({block:'center'});var r=b.getBoundingClientRect();"
+                + "return 'TAP '+(r.left+r.width/2)+' '+(r.top+r.height/2);}" : "")
                 + "return document.body?document.body.innerText:''})()";
         web.evaluateJavascript(script, text -> {
             final String t = text == null ? "" : text;
+            if (findButton && t.startsWith("\"TAP ")) {
+                final String[] xy = t.substring(5, t.length() - 1).split(" ");
+                tap(Float.parseFloat(xy[0]), Float.parseFloat(xy[1]));
+                tapped[0] = true;
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, tapped), 1_000);
+                return;
+            }
             final boolean done = until != null ? t.contains(until) : (t.contains("next in") || t.contains("due now"));
             if (done || attempt >= 90) {
                 // the line that matched first (it can be far down a long page), then the start of the page
@@ -666,11 +714,32 @@ public class MainActivity extends Activity {
                     }
                 }
                 EventLog.log(this, "WEBCHECK", "native_reads=" + nativeReads.get() + " url=" + (web != null ? web.getUrl() : null)
-                        + match + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
+                        + (click != null ? " tapped=" + tapped[0] : "") + match
+                        + " text=" + (t.length() > 1500 ? t.substring(0, 1500) : t));
             } else {
-                handler.postDelayed(() -> webCheck(click, until, attempt + 1, checkId), 1_000);
+                handler.postDelayed(() -> webCheck(click, until, attempt + 1, tapped), 1_000);
             }
         });
+    }
+
+    /** A finger tap on the page at CSS pixel (x, y). */
+    private void tap(float cssX, float cssY) {
+        if (web == null) return;
+        final float d = getResources().getDisplayMetrics().density;
+        final float x = cssX * d;
+        final float y = cssY * d;
+        final long down = android.os.SystemClock.uptimeMillis();
+        final android.view.MotionEvent press = android.view.MotionEvent.obtain(down, down,
+                android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        web.dispatchTouchEvent(press);
+        press.recycle();
+        handler.postDelayed(() -> {
+            if (web == null) return;
+            final android.view.MotionEvent lift = android.view.MotionEvent.obtain(down, android.os.SystemClock.uptimeMillis(),
+                    android.view.MotionEvent.ACTION_UP, x, y, 0);
+            web.dispatchTouchEvent(lift);
+            lift.recycle();
+        }, 80);
     }
 
     // ------------------------------------------------------------------ view helpers

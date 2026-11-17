@@ -129,6 +129,12 @@ public class StatusActivity extends Activity {
         super.onPause();
     }
 
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        BackToMeanwhile.go(this);
+    }
+
     private void handleAutomation(Intent intent) {
         final String action = intent != null ? intent.getStringExtra(EXTRA_ACTION) : null;
         if ("export_log".equals(action)) saveLog(false);
@@ -443,7 +449,10 @@ public class StatusActivity extends Activity {
 
         final LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(text("Eversense connection", 20, true),
+        header.addView(smallButton("← Meanwhile", v -> BackToMeanwhile.go(this)));
+        final TextView heading = text("Eversense connection", 20, true);
+        heading.setPadding(dp(12), 0, 0, 0);
+        header.addView(heading,
                 new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         final TextView version = text("v" + bridge.versionName(), 12, false);
         version.setAlpha(0.6f);
