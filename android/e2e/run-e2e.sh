@@ -166,7 +166,13 @@ ok "after reboot: endpoint + listener back by themselves, history kept, capture 
 # ------------------------------------------------------------------ Meanwhile inside the app
 # webcheck [extras...]: ask the app to report what its page shows (optionally on another
 # page, after pressing a button, once some text appears); webcheck_line is the report.
-webcheck() { adb shell am start -W -n "$APP/.MainActivity" --es action web_check "$@" >/dev/null; }
+# (adb shell joins its arguments into one command line for the device's shell, which
+# would split "Download backup" in two: each argument is single-quoted for that shell)
+webcheck() {
+  local args="" a
+  for a in "$@"; do args="$args '$(printf %s "$a" | sed "s/'/'\\\\''/g")'"; done
+  adb shell "am start -W -n $APP/.MainActivity --es action web_check$args" >/dev/null
+}
 webcheck_line() { adb logcat -d -s EversenseBridge:I | grep "WEBCHECK:" | tail -1; }
 reported() { [ -n "$(webcheck_line)" ]; }
 # page_shows <text>: ask again until the page contains <text>
