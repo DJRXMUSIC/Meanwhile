@@ -230,7 +230,9 @@ public class MainActivity extends Activity {
 
     /** The packaged file for one of the app's pages, or null to let the request through. */
     WebResourceResponse serve(String url) {
-        if (!AppPages.isAppUrl(url)) return null;
+        // anything on the app's address is answered here, even an address too malformed to
+        // match a page: it must never go out to the network
+        if (!AppPages.isAppUrl(url) && (url == null || !url.startsWith(AppPages.ORIGIN + "/"))) return null;
         for (String asset : AppPages.candidates(url)) {
             final WebResourceResponse r = asset(asset, 200, "OK");
             if (r != null) return r;

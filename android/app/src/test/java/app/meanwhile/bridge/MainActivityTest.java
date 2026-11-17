@@ -220,7 +220,7 @@ public class MainActivityTest {
         assertTrue(home, home.contains("/_next/static/"));
 
         // every script and stylesheet the home page names is in the app
-        final java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"(/_next/static/[^\"?]+)\"").matcher(home);
+        final java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"(/_next/static/[^\"?\\\\]+)\"").matcher(home);
         int found = 0;
         while (m.find()) {
             final WebResourceResponse part = a.serve(AppPages.ORIGIN + m.group(1));
@@ -241,6 +241,7 @@ public class MainActivityTest {
         assertEquals(404, a.serve(AppPages.HOME + "%2e%2e/%2e%2e/databases/readings.db").getStatusCode());
         assertNull("other sites are fetched normally", a.serve("https://my-site.netlify.app/api/sync"));
         assertNull(a.serve("http://127.0.0.1:17590/sgv.json"));
+        assertEquals("malformed, but the app's", 404, a.serve(AppPages.ORIGIN + "/_next/x.css\\").getStatusCode());
     }
 
     // ---------------------------------------------------------------- staying on the site
