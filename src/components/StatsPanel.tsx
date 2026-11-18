@@ -1,6 +1,7 @@
 "use client";
 
 import type { BgReading, InsulinDose } from "@/lib/types";
+import { captureStats, withEstimates, type Capture, type Estimate } from "@/lib/gapFill";
 import {
   tirWindow,
   medianBgWindow,
@@ -13,14 +14,24 @@ const DAY = 24 * 3600_000;
 
 export function StatsPanel({
   bgList,
+  estimates,
   insulinList,
+  now,
 }: {
   bgList: BgReading[];
+  estimates: Estimate[];
   insulinList: InsulinDose[];
+  now: number;
 }) {
-  const tir24 = tirWindow(bgList, 1 * DAY, 70, 160);
-  const tir72 = tirWindow(bgList, 3 * DAY, 70, 160);
-  const median3d = medianBgWindow(bgList, 3 * DAY);
+  // missed readings count as their estimates, so a gap doesn't skew the numbers
+  const all = withEstimates(bgList, estimates);
+  const tir24 = tirWindow(all, 1 * DAY, 70, 160);
+  const tir72 = tirWindow(all, 3 * DAY, 70, 160);
+  const median3d = medianBgWindow(all, 3 * DAY);
+  const cap24 = captureStats(bgList, estimates, 1 * DAY, now);
+  const cap72 = captureStats(bgList, estimates, 3 * DAY, now);
+  const est = (w: number) => all.filter((r) => r.estimated && r.ts >= Date.now() - w).length;
+  const pts = (n: number, w: number) => `${n} pts${est(w) ? ` · ${est(w)} est.` : ""}`;
   const avgBolus3d = avgBolusWindow(insulinList, 3 * DAY);
   const dailyBolus3d = avgDailyBolus(insulinList, 3);
   const today = totalBolusToday(insulinList);
@@ -35,13 +46,14 @@ export function StatsPanel({
         <Tile
           label="TIR · 24h"
           value={tir24.n ? `${(tir24.tir * 100).toFixed(0)}%` : "—"}
-          hint={tir24.n ? `${tir24.n} pts` : "no data"}
+          hint={tir24.n ? pts(tir24.n, DAY) : "no data"}
         />
         <Tile
           label="TIR · 3d"
           value={tir72.n ? `${(tir72.tir * 100).toFixed(0)}%` : "—"}
-          hint={tir72.n ? `${tir72.n} pts` : "no data"}
+          hint={tir72.n ? pts(tir72.n, 3 * DAY) : "no data"}
         />
+        <CaptureTile day={cap24} threeDays={cap72} />
         <Tile
           label="Median BG · 3d"
           value={median3d != null ? `${Math.round(median3d)}` : "—"}
@@ -65,6 +77,38 @@ export function StatsPanel({
         />
       </div>
     </section>
+  );
+}
+
+// Readings caught vs estimated vs missing, as a split bar with the counts beside it.
+function CaptureTile({ day, threeDays }: { day: Capture; threeDays: Capture }) {
+  const pct = (n: number, c: Capture) => (c.expected ? Math.round((n / c.expected) * 100) : 0);
+  const parts = [
+    { n: day.caught, label: "caught", style: { background: "rgb(var(--g-in))" } },
+    { n: day.estimated, label: "estimated", style: { background: "rgb(var(--g-in) / 0.35)" } },
+    { n: day.missing, label: "missing", style: { background: "rgb(var(--c-ink) / 0.12)" } },
+  ];
+  return (
+    <div className="col-span-2 rounded-xl bg-surface2/60 p-3 ring-1 ring-white/5">
+      <div className="flex items-baseline justify-between">
+        <div className="text-[10px] uppercase tracking-wider text-muted">Readings caught · 24h</div>
+        <div className="text-[11px] text-muted">3d {pct(threeDays.caught, threeDays)}%</div>
+      </div>
+      <div className="num text-2xl font-semibold mt-0.5 text-ink">{pct(day.caught, day)}%</div>
+      <div className="mt-2 flex h-2 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+        {parts.filter((p) => p.n > 0).map((p) => (
+          <div key={p.label} style={{ ...p.style, flexGrow: p.n }} />
+        ))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
+        {parts.map((p) => (
+          <span key={p.label} className="flex items-center gap-1">
+            <span className="inline-block size-2 rounded-full" style={p.style} />
+            <span className="num text-ink">{p.n}</span> {p.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

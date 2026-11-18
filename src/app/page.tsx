@@ -20,6 +20,7 @@ import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 import { apiUrl, NO_SERVER_MESSAGE } from "@/lib/native";
 import { SHOW_NOW } from "@/lib/alerts";
+import { fillGaps } from "@/lib/gapFill";
 
 export default function HomePage() {
   const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
@@ -116,6 +117,9 @@ export default function HomePage() {
     }
   };
 
+  // best guesses for missed readings: drawn on the chart and counted in the stats, never stored
+  const estimates = useMemo(() => fillGaps(bgList), [bgList]);
+
   return (
     <div className="flex flex-col gap-3 pb-2">
       <StatTiles
@@ -141,6 +145,7 @@ export default function HomePage() {
       />
       <Chart5h
         readings={bgList}
+        estimates={estimates}
         doses={insulinList}
         windowHours={windowHours}
         now={now}
@@ -151,7 +156,7 @@ export default function HomePage() {
         overlay24={overlay24}
         overlay48={overlay48}
       />
-      <StatsPanel bgList={bgList} insulinList={insulinList} />
+      <StatsPanel bgList={bgList} estimates={estimates} insulinList={insulinList} now={now} />
       <DoseList doses={insulinList} />
 
       {mode === "decide" && error && (
