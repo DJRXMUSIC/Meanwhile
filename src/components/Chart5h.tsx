@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { BgReading, InsulinDose } from "@/lib/types";
+import { bgAt, buildOverlay, DAY_MS, LOOKAHEAD_MS, nearest, overlayBoluses, type Pt } from "@/lib/chartOverlay";
 
 // Five-zone bolus chart with a piecewise-linear y-axis:
 //   • 40–70   → 10% of plot height  (compressed; we rarely live there)
@@ -14,6 +15,8 @@ import type { BgReading, InsulinDose } from "@/lib/types";
 // X-axis: configurable window (3/5/8/24h) plus pannable history via
 // pointer drag (touch and mouse). When the user drags into the past,
 // the "now" line is hidden and a "viewing N h ago" caption appears.
+// After the right edge, 190 minutes of blank lookahead, where the −24h / −48h
+// traces (and their boluses) carry on.
 
 export type WindowHours = 3 | 5 | 8 | 24;
 
@@ -61,20 +64,6 @@ function rangeColor(mgdl: number, low: number, high: number): string {
   return mgdl < low ? LOW_COLOR : mgdl > high ? HIGH_COLOR : IN_COLOR;
 }
 
-// Ghost trace from `offsetMs` in the past, shifted forward so it overlays
-// the current window at the same wall-clock time.
-function buildOverlay(
-  readings: BgReading[],
-  minT: number,
-  maxT: number,
-  offsetMs: number
-): { ts: number; mgdl: number }[] {
-  return readings
-    .filter((r) => r.ts >= minT - offsetMs && r.ts <= maxT - offsetMs)
-    .map((r) => ({ ts: r.ts + offsetMs, mgdl: r.mgdl }))
-    .sort((a, b) => a.ts - b.ts);
-}
-
 interface Props {
   readings: BgReading[];
   doses: InsulinDose[];
@@ -115,18 +104,21 @@ function Chart5hImpl({
     return m;
   }, [readings, doses]);
 
+  // maxT: the present (or the panned-to) edge; endT: the end of the lookahead after it.
   const maxT = Math.max(now, latestTs) - panMs;
   const minT = maxT - windowHours * 3600_000;
+  const endT = maxT + LOOKAHEAD_MS;
   const xOf = useCallback(
-    (t: number) => pad.l + ((t - minT) / (maxT - minT)) * plotW,
-    [minT, maxT]
+    (t: number) => pad.l + ((t - minT) / (endT - minT)) * plotW,
+    [minT, endT]
   );
 
   // Declared up here because the overlay memos below skip their work while
   // a pan gesture is in flight.
   const [dragging, setDragging] = useState(false);
-  // A tapped point: its reading, shown until the next tap (or 8 s).
-  const [inspect, setInspect] = useState<BgReading | null>(null);
+  // A tapped point: its reading (from the −24h / −48h trace in the lookahead), shown until
+  // the next tap (or 8 s).
+  const [inspect, setInspect] = useState<(Pt & { ago?: string }) | null>(null);
   useEffect(() => {
     if (!inspect) return;
     const t = setTimeout(() => setInspect(null), 8_000);
@@ -162,13 +154,22 @@ function Chart5hImpl({
   // Suppressed mid-drag: they double or triple the path work on every
   // frame of a pan, for a comparison nobody is reading during the gesture.
   const overlay24Pts = useMemo(
-    () => (overlay24 && !dragging ? buildOverlay(readings, minT, maxT, 24 * 3600_000) : []),
-    [overlay24, dragging, readings, minT, maxT]
+    () => (overlay24 && !dragging ? buildOverlay(readings, minT, endT, DAY_MS) : []),
+    [overlay24, dragging, readings, minT, endT]
   );
   const overlay48Pts = useMemo(
-    () => (overlay48 && !dragging ? buildOverlay(readings, minT, maxT, 48 * 3600_000) : []),
-    [overlay48, dragging, readings, minT, maxT]
+    () => (overlay48 && !dragging ? buildOverlay(readings, minT, endT, 2 * DAY_MS) : []),
+    [overlay48, dragging, readings, minT, endT]
   );
+  // Their boluses, on their traces.
+  const overlayDoses = useMemo(() => {
+    const out: { d: InsulinDose; trace: Pt[]; ago: string }[] = [];
+    if (overlay48Pts.length)
+      for (const d of overlayBoluses(doses, minT, endT, 2 * DAY_MS)) out.push({ d, trace: overlay48Pts, ago: "−48h" });
+    if (overlay24Pts.length)
+      for (const d of overlayBoluses(doses, minT, endT, DAY_MS)) out.push({ d, trace: overlay24Pts, ago: "−24h" });
+    return out;
+  }, [doses, minT, endT, overlay24Pts, overlay48Pts]);
 
   const toPath = useCallback(
     (pts: { ts: number; mgdl: number }[]) =>
@@ -187,25 +188,6 @@ function Chart5hImpl({
   const overlay48Path = useMemo(() => toPath(overlay48Pts), [toPath, overlay48Pts]);
   const bgPath = useMemo(() => toPath(bgInWin), [toPath, bgInWin]);
 
-  // Linear interpolation of BG at a given timestamp, for placing dose
-  // markers on the BG line itself.
-  const bgAt = (ts: number, allBg: BgReading[]): number | null => {
-    if (!allBg.length) return null;
-    let prev: BgReading | null = null;
-    let next: BgReading | null = null;
-    for (const r of allBg) {
-      if (r.ts <= ts) prev = r;
-      if (r.ts >= ts && !next) { next = r; break; }
-    }
-    if (prev && next && prev !== next) {
-      const span = next.ts - prev.ts;
-      if (span === 0) return prev.mgdl;
-      const frac = (ts - prev.ts) / span;
-      return prev.mgdl + (next.mgdl - prev.mgdl) * frac;
-    }
-    return prev?.mgdl ?? next?.mgdl ?? null;
-  };
-
   // Hour gridlines: pick spacing based on window
   const labelEveryMin =
     windowHours <= 3 ? 30 :
@@ -220,7 +202,7 @@ function Chart5hImpl({
 
   const tickFloor = Math.floor(minT / (tickEveryMin * 60_000)) * tickEveryMin * 60_000;
   const ticks: number[] = [];
-  for (let t = tickFloor; t <= maxT; t += tickEveryMin * 60_000) {
+  for (let t = tickFloor; t <= endT; t += tickEveryMin * 60_000) {
     if (t >= minT) ticks.push(t);
   }
   const labels = ticks.filter((t) => Math.round((t / 60_000) % labelEveryMin) === 0);
@@ -309,7 +291,7 @@ function Chart5hImpl({
     }
 
     const w = containerRef.current.clientWidth || 1;
-    const windowMs = windowHours * 3600_000;
+    const windowMs = endT - minT;
     // Drag the content rightward → reveal older data on the left → increase panMs.
     const deltaPan = (dx / w) * windowMs;
     const next = Math.max(0, dragRef.current.startPan + deltaPan);
@@ -320,13 +302,22 @@ function Chart5hImpl({
       try { e.currentTarget.releasePointerCapture(dragRef.current.pid); } catch {}
       // a tap (no real movement): show the reading nearest that time
       const moved = Math.hypot(e.clientX - dragRef.current.startX, e.clientY - dragRef.current.startY);
-      if (moved < DIRECTION_THRESHOLD_PX && e.type === "pointerup" && containerRef.current && bgInWin.length) {
+      if (moved < DIRECTION_THRESHOLD_PX && e.type === "pointerup" && containerRef.current) {
         const box = containerRef.current.getBoundingClientRect();
         const x = ((e.clientX - box.left) / (box.width || 1)) * view.w;
-        const t = minT + ((x - pad.l) / plotW) * (maxT - minT);
-        let best = bgInWin[0];
-        for (const r of bgInWin) if (Math.abs(r.ts - t) < Math.abs(best.ts - t)) best = r;
-        setInspect(inspect && inspect.ts === best.ts ? null : best);
+        const t = minT + ((x - pad.l) / plotW) * (endT - minT);
+        // before the edge: the reading; in the lookahead: the nearest −24h / −48h one
+        let best: (Pt & { ago?: string }) | null = null;
+        if (t <= maxT) best = nearest(bgInWin, t);
+        else {
+          // looked up here: the traces themselves are off while a mouse button is down
+          const near = (on: boolean, off: number) =>
+            on ? nearest(buildOverlay(readings, t - 30 * 60_000, t + 30 * 60_000, off), t) : null;
+          const a = near(overlay24, DAY_MS);
+          const b = near(overlay48, 2 * DAY_MS);
+          best = a && (!b || Math.abs(a.ts - t) <= Math.abs(b.ts - t)) ? { ...a, ago: "−24h" } : b ? { ...b, ago: "−48h" } : null;
+        }
+        if (best) setInspect(inspect && inspect.ts === best.ts && inspect.ago === best.ago ? null : best);
       }
     }
     // Land on the final position even if the gesture ended between frames.
@@ -412,6 +403,14 @@ function Chart5hImpl({
           {/* Compressed-zone tints */}
           <rect x={pad.l} y={pad.t} width={plotW} height={highH} fill="currentColor" fillOpacity={0.03} />
           <rect x={pad.l} y={pad.t + highH + midH} width={plotW} height={lowH} fill="currentColor" fillOpacity={0.03} />
+
+          {/* Lookahead: blank after the edge */}
+          <rect x={xOf(maxT)} y={pad.t} width={pad.l + plotW - xOf(maxT)} height={plotH}
+            fill="currentColor" fillOpacity={0.045} />
+          {!showNowLine && (
+            <line x1={xOf(maxT)} x2={xOf(maxT)} y1={pad.t} y2={pad.t + plotH}
+              stroke="currentColor" strokeOpacity={0.25} strokeWidth={1.5} />
+          )}
 
           {/* In-range band */}
           <rect
@@ -513,7 +512,7 @@ function Chart5hImpl({
             />
           )}
           {/* the tapped reading */}
-          {inspect && inspect.ts >= minT && inspect.ts <= maxT && (
+          {inspect && inspect.ts >= minT && inspect.ts <= endT && (
             <>
               <line
                 x1={xOf(inspect.ts)} x2={xOf(inspect.ts)}
@@ -523,7 +522,8 @@ function Chart5hImpl({
                 strokeWidth={1.5}
               />
               <circle cx={xOf(inspect.ts)} cy={yOf(inspect.mgdl)} r="8"
-                fill={rangeColor(inspect.mgdl, targetLow, targetHigh)} stroke="rgb(var(--c-surface))" strokeWidth={3} />
+                fill={inspect.ago ? "#5cd0ff" : rangeColor(inspect.mgdl, targetLow, targetHigh)}
+                stroke="rgb(var(--c-surface))" strokeWidth={3} />
             </>
           )}
 
@@ -667,7 +667,7 @@ function Chart5hImpl({
           )}
 
           {/* The tapped reading: value and time */}
-          {inspect && inspect.ts >= minT && inspect.ts <= maxT && (() => {
+          {inspect && inspect.ts >= minT && inspect.ts <= endT && (() => {
             const pctX = (xOf(inspect.ts) / view.w) * 100;
             return (
               <div
@@ -681,12 +681,37 @@ function Chart5hImpl({
                 <div className="text-lg font-bold leading-none" style={{ color: rangeColor(inspect.mgdl, targetLow, targetHigh) }}>
                   {inspect.mgdl} <span className="text-[11px] font-normal text-muted">mg/dL</span>
                 </div>
-                <div className="text-[11px] text-muted mt-0.5">
+                <div className="text-[11px] text-muted mt-0.5 whitespace-nowrap">
                   {String(new Date(inspect.ts).getHours()).padStart(2, "0")}:{String(new Date(inspect.ts).getMinutes()).padStart(2, "0")}
+                  {inspect.ago && ` · ${inspect.ago}`}
                 </div>
               </div>
             );
           })()}
+
+          {/* −24h / −48h boluses: a hollow ring on their trace (HTML, so it stays round), units above */}
+          {overlayDoses.map(({ d, trace, ago }) => {
+            const v = bgAt(d.ts, trace);
+            const cy = v != null ? yOf(v) : pad.t + plotH * 0.25;
+            const left = `${(xOf(d.ts) / view.w) * 100}%`;
+            const top = `${(cy / view.h) * 100}%`;
+            const opacity = ago === "−24h" ? 0.85 : 0.55;
+            return (
+              <div key={`ol-${ago}-${d.id ?? d.ts}-${d.units}`} style={{ opacity }}>
+                <div
+                  className="absolute size-3 rounded-full"
+                  style={{ left, top, transform: "translate(-50%, -50%)", border: "2.5px solid #ff9d4d",
+                    background: "rgb(var(--c-surface))" }}
+                />
+                <div
+                  className="num absolute pb-2 text-[13px] font-semibold whitespace-nowrap"
+                  style={{ left, top, transform: "translate(-50%, -100%)", color: "#ff9d4d" }}
+                >
+                  {d.units}U
+                </div>
+              </div>
+            );
+          })}
 
           {/* Bolus / basal unit labels above their markers */}
           {dosesInWin.map((d) => {
