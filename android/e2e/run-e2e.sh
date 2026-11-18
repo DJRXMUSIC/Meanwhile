@@ -354,14 +354,14 @@ STOPS=$(alert_log | grep -c "STOP (no alert applies)" || true)
 cleared() { [ "$(alert_log | grep -c "STOP (no alert applies)" || true)" -gt "$STOPS" ]; }
 wait_until 80 cleared || fail "the stopped alert was never cleared: $(alert_log)"
 
-# low again: the alarm covers the screen, and a volume button snoozes (for the alert's 15 minutes)
+# low again: the alarm covers the screen, and a volume button snoozes (90 minutes, the big choice)
 sleep 11
 post --es value 68 --el when_offset_ms 1000
 wait_until 20 count_is 10 || fail "reading 68 not captured"
 wait_until 20 has_log "reading 68: PLAY low" || fail "68 did not start the alert again: $(alert_log)"
 wait_until 15 alarm_on_top || fail "the alarm didn't cover the screen for 68"
 adb shell input keyevent KEYCODE_VOLUME_DOWN
-wait_until 20 has_log "snoozed for 15 min (alarm volume key)" || fail "the volume button did not snooze: $(alert_log)"
+wait_until 20 has_log "snoozed for 90 min (alarm volume key)" || fail "the volume button did not snooze: $(alert_log)"
 wait_until 10 alert_gone || fail "alert notification still shown after snooze"
 wait_until 10 alarm_gone || fail "the alarm stayed on the screen after snooze"
 BEFORE=$(plays)
@@ -371,7 +371,7 @@ wait_until 20 count_is 11 || fail "reading 71 not captured"
 sleep 8
 [ "$(plays)" = "$BEFORE" ] || fail "the alert sounded while snoozed: $(alert_log)"
 alert_gone || fail "alert notification came back while snoozed"
-ok "alarm over the screen: a volume button snoozes for 15 min, it goes, and a further low (71) stays quiet"
+ok "alarm over the screen: a volume button snoozes for 90 min, it goes, and a further low (71) stays quiet"
 
 echo "all $PASSED end-to-end checks passed"
 get "/sgv.json?count=7"

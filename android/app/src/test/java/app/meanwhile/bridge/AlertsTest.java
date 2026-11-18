@@ -346,10 +346,10 @@ public class AlertsTest {
         assertTrue(AlarmOverlay.isShowing());
         final String all = texts(AlarmOverlay.panelForTests());
         assertTrue(all, all.contains("LOW WARNING"));
-        assertTrue(all, all.contains("SNOOZE\n60 min"));
+        assertTrue(all, all.contains("90 min"));
 
         // its big button snoozes, and it goes
-        findButton(AlarmOverlay.panelForTests(), "SNOOZE\n60 min").performClick();
+        findButton(AlarmOverlay.panelForTests(), "90 min").performClick();
         shadowOf(android.os.Looper.getMainLooper()).idle();
         assertFalse(AlarmOverlay.isShowing());
         idleAlertThread();
@@ -394,13 +394,13 @@ public class AlertsTest {
         final String all = texts(c.get().getWindow().getDecorView());
         assertTrue(all, all.contains("LOW WARNING"));
         assertTrue(all, all.contains("80"));
-        assertTrue(all, all.contains("SNOOZE\n60 min"));
-        final android.widget.Button big = findButton(c.get().getWindow().getDecorView(), "SNOOZE\n60 min");
+        assertTrue(all, all.contains("90 min"));
+        final android.widget.Button big = findButton(c.get().getWindow().getDecorView(), "90 min");
         big.performClick();
         assertTrue(c.get().isFinishing());
         idleAlertThread();
         assertTrue(Alerts.active(app).snoozed);
-        assertTrue(Alerts.active(app).nextAlertAt > System.currentTimeMillis() + 59 * 60_000L);
+        assertTrue(Alerts.active(app).nextAlertAt > System.currentTimeMillis() + 89 * 60_000L);
         assertNull(nm.getNotification(Alerts.NOTIFICATION_ID));
     }
 
@@ -419,10 +419,50 @@ public class AlertsTest {
         makeRepeatDue();
         Alerts.checkNow(app, "test");
         c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
-        findButton(c.get().getWindow().getDecorView(), "15 min").performClick();
+        findButton(c.get().getWindow().getDecorView(), "30 min").performClick();
         idleAlertThread();
         final long left = Alerts.active(app).nextAlertAt - System.currentTimeMillis();
-        assertTrue(left > 14 * 60_000L && left <= 15 * 60_000L);
+        assertTrue(left > 29 * 60_000L && left <= 30 * 60_000L);
+    }
+
+    @Test
+    public void alarmSnoozeChoicesTopToBottomWithNinetyAsTheBigOne() {
+        importExport();
+        storeReading(System.currentTimeMillis(), 80);
+        Alerts.checkNow(app, "test");
+        final ActivityController<AlertScreenActivity> c = Robolectric.buildActivity(AlertScreenActivity.class).setup();
+        final String all = texts(c.get().getWindow().getDecorView());
+        int at = -1;
+        for (String l : new String[]{"30 min", "60 min", "90 min", "2 h", "2.5 h", "3 h"}) {
+            final int i = all.indexOf(l, at + 1);
+            assertTrue(l + " in order: " + all, i > at);
+            at = i;
+        }
+        final android.widget.Button big = findButton(c.get().getWindow().getDecorView(), "90 min");
+        final android.widget.Button small = findButton(c.get().getWindow().getDecorView(), "60 min");
+        assertTrue(big.getTextSize() > small.getTextSize());
+
+        // a volume key gives the big one too
+        assertTrue(c.get().onKeyDown(android.view.KeyEvent.KEYCODE_VOLUME_UP,
+                new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP)));
+        idleAlertThread();
+        final long left = Alerts.active(app).nextAlertAt - System.currentTimeMillis();
+        assertTrue(String.valueOf(left), left > 89 * 60_000L && left <= 90 * 60_000L);
+    }
+
+    @Test
+    public void untilWakeIsTheNextSixThirty() {
+        final java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.set(2026, 10, 18, 23, 0, 0);
+        cal.set(java.util.Calendar.MILLISECOND, 0);
+        assertEquals(7 * 60 + 30, AlarmPanel.minutesUntil(AlarmPanel.WAKE_MINUTE_OF_DAY, cal.getTimeInMillis()));
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 5);
+        assertEquals(90, AlarmPanel.minutesUntil(AlarmPanel.WAKE_MINUTE_OF_DAY, cal.getTimeInMillis()));
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 7);
+        assertEquals(23 * 60 + 30, AlarmPanel.minutesUntil(AlarmPanel.WAKE_MINUTE_OF_DAY, cal.getTimeInMillis()));
+        assertEquals("90 min", AlarmPanel.label(90));
+        assertEquals("2.5 h", AlarmPanel.label(150));
+        assertEquals("3 h", AlarmPanel.label(180));
     }
 
     @Test

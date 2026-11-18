@@ -79,7 +79,7 @@ public class AlertScreenActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            snooze(0, "alarm volume key");
+            snooze(AlarmPanel.MEDIUM, "alarm volume key");
             return true;
         }
         return super.onKeyDown(keyCode, event);
