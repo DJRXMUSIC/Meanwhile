@@ -12,6 +12,7 @@ export interface BgReading {
   delta?: number;      // mg/dL since previous
   source: "xdrip" | "manual" | "import";
   raw?: unknown;
+  estimated?: true;    // filled into a gap for the chart and stats (lib/gapFill); never stored
 }
 
 export interface InsulinDose {

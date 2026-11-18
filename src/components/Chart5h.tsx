@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BgReading, InsulinDose } from "@/lib/types";
 import { bgAt, buildOverlay, DAY_MS, LOOKAHEAD_MS, nearest, overlayBoluses, type Pt } from "@/lib/chartOverlay";
+import { MISSED_AFTER_MS, type Estimate } from "@/lib/gapFill";
 
 // The Now chart: BG over a chosen window (3/5/8/24h), pannable into the past by
 // dragging, with 190 minutes of blank lookahead after the right edge where the
@@ -34,6 +35,8 @@ function yOf(mgdl: number): number {
 
 // Readings further apart than this are not joined: a gap is drawn as a gap.
 const GAP_MS = 15 * 60_000;
+// A point that can be tapped: a reading, an estimate, or a −24h / −48h reading.
+type Tapped = Pt & { ago?: string; est?: boolean };
 
 // Theme colours (see globals.css): as CSS values, for style={{ ... }}.
 const C = {
@@ -61,6 +64,7 @@ const halo = { paintOrder: "stroke", stroke: C.surface, strokeWidth: 4, strokeLi
 
 interface Props {
   readings: BgReading[];
+  estimates?: Estimate[];        // best guesses for missed readings (lib/gapFill), drawn dashed
   doses: InsulinDose[];
   windowHours: WindowHours;
   now: number;                   // shared clock — see lib/useNow
@@ -74,6 +78,7 @@ interface Props {
 
 function Chart5hImpl({
   readings,
+  estimates = [],
   doses,
   windowHours,
   now,
@@ -120,7 +125,7 @@ function Chart5hImpl({
 
   const [dragging, setDragging] = useState(false);
   // A tapped point (from the −24h / −48h trace when in the lookahead), shown for 8 s.
-  const [inspect, setInspect] = useState<(Pt & { ago?: string }) | null>(null);
+  const [inspect, setInspect] = useState<Tapped | null>(null);
   useEffect(() => {
     if (!inspect) return;
     const t = setTimeout(() => setInspect(null), 8_000);
@@ -136,6 +141,10 @@ function Chart5hImpl({
     [doses, minT, maxT]
   );
   const latest = bgInWin.length ? bgInWin[bgInWin.length - 1] : null;
+  const estInWin = useMemo(
+    () => estimates.filter((e) => e.ts >= minT && e.ts <= maxT),
+    [estimates, minT, maxT]
+  );
 
   // Overlays are skipped mid-drag: extra path work on every frame, for a
   // comparison nobody reads during the gesture.
@@ -157,16 +166,34 @@ function Chart5hImpl({
   }, [doses, minT, endT, overlay24Pts, overlay48Pts]);
 
   const toPath = useCallback(
-    (pts: Pt[]) =>
+    (pts: Pt[], gapMs = GAP_MS) =>
       pts
         .map((r, i) => {
-          const jump = i === 0 || r.ts - pts[i - 1].ts > GAP_MS;
+          const jump = i === 0 || r.ts - pts[i - 1].ts > gapMs;
           return `${jump ? "M" : "L"}${xOf(r.ts).toFixed(1)} ${yOf(r.mgdl).toFixed(1)}`;
         })
         .join(""),
     [xOf]
   );
-  const bgPath = useMemo(() => toPath(bgInWin), [toPath, bgInWin]);
+  // live line: broken at every missed reading; the estimates bridge those breaks, dashed
+  const bgPath = useMemo(() => toPath(bgInWin, MISSED_AFTER_MS), [toPath, bgInWin]);
+  const estPath = useMemo(() => {
+    if (!estInWin.length) return "";
+    const all: (Pt & { est?: boolean })[] = [...bgInWin, ...estInWin.map((e) => ({ ...e, est: true }))]
+      .sort((a, b) => a.ts - b.ts);
+    let d = "";
+    let open = false;
+    for (let i = 1; i < all.length; i++) {
+      const p = all[i - 1];
+      const q = all[i];
+      if ((p.est || q.est) && q.ts - p.ts <= MISSED_AFTER_MS) {
+        if (!open) d += `M${xOf(p.ts).toFixed(1)} ${yOf(p.mgdl).toFixed(1)}`;
+        d += `L${xOf(q.ts).toFixed(1)} ${yOf(q.mgdl).toFixed(1)}`;
+        open = true;
+      } else open = false;
+    }
+    return d;
+  }, [bgInWin, estInWin, xOf]);
   const overlay24Path = useMemo(() => toPath(overlay24Pts), [toPath, overlay24Pts]);
   const overlay48Path = useMemo(() => toPath(overlay48Pts), [toPath, overlay48Pts]);
 
@@ -247,8 +274,8 @@ function Chart5hImpl({
         const x = e.clientX - containerRef.current.getBoundingClientRect().left;
         const t = minT + ((x - pad.l) / plotW) * (endT - minT);
         // before the edge: the reading; in the lookahead: the nearest −24h / −48h one
-        let best: (Pt & { ago?: string }) | null = null;
-        if (t <= maxT) best = nearest(bgInWin, t);
+        let best: Tapped | null = null;
+        if (t <= maxT) best = nearest<Tapped>([...bgInWin, ...estInWin.map((e) => ({ ...e, est: true }))], t);
         else {
           const near = (on: boolean, off: number) =>
             on ? nearest(buildOverlay(readings, t - 30 * 60_000, t + 30 * 60_000, off), t) : null;
@@ -256,7 +283,7 @@ function Chart5hImpl({
           const b = near(overlay48, 2 * DAY_MS);
           best = a && (!b || Math.abs(a.ts - t) <= Math.abs(b.ts - t)) ? { ...a, ago: "−24h" } : b ? { ...b, ago: "−48h" } : null;
         }
-        if (best) setInspect(inspect && inspect.ts === best.ts && inspect.ago === best.ago ? null : best);
+        if (best) setInspect(inspect && inspect.ts === best.ts && inspect.ago === best.ago ? null : { ts: best.ts, mgdl: best.mgdl, ago: best.ago, est: best.est });
       }
     }
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -411,6 +438,10 @@ function Chart5hImpl({
                   strokeLinecap="round" strokeLinejoin="round" />
               </>
             )}
+            {bgPath && estPath && (
+              <path d={estPath} fill="none" stroke={`url(#${gradId})`} strokeOpacity={0.6} strokeWidth={2.25}
+                strokeDasharray="2 5" strokeLinecap="round" strokeLinejoin="round" />
+            )}
             {showDots && bgInWin.map((r) => (
               <circle key={`bg-${r.ts}`} cx={xOf(r.ts)} cy={yOf(r.mgdl)} r={2.75}
                 style={{ fill: rangeColor(r.mgdl, targetLow, targetHigh) }} />
@@ -457,9 +488,14 @@ function Chart5hImpl({
               <g>
                 <line x1={inspectX} x2={inspectX} y1={pad.t} y2={pad.t + plotH}
                   stroke="currentColor" strokeOpacity={0.4} strokeWidth={1} />
-                <circle cx={inspectX} cy={yOf(inspect.mgdl)} r={5.5}
-                  style={{ fill: inspect.ago ? C.ink : rangeColor(inspect.mgdl, targetLow, targetHigh), stroke: C.surface }}
-                  strokeWidth={2.5} />
+                {inspect.est ? (
+                  <circle cx={inspectX} cy={yOf(inspect.mgdl)} r={5}
+                    style={{ fill: C.surface, stroke: rangeColor(inspect.mgdl, targetLow, targetHigh) }} strokeWidth={2.5} />
+                ) : (
+                  <circle cx={inspectX} cy={yOf(inspect.mgdl)} r={5.5}
+                    style={{ fill: inspect.ago ? C.ink : rangeColor(inspect.mgdl, targetLow, targetHigh), stroke: C.surface }}
+                    strokeWidth={2.5} />
+                )}
               </g>
             )}
           </svg>
@@ -474,10 +510,10 @@ function Chart5hImpl({
               }}
             >
               <div className="text-lg font-bold leading-none text-ink">
-                {inspect.mgdl} <span className="text-[11px] font-normal text-muted">mg/dL</span>
+                {inspect.est && "~"}{inspect.mgdl} <span className="text-[11px] font-normal text-muted">mg/dL</span>
               </div>
               <div className="text-[11px] text-muted mt-0.5">
-                {clock(inspect.ts)}{inspect.ago && ` · ${inspect.ago}`}
+                {clock(inspect.ts)}{inspect.ago && ` · ${inspect.ago}`}{inspect.est && " · estimated"}
               </div>
             </div>
           )}
@@ -495,6 +531,12 @@ function Chart5hImpl({
             <svg width="16" height="6" aria-hidden><line x1="1" x2="15" y1="3" y2="3" style={{ stroke: C.in }} strokeWidth="2.75" strokeLinecap="round" /></svg>
             BG
           </span>
+          {estPath && (
+            <span className="flex items-center gap-1.5">
+              <svg width="18" height="6" aria-hidden><line x1="1" x2="17" y1="3" y2="3" style={{ stroke: C.in }} strokeOpacity="0.6" strokeWidth="2.25" strokeDasharray="2 5" strokeLinecap="round" /></svg>
+              estimated
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <svg width="10" height="10" aria-hidden><circle cx="5" cy="5" r="4" style={{ fill: C.bolus }} /></svg>
             bolus
