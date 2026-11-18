@@ -21,6 +21,12 @@
   --c-ink: 245 245 247;
   /* Default accent if data-accent isn't set */
   --c-accent: 124 92 255;
+  /* Chart: low / in range / high, bolus, basal */
+  --g-low: 244 63 94;
+  --g-in: 11 155 219;
+  --g-high: 207 124 7;
+  --g-bolus: 155 123 245;
+  --g-basal: 16 169 116;
 }
 
 [data-mode="light"] {
@@ -34,6 +40,11 @@
   --c-muted: 100 116 139;
   --c-ink: 15 23 42;
   --c-accent: 37 99 235;
+  --g-low: 220 38 38;
+  --g-in: 2 132 199;
+  --g-high: 217 119 6;
+  --g-bolus: 124 58 237;
+  --g-basal: 5 150 105;
 }
 
 /* ---- Accents (just the --c-accent variable) ----------------------------
