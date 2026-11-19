@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { captureStats, fillGaps, MAX_FILL_MS, SLOT_MS, withEstimates } from "../src/lib/gapFill";
+import { captureStats, dedupeReadings, fillGaps, MAX_FILL_MS, SLOT_MS, withEstimates } from "../src/lib/gapFill";
 
 const M = 60_000;
 const r = (min: number, mgdl: number) => ({ ts: min * M, mgdl, trend: "Flat", source: "xdrip" }) as never;
@@ -57,4 +57,21 @@ test("stats see estimates as readings, marked as estimated", () => {
   assert.equal(all.length, 4);
   assert.equal(all.filter((x) => x.estimated).length, 2);
   assert.equal(SLOT_MS, 5 * M);
+});
+
+test("a reading stored twice counts once: a gap can't hide behind duplicates", () => {
+  // an hour (12 readings due): 9 real ones, each stored twice (a restore, an old sync, a
+  // corrected value seconds later), and a 20-minute hole
+  const rs = [5, 10, 15, 20, 45, 50, 55, 60, 35].flatMap((m) =>
+    [r(m, 100), { ts: m * M + 20_000, mgdl: 101, trend: "Flat", source: "xdrip" } as never]);
+  const once = dedupeReadings(rs);
+  assert.equal(once.length, 9);
+  const est = fillGaps(once);
+  const c = captureStats(rs, est, 60 * M, 60 * M);
+  assert.equal(c.caught, 9);
+  assert.ok(c.estimated + c.missing === 3, JSON.stringify(c));
+  // fingersticks don't count as caught sensor readings
+  const finger = { ts: 25 * M, mgdl: 150, trend: "Flat", source: "manual" } as never;
+  assert.equal(captureStats([...rs, finger], est, 60 * M, 60 * M).caught, 9);
+  assert.equal(dedupeReadings([...rs, finger]).length, 10);
 });

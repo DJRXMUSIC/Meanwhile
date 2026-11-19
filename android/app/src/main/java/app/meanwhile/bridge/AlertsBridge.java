@@ -134,6 +134,31 @@ final class AlertsBridge {
         return null;
     }
 
+    /**
+     * The alert setup saved in a backup file: its alerts and options. Whatever is snoozed or
+     * turned off now stays as it is. Returns "" when restored, else what's wrong.
+     */
+    static String restore(Context c, String json, Runnable done) {
+        final AlertConfig restored;
+        try {
+            final JSONObject o = new JSONObject(json);
+            if (!(o.opt("alerts") instanceof org.json.JSONArray) || o.getJSONArray("alerts").length() == 0) {
+                return "No alerts in the backup";
+            }
+            restored = AlertConfig.fromJson(json);
+            if (restored.rules.isEmpty()) return "The backup's alerts couldn't be read";
+        } catch (org.json.JSONException e) {
+            return "The backup's alerts couldn't be read";
+        }
+        Alerts.post(c, x -> {
+            final AlertSettings now = Alerts.config(x).settings;
+            Alerts.update(x, restored.withSettings(restored.settings.withDisabledUntil(now.allDisabledUntil,
+                    now.lowDisabledUntil, now.highDisabledUntil)), "restored " + restored.rules.size() + " alerts from a backup");
+            if (done != null) done.run();
+        }, null);
+        return "";
+    }
+
     /** @param minutes 0 for the alert's own snooze */
     static void snooze(Context c, int minutes, Runnable done) {
         Alerts.post(c, x -> {

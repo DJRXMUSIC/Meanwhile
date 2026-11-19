@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ThemeApplier } from "@/components/ThemeApplier";
+import { AutoBackup } from "@/components/AutoBackup";
 import { TopBar } from "@/components/TopBar";
 
 export const metadata: Metadata = {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   applicationName: "Meanwhile",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Meanwhile" },
-  icons: { icon: "/icon-192.svg", apple: "/icon-192.svg" },
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
 export const viewport: Viewport = {
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh bg-bg text-ink antialiased">
         <ThemeApplier />
         <ServiceWorkerRegister />
+        <AutoBackup />
         <div
           className="mx-auto flex min-h-dvh max-w-xl flex-col overflow-x-hidden"
           style={{

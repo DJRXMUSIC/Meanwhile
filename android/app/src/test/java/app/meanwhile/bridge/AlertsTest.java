@@ -2,6 +2,7 @@ package app.meanwhile.bridge;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -241,6 +242,21 @@ public class AlertsTest {
         makeRepeatDue();
         assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
         assertNotNull(nm.getNotification(Alerts.NOTIFICATION_ID));
+    }
+
+    @Test
+    public void turningHighsOffUntilTurnedBackOn() {
+        importExport();
+        final long before = System.currentTimeMillis();
+        Alerts.disable(app, "high", Alerts.OFF_UNTIL_TURNED_ON);
+        assertEquals(Alerts.OFF_FOREVER_UNTIL, Alerts.config(app).settings.highDisabledUntil);
+        // counts as a snooze for going back to Now
+        assertTrue(Alerts.snoozedAt(app) >= before);
+        storeReading(System.currentTimeMillis(), 250);
+        assertNotEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
+        Alerts.disable(app, "high", 0);
+        assertEquals(0, Alerts.config(app).settings.highDisabledUntil);
+        assertEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
     }
 
     @Test
@@ -484,7 +500,8 @@ public class AlertsTest {
         assertEquals(2, st.getJSONObject("config").getJSONArray("alerts").length());
         assertEquals("low-90", st.getJSONObject("active").getString("uuid"));
         assertEquals(80, st.getJSONObject("last").getInt("mgdl"));
-        assertEquals(10, st.getJSONArray("snooze_choices").getInt(0));
+        assertEquals(30, st.getJSONArray("snooze_choices").getInt(0));
+        assertEquals(300, st.getJSONArray("snooze_choices").getInt(st.getJSONArray("snooze_choices").length() - 1));
         assertEquals("Phone alarm", st.getJSONObject("sounds").getJSONObject("low-90").getString("name"));
         assertTrue(st.getJSONObject("perms").has("overlay"));
         assertTrue(st.getJSONObject("perms").has("dnd"));

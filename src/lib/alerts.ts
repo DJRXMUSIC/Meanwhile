@@ -212,3 +212,45 @@ export function shouldReturnToNow(
   if (!snoozedAt || snoozedAt === handledSnoozeAt) return false;
   return now - Math.max(snoozedAt, lastInteraction) >= BACK_TO_NOW_MS;
 }
+
+// ---- snoozing and turning off, from the Alerts tab and the Now pill
+
+/** "Off until I turn it on", in the snooze lists. */
+export const OFF_UNTIL_TURNED_ON = -1;
+/** The snooze lists: 30-minute steps up to 5 hours, then off until turned on. */
+export const SNOOZE_STEPS = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300, OFF_UNTIL_TURNED_ON];
+
+export function snoozeStepLabel(m: number): string {
+  return m === OFF_UNTIL_TURNED_ON ? "Off until I turn it on" : minutesLabel(m);
+}
+
+/** Off with no end ("off until I turn it on" is stored as a date far ahead). */
+export function offForever(until: number, now: number): boolean {
+  return until - now > 365 * 24 * 3600_000;
+}
+
+export type OffWhich = "low" | "high" | "all";
+
+/** Which groups of alerts are turned off now, and until when. */
+export function alertsOff(st: AlertsState | null): { which: OffWhich; until: number }[] {
+  if (!st) return [];
+  const s = st.config.settings;
+  return ([["low", s.low_alerts_disabled_until], ["high", s.high_alerts_disabled_until],
+    ["all", s.alerts_disabled_until]] as const)
+    .filter(([, until]) => until > st.now)
+    .map(([which, until]) => ({ which, until }));
+}
+
+const OFF_NAMES: Record<OffWhich, string> = { low: "Low", high: "High", all: "Alerts" };
+
+/** What the Now pill says: the snooze and what's off, first one in words, "+N" for the rest. */
+export function quietSummary(st: AlertsState | null): string | null {
+  const parts: string[] = [];
+  const sn = activeSnooze(st);
+  if (sn) parts.push(`${sn.name} ${clock(sn.until)}`);
+  for (const o of alertsOff(st)) {
+    parts.push(`${OFF_NAMES[o.which]} off${offForever(o.until, st!.now) ? "" : ` ${clock(o.until)}`}`);
+  }
+  if (!parts.length) return null;
+  return parts[0] + (parts.length > 1 ? ` +${parts.length - 1}` : "");
+}

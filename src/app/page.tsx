@@ -8,19 +8,20 @@ import { StatsPanel } from "@/components/StatsPanel";
 import { DoseList } from "@/components/DoseList";
 import { PreBolusTimer } from "@/components/PreBolusTimer";
 import { DailyBasalCard } from "@/components/DailyBasalCard";
+import { BackupWarning } from "@/components/BackupWarning";
 import { InputBar } from "@/components/InputBar";
 import { DecisionCard } from "@/components/DecisionCard";
 import { LearnPanel } from "@/components/LearnPanel";
 import { useLiveData, useXdripPolling } from "@/lib/useLiveData";
 import { useMode } from "@/lib/useMode";
 import { useChartView } from "@/lib/useChartView";
-import { useAutoSync } from "@/lib/useAutoSync";
 import { logDecision, recentDecisions } from "@/lib/db";
 import { suggestDose } from "@/lib/insulin";
 import type { Decision } from "@/lib/types";
 import { apiUrl, NO_SERVER_MESSAGE } from "@/lib/native";
 import { SHOW_NOW } from "@/lib/alerts";
-import { fillGaps } from "@/lib/gapFill";
+import { dedupeReadings, fillGaps } from "@/lib/gapFill";
+import { dropDuplicateBridgeReadings } from "@/lib/sync";
 
 export default function HomePage() {
   const { profile, bg, bgList, iob, insulinList, now } = useLiveData();
@@ -31,7 +32,6 @@ export default function HomePage() {
     for (let i = bgList.length - 1; i >= 0; i--) if (bgList[i].source === "xdrip") return bgList[i].ts;
     return undefined;
   }, [bgList]);
-  useAutoSync(profile);
   const [mode] = useMode();
   const {
     windowHours, setWindowHours,
@@ -118,7 +118,10 @@ export default function HomePage() {
   };
 
   // best guesses for missed readings: drawn on the chart and counted in the stats, never stored
-  const estimates = useMemo(() => fillGaps(bgList), [bgList]);
+  // (each sensor reading once, however many times it was stored)
+  const estimates = useMemo(() => fillGaps(dedupeReadings(bgList)), [bgList]);
+  // readings stored twice under different ids (an old restore or sync): drop the copies once
+  useEffect(() => { void dropDuplicateBridgeReadings(); }, []);
 
   return (
     <div className="flex flex-col gap-3 pb-2">
@@ -130,6 +133,7 @@ export default function HomePage() {
         syncing={xdrip.syncing}
         refreshNote={xdrip.note}
       />
+      <BackupWarning />
       <DailyBasalCard profile={profile} doses={insulinList} />
       <PreBolusTimer doses={insulinList} />
       {mode === "learn" && <LearnPanel />}

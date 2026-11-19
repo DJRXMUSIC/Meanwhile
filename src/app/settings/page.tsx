@@ -1,29 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getProfile, regenerateSyncKey, saveProfile } from "@/lib/db";
+import { getProfile, saveProfile } from "@/lib/db";
 import { ACCENTS, type AccentName, type Profile, type ThemeMode } from "@/lib/types";
 import {
   exportAll,
   importAll,
-  lastSync as readLastSync,
   lastExport as readLastExport,
-  lastSyncStatus as readLastSyncStatus,
-  syncOnce,
+  restoreAlertsFrom,
 } from "@/lib/sync";
+import { BACKUP_EVENT, backupFailing, backupNow, pickBackupFolder, readBackup, type BackupState } from "@/lib/driveBackup";
 import { NumberField } from "@/components/NumberField";
 import { requestPersistentStorage } from "@/lib/persistStorage";
 import { manualBg, syncXdripOnce } from "@/lib/xdrip";
-import { copyTextNatively, everBridge, IN_APP_BUILD, saveTextNatively } from "@/lib/native";
+import { everBridge, IN_APP_BUILD, saveTextNatively } from "@/lib/native";
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [bg, setBg] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [lastSyncTs, setLastSyncTs] = useState(0);
   const [lastExportTs, setLastExportTs] = useState(0);
-  const [lastSyncSummary, setLastSyncSummary] = useState("");
-  const [syncing, setSyncing] = useState(false);
+  const [backup, setBackup] = useState<BackupState | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // the restore's outcome, shown under its button (the page's status line is far below)
   const [restoreMsg, setRestoreMsg] = useState("");
@@ -33,8 +31,11 @@ export default function SettingsPage() {
     getProfile().then(setProfile);
     // keeps the browser from clearing the data under storage pressure (no settings needed)
     void requestPersistentStorage();
-    refreshSyncMeta();
+    refreshMeta();
     try { setServer(everBridge()?.apiBase?.() ?? ""); } catch { /* older app */ }
+    const onBackup = () => setBackup(readBackup());
+    window.addEventListener(BACKUP_EVENT, onBackup);
+    return () => window.removeEventListener(BACKUP_EVENT, onBackup);
   }, []);
 
   const saveServer = () => {
@@ -46,25 +47,17 @@ export default function SettingsPage() {
     setStatus(saved ? "Server address saved ✓" : "Server address cleared");
   };
 
-  const refreshSyncMeta = () => {
-    setLastSyncTs(readLastSync());
+  const refreshMeta = () => {
     setLastExportTs(readLastExport());
-    setLastSyncSummary(readLastSyncStatus());
+    setBackup(readBackup());
   };
 
-  const runSyncNow = async () => {
-    if (!profile?.sync_key) { setStatus("Sync key not set"); return; }
-    setSyncing(true);
-    setStatus("Syncing…");
-    try {
-      const r = await syncOnce(profile.sync_key);
-      setStatus(`Sync ${r.backend}: pushed ${r.pushed}, pulled ${r.pulled}`);
-      refreshSyncMeta();
-    } catch (e) {
-      setStatus(`Sync error: ${(e as Error).message}`);
-    } finally {
-      setSyncing(false);
-    }
+  const runBackupNow = async () => {
+    setBackingUp(true);
+    const s = await backupNow();
+    setBackingUp(false);
+    setBackup(s);
+    setStatus(!s ? "Backup isn't available" : s.error ? `Backup failed: ${s.error}` : `Backed up ${s.file} ✓`);
   };
 
   const downloadBackup = async () => {
@@ -73,7 +66,7 @@ export default function SettingsPage() {
     // Inside the EverBridge app there is no browser download; the app saves the file.
     const saved = saveTextNatively(name, await blob.text());
     if (saved !== undefined) {
-      refreshSyncMeta();
+      refreshMeta();
       setStatus(saved ? `Backup saved to ${saved} ✓` : "Backup could not be saved");
       return;
     }
@@ -83,7 +76,7 @@ export default function SettingsPage() {
     a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-    refreshSyncMeta();
+    refreshMeta();
     setStatus("Backup downloaded ✓");
   };
 
@@ -292,7 +285,7 @@ export default function SettingsPage() {
       </Section>
 
       {IN_APP_BUILD && (
-        <Section title="Meanwhile server">
+        <Section title="AI server">
           <input
             type="url"
             placeholder="https://your-site.netlify.app"
@@ -332,7 +325,8 @@ export default function SettingsPage() {
             setRestoreMsg(`Restoring ${f.name}…`);
             try {
               const applied = await importAll(f);
-              const msg = `Restored ${applied} rows from ${f.name} ✓`;
+              const alerts = await restoreAlertsFrom(f);
+              const msg = `Restored ${applied} rows from ${f.name}${alerts ? ` · ${alerts}` : ""} ✓`;
               setRestoreMsg(msg);
               setStatus(msg);
             } catch (err) {
@@ -346,61 +340,29 @@ export default function SettingsPage() {
         {restoreMsg && <p className="text-xs" role="status">{restoreMsg}</p>}
       </Section>
 
-      <Section title="Cloud sync">
-        <label className="flex items-center justify-between gap-2 cursor-pointer">
-          <span className="text-sm">Auto-sync</span>
-          <input
-            type="checkbox"
-            checked={profile.sync_auto ?? true}
-            onChange={(e) => update({ sync_auto: e.target.checked })}
-            className="size-5 accent-accent"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted">Sync key</span>
-          <input
-            type="text"
-            value={profile.sync_key ?? ""}
-            onChange={(e) => update({ sync_key: e.target.value.trim() })}
-            className="num mt-1 w-full rounded-xl bg-surface2 px-3 py-2 ring-1 ring-white/5 text-xs font-mono break-all"
-          />
-        </label>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                if (!profile.sync_key) return;
-                try { await navigator.clipboard.writeText(profile.sync_key); setStatus("Sync key copied ✓"); }
-                catch { setStatus(copyTextNatively(profile.sync_key) ? "Sync key copied ✓" : "Copy failed"); }
-              }}
-              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
-            >
-              Copy
-            </button>
-            <button
-              onClick={async () => {
-                if (!confirm("New sync key? Other devices stop syncing until they have it.")) return;
-                const k = await regenerateSyncKey();
-                setProfile((p) => p ? { ...p, sync_key: k } : p);
-                setStatus("New sync key generated");
-              }}
-              className="rounded-xl bg-surface2 px-3 py-1.5 text-xs"
-            >
-              Regenerate
+      {IN_APP_BUILD && backup && (
+        <Section title="Cloud backup">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm min-w-0 truncate">{backup.folder ? backup.folder_name || "Chosen folder" : "No folder chosen"}</span>
+            <button onClick={async () => setBackup(await pickBackupFolder())}
+              className="shrink-0 rounded-xl bg-surface2 px-3 py-2 text-sm">
+              {backup.folder ? "Change folder" : "Choose folder"}
             </button>
           </div>
-          <button
-            onClick={runSyncNow}
-            disabled={syncing}
-            className="rounded-xl bg-accent text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-          >
-            {syncing ? "Syncing…" : "Sync now"}
-          </button>
-        </div>
-        <div className="text-[11px] text-muted truncate">
-          {lastSyncTs ? `${fmtAgo(lastSyncTs)} ago${lastSyncSummary ? ` · ${lastSyncSummary}` : ""}` : "Never synced"}
-        </div>
-      </Section>
+          {backup.folder && (
+            <button onClick={runBackupNow} disabled={backingUp}
+              className="w-full rounded-xl bg-accent text-white px-3 py-2 text-sm font-medium disabled:opacity-50">
+              {backingUp ? "Backing up…" : "Back up now"}
+            </button>
+          )}
+          {backup.ok_at > 0 && (
+            <div className="text-[11px] text-muted">
+              Last backup {fmtAgo(backup.ok_at)} ago · {backup.file} · {fmtBytes(backup.bytes)}
+            </div>
+          )}
+          {backupFailing(backup) && <div className="text-[12px] text-bad" role="status">Last try failed: {backup.error}</div>}
+        </Section>
+      )}
 
       {status && <div className="rounded-xl bg-surface2 px-3 py-2 text-sm text-muted">{status}</div>}
     </div>
@@ -414,6 +376,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </section>
   );
+}
+
+function fmtBytes(n: number): string {
+  return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
 }
 
 function fmtAgo(ts: number): string {

@@ -8,18 +8,19 @@ import {
   hhmm,
   minutesLabel,
   newAlert,
+  offForever,
   onAlertsChanged,
   parseThreshold,
-  PROFILES,
   readState,
   showThreshold,
   snoozeMinutes,
+  snoozeStepLabel,
+  SNOOZE_STEPS,
   SOUND_BEEP,
   SOUND_VIBRATION,
   summary,
   unitLabel,
   validate,
-  type AlertOptions,
   type AlertRule,
   type AlertsState,
 } from "@/lib/alerts";
@@ -52,15 +53,13 @@ export default function AlertsPage() {
 
   if (!ready) return null;
   const app = alertsApp();
-  if (!app || !st) return <div className="p-6 text-muted">Alerts are in the Meanwhile v5 app.</div>;
+  if (!app || !st) return <div className="p-6 text-muted">Alerts are in the Meanwhile v6 app.</div>;
 
   const units = st.config.units;
   const opts = st.config.settings;
   const rules = st.config.alerts;
   const activeRule = st.active ? rules.find((r) => r.uuid === st.active!.uuid) ?? null : null;
   const snoozedNow = !!st.active && st.active.snoozed && st.active.next_alert_at > st.now;
-  const offNow = ([["low", "Low", opts.low_alerts_disabled_until], ["high", "High", opts.high_alerts_disabled_until],
-    ["all", "All", opts.alerts_disabled_until]] as const).filter(([, , until]) => until > st.now);
 
   const openEditor = (r: AlertRule) => {
     setMsg("");
@@ -68,11 +67,6 @@ export default function AlertsPage() {
     setToneName(r.uuid ? st.sounds[r.uuid]?.name ?? "" : soundName(r.mp3_file));
   };
   const setRule = (patch: Partial<AlertRule>) => edit && setEdit({ ...edit, rule: { ...edit.rule, ...patch } });
-
-  const saveOptions = (patch: Partial<AlertOptions>) => {
-    const err = app.alertsSaveSettings?.(JSON.stringify({ ...opts, ...patch }));
-    if (err) setMsg(err);
-  };
 
   const pickTone = (choice: string) => {
     if (!edit) return;
@@ -133,7 +127,7 @@ export default function AlertsPage() {
           </button>
           <select className={field} value="" onChange={(e) => e.target.value && app.alertsSnooze?.(Number(e.target.value))}>
             <option value="">Snooze for…</option>
-            {choices.map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
+            {SNOOZE_STEPS.filter((m) => m > 0).map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
           </select>
         </section>
       )}
@@ -143,17 +137,6 @@ export default function AlertsPage() {
           <button className={btnAccent} onClick={() => app.alertsUnsnooze?.()}>Unsnooze</button>
         </section>
       )}
-      {offNow.length > 0 && (
-        <section className="rounded-2xl bg-surface p-4 ring-1 ring-white/5 space-y-2">
-          {offNow.map(([which, label, until]) => (
-            <div key={which} className="flex items-center justify-between gap-2">
-              <span className="text-sm">{label} alerts off until {clock(until)}</span>
-              <button className={btnAccent} onClick={() => app.alertsDisable?.(which, 0)}>Turn on</button>
-            </div>
-          ))}
-        </section>
-      )}
-
       {(!st.perms.overlay || !st.perms.full_screen || !st.perms.dnd || !st.perms.notifications) && (
         <Section title="Allow">
           {([["overlay", "Alarm screen while using the phone", st.perms.overlay],
@@ -254,10 +237,6 @@ export default function AlertsPage() {
         </Section>
       ) : (
         <Section title="Alerts">
-          <div className="grid grid-cols-2 gap-2">
-            <button className={btnAccent} onClick={() => openEditor(newAlert(false))}>+ Low alert</button>
-            <button className={btnAccent} onClick={() => openEditor(newAlert(true))}>+ High alert</button>
-          </div>
           {[false, true].map((above) => (
             <div key={String(above)} className="space-y-1.5">
               <div className="text-[11px] uppercase tracking-wider text-muted mt-2">{above ? "High" : "Low"}</div>
@@ -277,51 +256,39 @@ export default function AlertsPage() {
         </Section>
       )}
 
-      <Section title="Turn off">
-        {([["low", "Low", opts.low_alerts_disabled_until], ["high", "High", opts.high_alerts_disabled_until],
-           ["all", "All", opts.alerts_disabled_until]] as const).map(([which, label, until]) => (
-          <div key={which} className="flex items-center justify-between gap-2">
-            <span className="text-sm">{label}{until > st.now ? ` · off until ${clock(until)}` : ""}</span>
-            {until > st.now ? (
-              <button className={btn} onClick={() => app.alertsDisable?.(which, 0)}>Turn on</button>
-            ) : (
-              <select className="rounded-xl bg-surface2 px-3 py-2 text-sm" value=""
+      <Section title="Snooze">
+        {([["low", "Snooze low alerts", "Low alerts", opts.low_alerts_disabled_until],
+           ["high", "Snooze high alerts", "High alerts", opts.high_alerts_disabled_until],
+           ["all", "Snooze all alerts", "All alerts", opts.alerts_disabled_until]] as const).map(([which, label, name, until]) =>
+          until > st.now ? (
+            <div key={which} className="flex items-center justify-between gap-2 rounded-xl bg-surface2/60 px-3 py-2.5">
+              <span className="text-sm">
+                {name}{" "}
+                <span className="text-muted">{offForever(until, st.now) ? "off" : `snoozed until ${clock(until)}`}</span>
+              </span>
+              <button className={btnAccent} onClick={() => app.alertsDisable?.(which, 0)}>Turn on</button>
+            </div>
+          ) : (
+            // the whole row is the menu: a tap opens the list of lengths
+            <label key={which} className="relative flex items-center justify-between gap-2 rounded-xl bg-surface2/60 px-3 py-3">
+              <span className="text-sm font-medium">{label}</span>
+              <span className="text-muted text-sm" aria-hidden>›</span>
+              <select aria-label={label} className="absolute inset-0 opacity-0 w-full cursor-pointer" value=""
                 onChange={(e) => e.target.value && app.alertsDisable?.(which, Number(e.target.value))}>
-                <option value="">Off for…</option>
-                {choices.map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
+                <option value="">{label}…</option>
+                {SNOOZE_STEPS.map((m) => <option key={m} value={m}>{snoozeStepLabel(m)}</option>)}
               </select>
-            )}
-          </div>
-        ))}
+            </label>
+          ))}
       </Section>
 
-      <Section title="All alerts">
-        <div className="grid grid-cols-5 gap-1">
-          {PROFILES.map((p) => (
-            <button key={p.id} onClick={() => saveOptions({ bg_alert_profile: p.id })}
-              className={`rounded-lg px-1 py-2 text-[12px] ${opts.bg_alert_profile === p.id ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60"}`}>
-              {p.label}
-            </button>
-          ))}
+      {!edit && (
+        <div className="grid grid-cols-2 gap-2">
+          <button className={btn} onClick={() => openEditor(newAlert(false))}>+ Low alert</button>
+          <button className={btn} onClick={() => openEditor(newAlert(true))}>+ High alert</button>
         </div>
-        <Toggle label="Smart snoozing" on={opts.smart_snoozing} set={(v) => saveOptions({ smart_snoozing: v })} />
-        <Toggle label="Smart alerting" on={opts.smart_alerting} set={(v) => saveOptions({ smart_alerting: v })} />
-        <Toggle label="Silent during calls" on={opts.no_alarms_during_calls} set={(v) => saveOptions({ no_alarms_during_calls: v })} />
-        <Toggle label="Start snoozed" on={opts.start_snoozed} set={(v) => saveOptions({ start_snoozed: v })} />
-        <Toggle label="Off when readings are missing" on={opts.disable_alerts_stale_data}
-          set={(v) => saveOptions({ disable_alerts_stale_data: v })} />
-        {opts.disable_alerts_stale_data && (
-          <Label text="After (min)">
-            <input className={`num ${field}`} inputMode="numeric" defaultValue={String(opts.disable_alerts_stale_data_minutes)}
-              onBlur={(e) => saveOptions({ disable_alerts_stale_data_minutes: Math.round(Number(e.target.value) || 15) })} />
-          </Label>
-        )}
-        <Toggle label="Ascending: 3 min vibration first" on={opts.delay_ascending_3min}
-          set={(v) => saveOptions({ delay_ascending_3min: v })} />
-        <Toggle label="Ascending: up to medium" on={opts.ascending_volume_to_medium}
-          set={(v) => saveOptions({ ascending_volume_to_medium: v })} />
-        {!edit && msg && <p className="text-sm text-warn" role="status">{msg}</p>}
-      </Section>
+      )}
+      {!edit && msg && <p className="text-sm text-warn" role="status">{msg}</p>}
     </div>
   );
 }

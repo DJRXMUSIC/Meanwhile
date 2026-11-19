@@ -68,11 +68,37 @@ export interface Capture {
   missing: number;    // neither
 }
 
-/** How many readings in [now − windowMs, now] were caught, estimated, or missing. */
+/** Sensor readings closer together than this are the same reading stored twice. */
+export const SAME_READING_MS = 2 * 60_000;
+
+/**
+ * One row per sensor reading: drops a sensor reading that comes within
+ * SAME_READING_MS of the one kept before it (a corrected value posted seconds
+ * later, or the same reading brought in twice by a restore or an old sync).
+ * Fingersticks are kept as they are.
+ */
+export function dedupeReadings(readings: BgReading[]): BgReading[] {
+  const sorted = [...readings].sort((a, b) => a.ts - b.ts);
+  const out: BgReading[] = [];
+  let lastSensor = -Infinity;
+  for (const r of sorted) {
+    if (r.source === "manual") { out.push(r); continue; }
+    if (r.ts - lastSensor < SAME_READING_MS) continue;
+    lastSensor = r.ts;
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * How many sensor readings in [now − windowMs, now] were caught, estimated, or
+ * missing. Each reading counts once, however many times it was stored.
+ */
 export function captureStats(readings: BgReading[], estimates: Estimate[], windowMs: number, now: number): Capture {
   const from = now - windowMs;
   const expected = Math.floor(windowMs / SLOT_MS);
-  const caught = Math.min(expected, readings.filter((r) => r.ts > from && r.ts <= now).length);
+  const sensor = dedupeReadings(readings).filter((r) => r.source !== "manual");
+  const caught = Math.min(expected, sensor.filter((r) => r.ts > from && r.ts <= now).length);
   const estimated = Math.min(expected - caught, estimates.filter((e) => e.ts > from && e.ts <= now).length);
   return { expected, caught, estimated, missing: expected - caught - estimated };
 }

@@ -79,7 +79,7 @@ final class AlertSound implements Alerts.Noise {
         try {
             if (nm.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_NONE) return;
             if (!nm.isNotificationPolicyAccessGranted()) {
-                EventLog.log(c, "SOUND", "Do Not Disturb is on total silence and Meanwhile v5 may not change it: "
+                EventLog.log(c, "SOUND", "Do Not Disturb is on total silence and Meanwhile v6 may not change it: "
                         + "allow it on the alerts screen");
                 return;
             }

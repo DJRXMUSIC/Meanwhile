@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <pattern id="cf" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" fill="#0c0c0e"/>
+      <rect width="3" height="3" fill="#18181b"/>
+      <rect x="3" y="3" width="3" height="3" fill="#18181b"/>
+      <rect width="3" height="1" fill="#222226"/>
+      <rect x="3" y="3" width="1" height="3" fill="#222226"/>
+    </pattern>
+    <radialGradient id="v" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </radialGradient>
+    <filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="url(#cf)"/>
+  <rect width="108" height="108" rx="24" fill="url(#v)"/>
+  <path d="M22 56 H41 L45.5 50.5 L50 56 L54 31 L58.5 76 L62.5 56 H86" fill="none" stroke="#8b5cf6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" filter="url(#g)" opacity="0.9"/>
+  <path d="M22 56 H41 L45.5 50.5 L50 56 L54 31 L58.5 76 L62.5 56 H86" fill="none" stroke="#b69bff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
