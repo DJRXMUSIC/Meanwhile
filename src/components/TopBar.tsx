@@ -6,14 +6,17 @@ import { useEffect, useRef, useState } from "react";
 import { IN_APP_BUILD } from "@/lib/native";
 import {
   activeSnooze,
-  alertsApp,
   alertsOff,
   onAlertsChanged,
+  quietItems,
   quietSummary,
   readState,
   shouldReturnToNow,
   SHOW_NOW,
+  turnQuietOn,
+  withoutQuiet,
   type AlertsState,
+  type QuietItem,
 } from "@/lib/alerts";
 
 export function TopBar() {
@@ -62,17 +65,18 @@ export function TopBar() {
     };
   }, [snoozedAt, onNow, router]);
 
-  // On Now: what's snoozed or off, in the title's place. A tap turns it all back on, here.
+  // On Now: what's snoozed or off, in the title's place. With one, a tap turns it back on;
+  // with more, a tap opens the list, each turned back on by itself.
   const quiet = onNow ? quietSummary(alerts) : null;
-  const turnBackOn = () => {
-    const a = alertsApp();
-    if (!a || !alerts) return;
-    if (activeSnooze(alerts)) a.alertsUnsnooze?.();
-    for (const o of alertsOff(alerts)) a.alertsDisable?.(o.which, 0);
+  const items = onNow ? quietItems(alerts) : [];
+  const [listOpen, setListOpen] = useState(false);
+  const turnOn = (item: QuietItem) => {
+    if (!alerts) return;
+    turnQuietOn(item);
     // show it gone straight away; the app's state follows within a moment
-    setAlerts({ ...alerts, active: null, config: { ...alerts.config, settings: { ...alerts.config.settings,
-      alerts_disabled_until: 0, low_alerts_disabled_until: 0, high_alerts_disabled_until: 0 } } });
+    setAlerts(withoutQuiet(alerts, item));
   };
+  useEffect(() => { if (items.length < 2) setListOpen(false); }, [items.length]);
 
   const tab = (href: string, label: string) => {
     // the app's pages are exported with a trailing slash ("/alerts/")
@@ -96,12 +100,13 @@ export function TopBar() {
       {quiet ? (
         // in the title's place, the same height: nothing below moves
         <button
-          onClick={turnBackOn}
+          onClick={() => (items.length === 1 ? turnOn(items[0]) : setListOpen(!listOpen))}
           className="flex items-center gap-1.5 min-w-0 h-7 px-2.5 rounded-full bg-warn/15 ring-1 ring-warn/50 text-[12px] leading-none"
-          aria-label={`${quiet}. Tap to turn alerts back on`}
+          aria-label={items.length === 1 ? `${quiet}. Tap to turn it back on` : `${quiet}. Tap to choose which to turn back on`}
+          aria-expanded={items.length > 1 ? listOpen : undefined}
         >
           <span className="font-semibold truncate">{quiet}</span>
-          <span className="text-muted shrink-0">· Turn on</span>
+          <span className="text-muted shrink-0">{items.length === 1 ? "· Turn on" : listOpen ? "▴" : "▾"}</span>
         </button>
       ) : (
         <Link href="/" className="flex items-center gap-2 min-w-0">
@@ -110,6 +115,19 @@ export function TopBar() {
           <img src="/icon.svg" alt="" className="size-7 shrink-0 rounded-lg" />
           <span className="font-medium tracking-tight truncate">Meanwhile v6</span>
         </Link>
+      )}
+      {listOpen && items.length > 1 && (
+        // over the page, under the pill: nothing moves
+        <div className="absolute left-3 top-full -mt-1 z-30 w-64 rounded-xl bg-surface ring-1 ring-ink/15 shadow-lg shadow-black/30 p-1.5 space-y-1">
+          {items.map((it) => (
+            <div key={it.key} className="flex items-center justify-between gap-2 rounded-lg bg-surface2/60 pl-3 pr-1.5 py-1.5">
+              <span className="text-[13px] font-medium truncate">{it.text}</span>
+              <button onClick={() => turnOn(it)} className="shrink-0 rounded-lg bg-accent text-white px-2.5 py-1 text-[12px] font-medium">
+                Turn on
+              </button>
+            </div>
+          ))}
+        </div>
       )}
       <nav className="flex items-center gap-0.5 shrink-0">
         {tab("/", "Now")}
