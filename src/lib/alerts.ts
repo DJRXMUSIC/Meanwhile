@@ -243,14 +243,42 @@ export function alertsOff(st: AlertsState | null): { which: OffWhich; until: num
 
 const OFF_NAMES: Record<OffWhich, string> = { low: "Low", high: "High", all: "Alerts" };
 
-/** What the Now pill says: the snooze and what's off, first one in words, "+N" for the rest. */
-export function quietSummary(st: AlertsState | null): string | null {
-  const parts: string[] = [];
+/** One thing that's snoozed or off: the snoozed alert, or a group of alerts turned off. */
+export type QuietItem =
+  | { kind: "snooze"; key: string; text: string }
+  | { kind: "off"; key: OffWhich; which: OffWhich; text: string };
+
+/** What's snoozed or off now, each to be turned back on by itself. */
+export function quietItems(st: AlertsState | null): QuietItem[] {
+  const items: QuietItem[] = [];
   const sn = activeSnooze(st);
-  if (sn) parts.push(`${sn.name} ${clock(sn.until)}`);
+  if (sn) items.push({ kind: "snooze", key: "snooze", text: `${sn.name} ${clock(sn.until)}` });
   for (const o of alertsOff(st)) {
-    parts.push(`${OFF_NAMES[o.which]} off${offForever(o.until, st!.now) ? "" : ` ${clock(o.until)}`}`);
+    items.push({ kind: "off", key: o.which, which: o.which,
+      text: `${OFF_NAMES[o.which]} off${offForever(o.until, st!.now) ? "" : ` ${clock(o.until)}`}` });
   }
-  if (!parts.length) return null;
-  return parts[0] + (parts.length > 1 ? ` +${parts.length - 1}` : "");
+  return items;
+}
+
+/** What the Now pill says: the first one in words, "+N" for the rest. */
+export function quietSummary(st: AlertsState | null): string | null {
+  const items = quietItems(st);
+  if (!items.length) return null;
+  return items[0].text + (items.length > 1 ? ` +${items.length - 1}` : "");
+}
+
+/** The state with just that one turned back on (shown at once, before the app's own update). */
+export function withoutQuiet(st: AlertsState, item: QuietItem): AlertsState {
+  if (item.kind === "snooze") return { ...st, active: null };
+  const key = item.which === "low" ? "low_alerts_disabled_until"
+    : item.which === "high" ? "high_alerts_disabled_until" : "alerts_disabled_until";
+  return { ...st, config: { ...st.config, settings: { ...st.config.settings, [key]: 0 } } };
+}
+
+/** Turns one back on in the app. */
+export function turnQuietOn(item: QuietItem): void {
+  const a = alertsApp();
+  if (!a) return;
+  if (item.kind === "snooze") a.alertsUnsnooze?.();
+  else a.alertsDisable?.(item.which, 0);
 }

@@ -136,3 +136,43 @@ test("the Now pill: what's snoozed or off, in a few words", async () => {
   const ended = { ...base, config: { ...base.config, settings: { ...settings, low_alerts_disabled_until: now - 1 } as never } };
   assert.equal(quietSummary(ended), null);
 });
+
+test("the Now pill: each snooze or off group turns back on by itself", async () => {
+  const { quietItems, withoutQuiet, quietSummary, clock } = await import("../src/lib/alerts");
+  const now = 1_000_000_000;
+  const rule = { ...newAlert(false), uuid: "a", name: "LOW WARNING" };
+  const settings = { alerts_disabled_until: 0, low_alerts_disabled_until: 0, high_alerts_disabled_until: now + 3_600_000 };
+  const st = { config: { units: "mgdl", settings: settings as never, alerts: [rule] }, now, last: null,
+    active: { uuid: "a", snoozed: true, next_alert_at: now + 600_000 },
+    snooze_choices: [], sounds: {}, perms: { overlay: true, full_screen: true, dnd: true, notifications: true } };
+  const items = quietItems(st);
+  assert.deepEqual(items.map((i) => [i.kind, i.text]),
+    [["snooze", `LOW WARNING ${clock(now + 600_000)}`], ["off", `High off ${clock(now + 3_600_000)}`]]);
+  // turning the high alerts back on leaves the snooze as it is
+  const highOn = withoutQuiet(st, items[1]);
+  assert.equal(highOn.config.settings.high_alerts_disabled_until, 0);
+  assert.equal(highOn.active?.snoozed, true);
+  assert.equal(quietSummary(highOn), `LOW WARNING ${clock(now + 600_000)}`);
+  // and the other way round
+  const unsnoozed = withoutQuiet(st, items[0]);
+  assert.equal(unsnoozed.active, null);
+  assert.equal(unsnoozed.config.settings.high_alerts_disabled_until, now + 3_600_000);
+  assert.deepEqual(quietItems(unsnoozed).map((i) => i.key), ["high"]);
+});
+
+test("the Now pill: turning one back on calls the app for that one only", async () => {
+  const { quietItems, turnQuietOn } = await import("../src/lib/alerts");
+  const calls: string[] = [];
+  setNative({ sgv: () => "[]", alertsState: () => "{}", alertsUnsnooze: () => calls.push("unsnooze"),
+    alertsDisable: (w: string, m: number) => calls.push(`disable ${w} ${m}`) });
+  const now = 1_000_000_000;
+  const st = { config: { units: "mgdl", settings: { alerts_disabled_until: now + 1, low_alerts_disabled_until: now + 1,
+    high_alerts_disabled_until: 0 } as never, alerts: [] }, now, last: null, active: null,
+    snooze_choices: [], sounds: {}, perms: { overlay: true, full_screen: true, dnd: true, notifications: true } };
+  const [low, all] = quietItems(st);
+  turnQuietOn(all);
+  assert.deepEqual(calls, ["disable all 0"]);
+  turnQuietOn(low);
+  assert.deepEqual(calls, ["disable all 0", "disable low 0"]);
+  setNative(undefined);
+});
