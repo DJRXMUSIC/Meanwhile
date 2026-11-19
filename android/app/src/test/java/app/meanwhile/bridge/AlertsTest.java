@@ -254,13 +254,13 @@ public class AlertsTest {
         assertTrue(Alerts.snoozedAt(app) >= before);
         storeReading(System.currentTimeMillis(), 250);
         assertNotEquals(AlertEngine.Action.PLAY, Alerts.checkNow(app, "test").action);
-        final int before = noise.calls.size();
+        final int heard = noise.calls.size();
         Alerts.disable(app, "high", 0);
         assertEquals(0, Alerts.config(app).settings.highDisabledUntil);
         // turned back on: it sounds straight away
         assertEquals("high-180", Alerts.active(app).uuid);
-        assertTrue(noise.calls.subList(before, noise.calls.size()).toString(),
-                noise.calls.subList(before, noise.calls.size()).stream().anyMatch(x -> x.startsWith("alert high-180")));
+        final List<String> since = new ArrayList<>(noise.calls.subList(heard, noise.calls.size()));
+        assertTrue(since.toString(), since.stream().anyMatch(x -> x.startsWith("alert high-180")));
     }
 
     @Test
