@@ -105,3 +105,34 @@ test("back to Now: two minutes after a snooze with no touch since, once", async 
   // once per snooze
   assert.equal(shouldReturnToNow(snoozed, 0, snoozed + 500_000, snoozed), false);
 });
+
+test("snooze lists: 30-minute steps to 5 hours, then off until turned on", async () => {
+  const { SNOOZE_STEPS, snoozeStepLabel, OFF_UNTIL_TURNED_ON } = await import("../src/lib/alerts");
+  assert.deepEqual(SNOOZE_STEPS.slice(0, -1), [30, 60, 90, 120, 150, 180, 210, 240, 270, 300]);
+  assert.equal(SNOOZE_STEPS[SNOOZE_STEPS.length - 1], OFF_UNTIL_TURNED_ON);
+  assert.equal(snoozeStepLabel(150), "2 h 30 min");
+  assert.equal(snoozeStepLabel(OFF_UNTIL_TURNED_ON), "Off until I turn it on");
+});
+
+test("the Now pill: what's snoozed or off, in a few words", async () => {
+  const { quietSummary, alertsOff, clock } = await import("../src/lib/alerts");
+  const now = 1_000_000_000;
+  const rule = { ...newAlert(false), uuid: "a", name: "LOW WARNING" };
+  const settings = { alerts_disabled_until: 0, low_alerts_disabled_until: 0, high_alerts_disabled_until: 0 };
+  const base = { config: { units: "mgdl", settings: settings as never, alerts: [rule] }, active: null, now, last: null,
+    snooze_choices: [], sounds: {}, perms: { overlay: true, full_screen: true, dnd: true, notifications: true } };
+  assert.equal(quietSummary(base), null);
+  assert.equal(quietSummary(null), null);
+  const lowOff = { ...base, config: { ...base.config, settings: { ...settings, low_alerts_disabled_until: now + 3_600_000 } as never } };
+  assert.equal(quietSummary(lowOff), `Low off ${clock(now + 3_600_000)}`);
+  // off until turned on: no time
+  const forever = { ...base, config: { ...base.config, settings: { ...settings, high_alerts_disabled_until: 4_102_444_800_000 } as never } };
+  assert.equal(quietSummary(forever), "High off");
+  assert.deepEqual(alertsOff(forever).map((o) => o.which), ["high"]);
+  // a snooze and something off: the snooze first, "+1" for the rest
+  const both = { ...lowOff, active: { uuid: "a", snoozed: true, next_alert_at: now + 600_000 } };
+  assert.equal(quietSummary(both), `LOW WARNING ${clock(now + 600_000)} +1`);
+  // ended: nothing
+  const ended = { ...base, config: { ...base.config, settings: { ...settings, low_alerts_disabled_until: now - 1 } as never } };
+  assert.equal(quietSummary(ended), null);
+});

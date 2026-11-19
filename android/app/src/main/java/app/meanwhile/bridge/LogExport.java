@@ -131,7 +131,7 @@ final class LogExport {
     static Intent shareIntent(Context context, Saved saved) {
         final Intent send = new Intent(Intent.ACTION_SEND)
                 .setType("text/plain")
-                .putExtra(Intent.EXTRA_SUBJECT, "Meanwhile v5 log");
+                .putExtra(Intent.EXTRA_SUBJECT, "Meanwhile v6 log");
         if (saved.uri != null) {
             send.putExtra(Intent.EXTRA_STREAM, saved.uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             send.setClipData(ClipData.newRawUri("log", saved.uri));

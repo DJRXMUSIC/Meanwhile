@@ -1,7 +1,7 @@
 "use client";
 
 import type { BgReading, InsulinDose } from "@/lib/types";
-import { captureStats, withEstimates, type Capture, type Estimate } from "@/lib/gapFill";
+import { captureStats, dedupeReadings, withEstimates, type Capture, type Estimate } from "@/lib/gapFill";
 import {
   tirWindow,
   medianBgWindow,
@@ -24,7 +24,7 @@ export function StatsPanel({
   now: number;
 }) {
   // missed readings count as their estimates, so a gap doesn't skew the numbers
-  const all = withEstimates(bgList, estimates);
+  const all = withEstimates(dedupeReadings(bgList), estimates);
   const tir24 = tirWindow(all, 1 * DAY, 70, 160);
   const tir72 = tirWindow(all, 3 * DAY, 70, 160);
   const median3d = medianBgWindow(all, 3 * DAY);

@@ -1,6 +1,6 @@
 // The build that goes inside the EverBridge app (npm run build:app), where there
-// is no server of its own: AI advice and cloud backup go to the Meanwhile
-// server whose address was entered in the app.
+// is no server of its own: AI advice goes to the Meanwhile server whose
+// address was entered in the app; the cloud backup goes to a folder (Drive).
 process.env.NEXT_PUBLIC_EVERBRIDGE_APP = "1";
 
 import test from "node:test";
@@ -36,39 +36,55 @@ test("server requests go to the address saved in the app, and nowhere without on
   assert.equal(native.apiUrl("/api/sync"), null);
 });
 
-test("cloud backup from the app sends your data to your server and takes back what's new", async () => {
+test("cloud backup: the day's file, with the readings and the alert setup, sent to the app in pieces", async () => {
   await dbm.db().delete();
   await dbm.db().open();
-  const profile = await dbm.getProfile();
+  await dbm.getProfile();
   await dbm.db().insulin.add({ ts: 1_800_000_000_000, units: 3, kind: "bolus" });
-  setNative({ sgv: () => "[]", apiBase: () => "https://my-site.netlify.app" });
-
-  let sent: { url: string; body: { sync_key: string; push: { insulin: unknown[] } } } | null = null;
-  (globalThis as unknown as { fetch: unknown }).fetch = async (url: string, init: { body: string }) => {
-    sent = { url, body: JSON.parse(init.body) };
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        pushed: 2, pulled: 1, backend: "blobs", server_ts: 1_800_000_100_000,
-        pull: { insulin: [{ id: 99, ts: 1_799_999_000_000, units: 20, kind: "basal" }] },
-      }),
-      text: async () => "",
-    };
-  };
-  const r = await sync.syncOnce(profile.sync_key!);
-  assert.equal(sent!.url, "https://my-site.netlify.app/api/sync");
-  assert.equal(sent!.body.sync_key, profile.sync_key);
-  assert.equal(sent!.body.push.insulin.length, 1);
-  assert.equal(r.backend, "blobs");
-  assert.equal(await dbm.db().insulin.count(), 2); // the pulled basal dose arrived
+  const drive = require("../src/lib/driveBackup") as typeof import("../src/lib/driveBackup");
+  let written = "";
+  let name = "";
+  const state = { folder: "content://drive/tree/x", folder_name: "Meanwhile backups", ok_at: 0, bytes: 0, file: "",
+    attempt_at: 0, error: "" };
+  const config = { units: "mgdl", settings: {}, alerts: [{ uuid: "a", name: "LOW WARNING" }] };
+  setNative({
+    sgv: () => "[]",
+    alertsState: () => JSON.stringify({ config, active: null, now: 1, last: null, snooze_choices: [], sounds: {},
+      perms: {} }),
+    backupState: () => JSON.stringify(state),
+    saveBegin: (n: string) => { name = n; written = ""; return "id1"; },
+    saveChunk: (id: string, t: string) => { assert.equal(id, "id1"); written += t; return true; },
+    backupEnd: (id: string) => {
+      assert.equal(id, "id1");
+      Object.assign(state, { ok_at: 5, attempt_at: 5, bytes: written.length, file: name });
+      return JSON.stringify(state);
+    },
+  });
+  const s = await drive.backupNow();
+  assert.match(name, /^meanwhile-\d{4}-\d{2}-\d{2}\.json$/);
+  const file = JSON.parse(written);
+  assert.equal(file.insulin.length, 1);
+  assert.equal(file.alerts.alerts[0].name, "LOW WARNING");
+  assert.equal(s!.file, name);
+  assert.equal(drive.backupFailing(s), false);
 });
 
-test("without a server address, sync says what to do instead of failing silently", async () => {
-  setNative({ sgv: () => "[]", apiBase: () => "" });
-  const calls = stubFetch(() => ({}));
-  await assert.rejects(sync.syncOnce("abcdefgh12345678"), new RegExp("server address in Settings"));
-  assert.deepEqual(calls, []);
+test("cloud backup: when it's due, and when it's failing", () => {
+  const drive = require("../src/lib/driveBackup") as typeof import("../src/lib/driveBackup");
+  const H = 3600_000;
+  const base = { folder: "x", folder_name: "", ok_at: 0, bytes: 0, file: "", attempt_at: 0, error: "" };
+  const now = 1_000 * H;
+  assert.equal(drive.backupDue(null, now), false);
+  assert.equal(drive.backupDue({ ...base, folder: "" }, now), false); // no folder: nothing to do
+  assert.equal(drive.backupDue(base, now), true); // never backed up
+  assert.equal(drive.backupDue({ ...base, ok_at: now - 11 * H }, now), false);
+  assert.equal(drive.backupDue({ ...base, ok_at: now - 13 * H }, now), true);
+  // failed 10 minutes ago: wait; 40 minutes ago: try again
+  assert.equal(drive.backupDue({ ...base, error: "x", attempt_at: now - 10 * 60_000 }, now), false);
+  assert.equal(drive.backupDue({ ...base, error: "x", attempt_at: now - 40 * 60_000 }, now), true);
+  assert.equal(drive.backupFailing({ ...base, error: "x", attempt_at: 5, ok_at: 4 }), true);
+  assert.equal(drive.backupFailing({ ...base, error: "", attempt_at: 5, ok_at: 5 }), false);
+  assert.equal(drive.backupName(new Date(2026, 0, 5, 23, 59).getTime()), "meanwhile-2026-01-05.json");
 });
 
 test("in the app, readings never go through a server", async () => {

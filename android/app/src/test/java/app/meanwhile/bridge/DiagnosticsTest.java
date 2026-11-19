@@ -90,7 +90,7 @@ public class DiagnosticsTest {
         listener.get().onNotificationPosted(TestNotifications.sbn(EV365,
                 TestNotifications.customView(app, "142", "mg/dL", now - 700), now));
         final String r = DiagnosticsReport.build(app);
-        for (String section : new String[]{"===== Meanwhile v5 diagnostics", "===== Health", "===== Settings",
+        for (String section : new String[]{"===== Meanwhile v6 diagnostics", "===== Health", "===== Settings",
                 "===== Eversense app", "===== Active notifications (raw)", "===== Readings", "===== Capture log",
                 "===== status.json", "===== Event log (persistent)", "===== Logcat", "===== end"}) {
             assertTrue("missing " + section, r.contains(section));

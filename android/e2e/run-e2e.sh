@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # End-to-end test on a running emulator:
 #   fake Eversense app (same package name as Eversense 365) posts a glucose notification
-#   -> Meanwhile v5 captures it -> http://127.0.0.1:17590/sgv.json serves it.
+#   -> Meanwhile v6 captures it -> http://127.0.0.1:17590/sgv.json serves it.
 # Also checks dedupe, mmol parsing, rejection of LO, recovery after the process is
 # killed, and recovery after a reboot. Then the app as it is used: Meanwhile, packaged
 # inside the app, shows the captured reading straight from the bridge and the next one
-# when it arrives, saves and restores a backup file, and backs up to a Meanwhile server; the
+# when it arrives, saves and restores a backup file, and writes the daily cloud backup; the
 # Alerts tab. Last, the glucose alerts: a low sounds at its own volume, brings up the alarm
 # screen, repeats, stops when back up, and a volume button on the alarm screen snoozes it.
 #
 # usage: run-e2e.sh <bridge.apk> <fake-eversense.apk> <meanwhile server url>
 #   <meanwhile server url>: the website version (next start) on the machine running adb,
-#   e.g. http://localhost:3000. Only the cloud backup check uses it; the device reaches it
-#   through adb reverse.
+#   e.g. http://localhost:3000 (not used by the checks at the moment).
 set -euo pipefail
 
 APP_APK=$1
@@ -261,15 +260,24 @@ done
 shot alerts-tab
 ok "Alerts tab shows the built-in alerts (LOW WARNING ≤90, Elevated Alert ≥155, each at 50%)"
 
-# cloud backup: Settings > Sync now sends the data to a Meanwhile server
-curl -fsS --max-time 10 -o /dev/null "$SERVER_URL" || fail "the Meanwhile server isn't running at $SERVER_URL"
-adb reverse "tcp:$SERVER_PORT" "tcp:$SERVER_PORT" >/dev/null
+# cloud backup: Settings > Back up now writes the day's file to the backup folder (here a
+# folder adb can read; on a phone, the Google Drive folder chosen in Settings)
 adb logcat -c
-webcheck --es page settings/ --es api "$SERVER_URL" --es click "Sync now" --es until "Sync memory: pushed"
-wait_until 60 reported || fail "the sync never reported"
+webcheck --es page settings/ --es backup_dir test --es token "$TOKEN" --es click "Back up now" --es until "Backed up meanwhile-"
+wait_until 60 reported || fail "the cloud backup never reported"
 W=$(webcheck_line)
-echo "$W" | grep -Eq "Sync memory: pushed [1-9]" || fail "cloud backup failed: $(echo "$W" | grep -o 'Sync[^|]*' | head -1) :: $W"
-ok "cloud backup from the app reached the server ($(echo "$W" | grep -Eo 'Sync memory: pushed [0-9]+, pulled [0-9]+'))"
+echo "$W" | grep -Eq "Backed up meanwhile-[0-9-]+\.json" || fail "cloud backup failed: $(adb logcat -d -s EversenseBridge:I | grep BACKUP | tail -3) :: $W"
+BKD=$(adb shell ls "/sdcard/Android/data/$APP/files/backups" | tr -d '\r' | grep -E '^meanwhile-' | head -1)
+[ -n "$BKD" ] || fail "no file in the backup folder"
+adb pull "/sdcard/Android/data/$APP/files/backups/$BKD" "e2e-out/$BKD" >/dev/null
+python3 - "e2e-out/$BKD" <<'PYD' || fail "the cloud backup file is wrong"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert len(d["bg"]) > 0 and d["profile"], list(d)
+assert any(a["name"] == "LOW WARNING" for a in d["alerts"]["alerts"]), d.get("alerts")
+print("cloud backup:", len(d["bg"]), "readings,", len(d["alerts"]["alerts"]), "alerts")
+PYD
+ok "cloud backup: Back up now wrote $BKD to the backup folder, with the readings, profile and alerts"
 
 # ------------------------------------------------------------------ self-test button
 adb shell am start -W -n "$APP/.StatusActivity" --es action self_test >/dev/null

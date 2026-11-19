@@ -46,8 +46,12 @@ final class Alerts {
     /** xDrip+ {@code MINIMUM_CANCEL_DELAY}: a swipe this soon after the alert is ignored. */
     static final long MINIMUM_CANCEL_DELAY = 2000;
     /** xDrip+'s snooze choices, minutes. */
-    static final int[] SNOOZE_CHOICES = {10, 15, 20, 30, 40, 50, 60, 75, 90, 120, 150, 180, 240, 300, 360, 420, 480,
-            540, 600, 720};
+    /** Snooze lengths offered in the Alerts tab: 30-minute steps up to 5 hours. */
+    static final int[] SNOOZE_CHOICES = {30, 60, 90, 120, 150, 180, 210, 240, 270, 300};
+    /** {@link #disable} minutes for "off until I turn it on". */
+    static final int OFF_UNTIL_TURNED_ON = -1;
+    /** What "off until I turn it on" stores: far enough ahead to never run out (2100-01-01). */
+    static final long OFF_FOREVER_UNTIL = 4_102_444_800_000L;
 
     private static final String PREFS = "alerts";
     private static final String KEY_CONFIG = "config";
@@ -259,7 +263,7 @@ final class Alerts {
         final NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm == null || nm.getNotificationChannel(CHANNEL) != null) return;
         final NotificationChannel ch = new NotificationChannel(CHANNEL, "Glucose alerts", NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Low and high alerts. Meanwhile v5 plays the alert's own sound and vibration itself.");
+        ch.setDescription("Low and high alerts. Meanwhile v6 plays the alert's own sound and vibration itself.");
         ch.setSound(null, null);
         ch.enableVibration(false);
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -357,7 +361,9 @@ final class Alerts {
     static synchronized void disable(Context c, String which, int minutes) {
         final AlertConfig cfg = config(c);
         final AlertSettings s = cfg.settings;
-        final long until = minutes <= 0 ? 0 : System.currentTimeMillis() + minutes * 60_000L;
+        final long now = System.currentTimeMillis();
+        final long until = minutes == OFF_UNTIL_TURNED_ON ? OFF_FOREVER_UNTIL
+                : minutes <= 0 ? 0 : now + minutes * 60_000L;
         final AlertSettings next;
         switch (which) {
             case "low": next = s.withDisabledUntil(s.allDisabledUntil, until, s.highDisabledUntil); break;
@@ -365,7 +371,11 @@ final class Alerts {
             default: next = s.withDisabledUntil(until, s.lowDisabledUntil, s.highDisabledUntil);
         }
         saveConfig(c, cfg.withSettings(next));
-        EventLog.log(c, "ALERT", minutes <= 0 ? which + " alerts back on" : which + " alerts off for " + minutes + " min");
+        // like a snooze: the app goes back to Now two minutes after, if left alone
+        if (until > 0) prefs(c).edit().putLong(KEY_SNOOZED_AT, now).commit();
+        EventLog.log(c, "ALERT", until == 0 ? which + " alerts back on"
+                : until == OFF_FOREVER_UNTIL ? which + " alerts off until turned on"
+                : which + " alerts off for " + minutes + " min");
         checkNow(c, "alerts turned " + (minutes <= 0 ? "on" : "off"));
     }
 

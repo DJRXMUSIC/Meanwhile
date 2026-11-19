@@ -1,4 +1,4 @@
-# Meanwhile v5 watch face (Garmin Instinct E)
+# EverBridge watch face (Garmin Instinct E)
 
 A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the watch's own "Instinct" face:
 
@@ -11,7 +11,7 @@ A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
 ```
-Eversense app ─▶ Meanwhile v5 (127.0.0.1:17590/pebble on the phone)
+Eversense app ─▶ Meanwhile v6 (127.0.0.1:17590/pebble on the phone)
              ─▶ Garmin Connect app ─Bluetooth─▶ watch face background fetch ─▶ screen
 ```
 
@@ -22,13 +22,13 @@ Eversense app ─▶ Meanwhile v5 (127.0.0.1:17590/pebble on the phone)
    * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte45mm.prg
 2. Connect the watch to a computer with its charging cable. It shows up as a drive (on a Mac, use Garmin Express or Android File Transfer).
 3. Copy the `.prg` into the watch's `GARMIN/APPS` folder, then unplug it.
-4. On the watch, hold **MENU** → **Watch Face**, and pick **Meanwhile v5**.
+4. On the watch, hold **MENU** → **Watch Face**, and pick **EverBridge**.
 
 To update, copy the new `.prg` over the old one.
 
 ## Phone setup
 
-* **Meanwhile v5** (`android/`) must be installed and running; the face reads only its `/pebble` endpoint on port 17590. To check it, open `http://127.0.0.1:17590/pebble` in Chrome on the phone: it should show your latest reading.
+* **Meanwhile v6** (`android/`) must be installed and running; the face reads only its `/pebble` endpoint on port 17590. To check it, open `http://127.0.0.1:17590/pebble` in Chrome on the phone: it should show your latest reading.
 * **xDrip+** can stay installed with its web service on. It uses port 17580, and nothing here reads it.
 * **Garmin Connect:** the face's fetch goes through it, so keep it running and exempt it from battery optimisation (Android Settings → Apps → Garmin Connect → Battery → Unrestricted).
 

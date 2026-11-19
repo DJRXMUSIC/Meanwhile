@@ -162,7 +162,7 @@ public class BridgeService extends Service {
     }
 
     private static String staleHint(Bridge bridge) {
-        if (!bridge.hasNotificationAccess()) return "Notification access is off for Meanwhile v5";
+        if (!bridge.hasNotificationAccess()) return "Notification access is off for Meanwhile v6";
         if (!bridge.isListenerConnected()) return "Notification listener disconnected; open the app";
         if (bridge.installedEversensePackage() == null) return "Eversense app not found";
         return "Check the Eversense app and transmitter";

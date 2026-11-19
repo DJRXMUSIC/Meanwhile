@@ -63,7 +63,7 @@ import app.meanwhile.bridge.core.WebOrigin;
  * Those pages, and only those, get {@code window.EverBridgeNative}: the readings straight
  * from the bridge's store (no network hop), saving a backup file, voice input, the
  * clipboard, the bridge's {@link StatusActivity status screen}, and the address of the
- * Meanwhile server that AI advice and cloud backup go to. Links anywhere else open in
+ * Meanwhile server that AI advice goes to. Links anywhere else open in
  * the browser.
  *
  * The page must never take the bridge down with it: a crashed page renderer is replaced
@@ -71,9 +71,10 @@ import app.meanwhile.bridge.core.WebOrigin;
  *
  * Automation (used by the emulator test), each logging what the page shows:
  * {@code --es action web_check} on the home page; with {@code --es page settings/
- * --es click "Download backup"} (or "Sync now") that button is pressed first, and
+ * --es click "Download backup"} (or "Back up now") that button is pressed first, and
  * {@code --es until <text>} waits for that text. {@code --es api http://localhost:PORT}
- * points AI and sync at a server on this device for that run only (never saved).
+ * points AI at a server on this device for that run only (never saved). {@code --es backup_dir test}
+ * (with the adb token) backs up to a folder adb can read instead of a picked one.
  */
 public class MainActivity extends Activity {
 
@@ -84,7 +85,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_API = "api";
     /** The only buttons automation may press: both harmless to press any time. */
     static final java.util.Set<String> CLICKABLE = new java.util.HashSet<>(
-            java.util.Arrays.asList("Download backup", "Sync now", "Open glucose alerts", "Restore from file"));
+            java.util.Arrays.asList("Download backup", "Back up now", "Open glucose alerts", "Restore from file"));
     static final String JS_NAME = "EverBridgeNative";
     static final int REQ_FILE = 1;
     static final int REQ_SPEECH = 2;
@@ -607,6 +608,66 @@ public class MainActivity extends Activity {
         public void alertsOpenPermission(String which) {
             if (trusted) runOnUiThread(() -> openPermission(which));
         }
+
+        /** The alert setup from a backup file (its "alerts" part); "" if done, else why not. */
+        @JavascriptInterface
+        public String alertsRestore(String json) {
+            return trusted ? AlertsBridge.restore(MainActivity.this, json, MainActivity.this::alertsChanged) : "not allowed";
+        }
+
+        // ---- cloud backup: a daily file in a folder the user picks (Google Drive)
+
+        @JavascriptInterface
+        public String backupState() {
+            return trusted ? DriveBackup.state(MainActivity.this) : "{}";
+        }
+
+        /** Opens the folder picker; the page hears back through window.__backupFolderPicked(state). */
+        @JavascriptInterface
+        public void backupPickFolder() {
+            if (trusted) runOnUiThread(MainActivity.this::pickBackupFolder);
+        }
+
+        /**
+         * Puts the backup file the page built (sent with saveBegin / saveChunk, like a
+         * download) in the backup folder instead of Downloads. Returns the new state.
+         */
+        @JavascriptInterface
+        public String backupEnd(String id) {
+            final Save s;
+            synchronized (saves) {
+                s = saves.remove(id);
+            }
+            if (s == null) return trusted ? DriveBackup.write(MainActivity.this, "", (File) null) : "{}";
+            try {
+                s.out.close();
+                return trusted ? DriveBackup.write(MainActivity.this, s.name, s.tmp) : "{}";
+            } catch (IOException e) {
+                return DriveBackup.write(MainActivity.this, s.name, (File) null);
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                s.tmp.delete();
+            }
+        }
+    }
+
+    static final int REQ_BACKUP_FOLDER = 5;
+
+    private void pickBackupFolder() {
+        final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(i, REQ_BACKUP_FOLDER);
+        } catch (ActivityNotFoundException e) {
+            backupFolderPicked();
+        }
+    }
+
+    private void backupFolderPicked() {
+        if (web == null) return;
+        web.evaluateJavascript("window.__backupFolderPicked&&window.__backupFolderPicked("
+                + JSONObject.quote(DriveBackup.state(this)) + ")", null);
     }
 
     static final int REQ_PHONE_SOUND = 3;
@@ -732,6 +793,18 @@ public class MainActivity extends Activity {
                 }
             }
             soundPicked(picked == null ? null : picked.toString());
+        } else if (requestCode == REQ_BACKUP_FOLDER) {
+            final Uri tree = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            if (tree != null) {
+                try {
+                    getContentResolver().takePersistableUriPermission(tree,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    DriveBackup.setFolder(this, tree.toString(), DriveBackup.folderName(getContentResolver(), tree));
+                } catch (SecurityException e) {
+                    EventLog.log(this, "BACKUP", "no lasting access to the chosen folder: " + e.getMessage());
+                }
+            }
+            backupFolderPicked();
         } else if (requestCode == REQ_SPEECH) {
             String heard = null;
             if (resultCode == RESULT_OK && data != null) {
@@ -795,6 +868,11 @@ public class MainActivity extends Activity {
         }
         final String api = automationApi(intent);
         if (api != null) apiOverride = api;
+        // the emulator test: back up to a plain folder it can read, instead of a picked one
+        if ("test".equals(intent.getStringExtra("backup_dir")) && Automation.fromAdb(this, intent.getStringExtra("token"))) {
+            final File dir = new File(getExternalFilesDir(null), "backups");
+            DriveBackup.setFolder(this, Uri.fromFile(dir).toString(), "test folder");
+        }
         final String page = automationPage(intent);
         final int loadsBefore = pagesFinished;
         final boolean opening = web != null && !page.isEmpty();

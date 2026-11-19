@@ -1,4 +1,4 @@
-# Meanwhile v5 (Android)
+# Meanwhile v6 (Android)
 
 One Android app for the Pixel 9a: **Meanwhile**, with the Eversense bridge built in. The app icon opens Meanwhile; its pages are packaged inside the APK (built from this repository's web app), so it opens instantly and works with no internet. Underneath, the bridge runs whether Meanwhile is open or not.
 
@@ -6,7 +6,7 @@ The bridge captures each Eversense 365 glucose reading (value and timestamp) fro
 
 ```
 Eversense 365 transmitter ──BLE──▶ Eversense app ──posts/updates its glucose notification──▶
-  Meanwhile v5 (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
+  Meanwhile v6 (NotificationListenerService) ──▶ SQLite ──▶ 127.0.0.1:17590 (/sgv.json, /pebble) ──▶ Meanwhile, Garmin watch face
 ```
 
 ## Why it reads the notification instead of Bluetooth
@@ -56,22 +56,23 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 ## Meanwhile inside the app
 
 * **Pages:** built by `npm run build:app` (a static export of the web app) into `app/src/main/assets/web`, which the Gradle build does by itself, and served from `https://appassets.androidplatform.net/`, an address Android reserves for exactly this. Links anywhere else open in the browser.
-* **Readings:** the page reads the bridge's store directly (`window.Meanwhile v5Native.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
+* **Readings:** the page reads the bridge's store directly (`window.EverBridgeNative.sgv`), with the HTTP endpoint as a fallback. New readings show within seconds.
 * **Data:** Meanwhile's database lives in the app's own storage, separate from Chrome's. To move it, see *Moving from the Chrome version* below.
-* **AI advice and cloud backup** go to your Meanwhile server (the website version, e.g. on Netlify), whose address you enter once in Meanwhile → Settings → **Meanwhile server**. Everything else works without it. The server's `/api/sync` and `/api/ai/decide` accept requests from the app's address and no other site.
+* **AI advice** goes to your Meanwhile server (the website version, e.g. on Netlify), whose address you enter once in Meanwhile → Settings → **AI server**. Everything else works without it. The server's `/api/ai/decide` accepts requests from the app's address and no other site.
+* **Cloud backup:** Settings → **Cloud backup** → **Choose folder**, and pick a folder in Google Drive. While the app is open it writes `meanwhile-YYYY-MM-DD.json` there whenever the last backup is over 12 hours old (or on **Back up now**), and keeps the newest 14. The file holds readings, doses, notes, the profile and the alert setup; **Restore from file** brings it all back. If a backup fails, Now shows "Backup failed".
 * **Backup file:** Settings → **Download backup** saves `Downloads/Meanwhile/meanwhile-<date>.json`; **Restore from file** opens the phone's file picker.
 * **Voice:** the mic button uses the phone's voice input.
-* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **Meanwhile v5 status & setup**. It also opens by itself until notification access is on.
+* **The bridge's own screen** (status, self-test, log file, settings): Meanwhile → Settings → **Meanwhile v6 status & setup**. It also opens by itself until notification access is on.
 * **Safety:** if the page's renderer crashes, the app replaces it instead of going down, so capture never stops because of the page.
 
 ## Install on the Pixel 9a
 
 **Download link (always the newest build that passed every test):**
-https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v5.apk
+https://github.com/DJRXMUSIC/Meanwhile/releases/download/bridge-latest/meanwhile-v6.apk
 
 1. Open that link in Chrome on the phone and open the downloaded file. If asked, allow Chrome to install apps. Updates install the same way, on top of the old version, and keep your history.
-2. Open **Meanwhile v5**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
-   * **Turn on: Notification access** → enable Meanwhile v5. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → Meanwhile v5 → ⋮ → **Allow restricted settings**, then try again.
+2. Open **Meanwhile v6**. Meanwhile opens, and on first run the bridge's setup screen opens over it. It asks to show notifications (allow it), then a yellow **Setup** box walks you through what's left, one button at a time:
+   * **Turn on: Notification access** → enable Meanwhile v6. If the switch is greyed out (Android 13+ does this for apps installed from a browser), go to Settings → Apps → Meanwhile v6 → ⋮ → **Allow restricted settings**, then try again.
    * **Fix: Battery** → Allow.
 3. When every dot under **Status** is green, open the Eversense app once. The next reading appears in the **Last reading** card with its exact time.
 4. Tap **Run self-test**: it should say PASS. Press Back to get to Meanwhile.
@@ -83,7 +84,7 @@ Your history in Chrome stays in Chrome until you bring it over:
 
 1. In Chrome, open Meanwhile → Settings → **Download backup**. Keep this file somewhere safe.
 2. In the app, Meanwhile → Settings → **Restore from file**, and pick that file. Readings the app has already collected are kept, and nothing is counted twice.
-3. Your cloud sync key comes across with the backup, so cloud backup carries on where it was once the server address is set.
+3. Choose the cloud backup folder in Settings → **Cloud backup**.
 
 The bridge listens on 17590 so xDrip+ can keep 17580. If you saved settings in an older version (when the default was 17580), the port moves to 17590 by itself once; you can still choose any port under **Advanced**.
 

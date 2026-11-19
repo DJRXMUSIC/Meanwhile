@@ -1,48 +1,16 @@
 "use client";
 
 import { db } from "./db";
-import { apiUrl, NO_SERVER_MESSAGE } from "./native";
+import { readState } from "./alerts";
 
-// Multi-device sync via the built-in /api/sync route (Netlify Blobs in
-// production, in-memory fallback during local dev). The server never
-// sees credentials beyond the user-supplied sync_key, which acts as a
-// shared namespace identifier.
-//
-// Bundle structure: each table is sent as an array of rows. The server
-// merges by row.id (or row.ts for new pushes) using last-writer-wins on
-// updated_ts. On pull, the server returns every row newer than `since`.
+// Backup files: everything in the app's database, plus (inside the app) the
+// glucose alerts' setup, which lives on the Android side. The same file is the
+// manual "Download backup" and the daily cloud backup (lib/driveBackup).
 
-const META_LAST_SYNC = "meanwhile.lastSync";
 const META_LAST_EXPORT = "meanwhile.lastExport";
-const META_LAST_STATUS = "meanwhile.lastSyncStatus";
 
 const TABLE_NAMES = ["bg", "insulin", "decisions", "context", "profile"] as const;
 type TableName = (typeof TABLE_NAMES)[number];
-
-export interface SyncBundle {
-  bg: unknown[];
-  insulin: unknown[];
-  decisions: unknown[];
-  context: unknown[];
-  profile: unknown[];
-}
-
-export interface SyncResult {
-  pushed: number;
-  pulled: number;
-  backend: "blobs" | "memory" | "unknown";
-  server_ts: number;
-}
-
-// ---- Local meta --------------------------------------------------------
-
-export function lastSync(): number {
-  try { return Number(localStorage.getItem(META_LAST_SYNC)) || 0; }
-  catch { return 0; }
-}
-function setLastSync(ts: number) {
-  try { localStorage.setItem(META_LAST_SYNC, String(ts)); } catch {}
-}
 
 export function lastExport(): number {
   try { return Number(localStorage.getItem(META_LAST_EXPORT)) || 0; }
@@ -50,14 +18,6 @@ export function lastExport(): number {
 }
 function setLastExport(ts: number) {
   try { localStorage.setItem(META_LAST_EXPORT, String(ts)); } catch {}
-}
-
-export function lastSyncStatus(): string {
-  try { return localStorage.getItem(META_LAST_STATUS) || ""; }
-  catch { return ""; }
-}
-function setLastSyncStatus(s: string) {
-  try { localStorage.setItem(META_LAST_STATUS, s); } catch {}
 }
 
 // ---- Bundle build / apply ---------------------------------------------
@@ -92,50 +52,19 @@ export async function applyPull(pull: Partial<Record<TableName, unknown[]>>): Pr
   return applied;
 }
 
-// ---- Sync API call -----------------------------------------------------
-
-export async function syncOnce(syncKey: string): Promise<SyncResult> {
-  if (!syncKey) throw new Error("Missing sync key");
-  const since = lastSync();
-  const url = apiUrl("/api/sync");
-  if (!url) throw new Error(NO_SERVER_MESSAGE);
-  const push = await buildPush(since);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sync_key: syncKey, since, push }),
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`Sync failed (${res.status}): ${t.slice(0, 200)}`);
-  }
-  const body = await res.json() as {
-    pushed: number;
-    pulled: number;
-    backend: "blobs" | "memory";
-    server_ts: number;
-    pull: Partial<Record<TableName, unknown[]>>;
-  };
-  await applyPull(body.pull);
-  setLastSync(body.server_ts);
-  const status = `pushed ${body.pushed}, pulled ${body.pulled}`;
-  setLastSyncStatus(status);
-  return {
-    pushed: body.pushed,
-    pulled: body.pulled,
-    backend: body.backend,
-    server_ts: body.server_ts,
-  };
-}
-
 // ---- Export / import (manual backups) ----------------------------------
 
-export async function exportAll(): Promise<Blob> {
+/** The backup file's text. */
+export async function backupText(): Promise<string> {
   const all = await buildPush(0);
+  const alerts = readState()?.config;
+  return JSON.stringify({ ...all, ...(alerts ? { alerts } : {}), exported_at: Date.now() });
+}
+
+export async function exportAll(): Promise<Blob> {
+  const text = await backupText();
   setLastExport(Date.now());
-  return new Blob([JSON.stringify({ ...all, exported_at: Date.now() }, null, 2)], {
-    type: "application/json",
-  });
+  return new Blob([text], { type: "application/json" });
 }
 
 // Restoring a backup file. Rows carry the ids they had in the app that made
@@ -190,4 +119,20 @@ export async function dropDuplicateBridgeReadings(): Promise<number> {
   });
   if (dups.length) await d.bg.bulkDelete(dups);
   return dups.length;
+}
+
+/**
+ * The glucose alerts' setup from a backup file, put back in the app. Returns
+ * what happened, for the Settings message: "" when the file has none.
+ */
+export async function restoreAlertsFrom(file: File): Promise<string> {
+  let alerts: unknown;
+  try { alerts = (JSON.parse(await file.text()) as { alerts?: unknown }).alerts; }
+  catch { return ""; }
+  if (!alerts || typeof alerts !== "object") return "";
+  const restore = (window as unknown as { EverBridgeNative?: { alertsRestore?: (json: string) => string } })
+    .EverBridgeNative?.alertsRestore;
+  if (!restore) return "";
+  const err = restore.call((window as unknown as { EverBridgeNative: object }).EverBridgeNative, JSON.stringify(alerts));
+  return err ? `alerts not restored: ${err}` : "alerts restored";
 }
