@@ -67,11 +67,21 @@ test("a reading stored twice counts once: a gap can't hide behind duplicates", (
   const once = dedupeReadings(rs);
   assert.equal(once.length, 9);
   const est = fillGaps(once);
-  const c = captureStats(rs, est, 60 * M, 60 * M);
+  // (each copy is 20 s after its reading, so the hour ends at 60:20)
+  const c = captureStats(rs, est, 60 * M, 60 * M + 20_000);
   assert.equal(c.caught, 9);
   assert.ok(c.estimated + c.missing === 3, JSON.stringify(c));
   // fingersticks don't count as caught sensor readings
   const finger = { ts: 25 * M, mgdl: 150, trend: "Flat", source: "manual" } as never;
-  assert.equal(captureStats([...rs, finger], est, 60 * M, 60 * M).caught, 9);
+  assert.equal(captureStats([...rs, finger], est, 60 * M, 60 * M + 20_000).caught, 9);
   assert.equal(dedupeReadings([...rs, finger]).length, 10);
+});
+
+test("of two rows a minute apart, the newer (the real update) is kept", () => {
+  // 01:25 146, 01:30 146 again (re-posted), 01:31 148 (new); 01:36 148
+  const rs = [r(25, 146), r(30, 146), r(31, 148), r(36, 148)];
+  assert.deepEqual(dedupeReadings(rs).map((x) => [x.ts / M, x.mgdl]), [[25, 146], [31, 148], [36, 148]]);
+  // a steady run a minute apart doesn't collapse into one
+  const steady = [0, 1, 2, 3, 4, 5, 6].map((m) => r(m, 100));
+  assert.deepEqual(dedupeReadings(steady).map((x) => x.ts / M), [1, 3, 5, 6]);
 });

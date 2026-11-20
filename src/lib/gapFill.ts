@@ -72,19 +72,22 @@ export interface Capture {
 export const SAME_READING_MS = 2 * 60_000;
 
 /**
- * One row per sensor reading: drops a sensor reading that comes within
- * SAME_READING_MS of the one kept before it (a corrected value posted seconds
- * later, or the same reading brought in twice by a restore or an old sync).
- * Fingersticks are kept as they are.
+ * One row per sensor reading. Sensor readings within SAME_READING_MS of the
+ * first of a run are one reading, and the newest of them is kept: the Eversense
+ * app re-posts its last value just before a new one arrives, so the later row
+ * is the real update. Copies brought in twice by a restore collapse the same
+ * way. Fingersticks are kept as they are.
  */
 export function dedupeReadings(readings: BgReading[]): BgReading[] {
   const sorted = [...readings].sort((a, b) => a.ts - b.ts);
   const out: BgReading[] = [];
-  let lastSensor = -Infinity;
+  let runStart = -Infinity;
+  let lastSensor = -1; // index in out
   for (const r of sorted) {
     if (r.source === "manual") { out.push(r); continue; }
-    if (r.ts - lastSensor < SAME_READING_MS) continue;
-    lastSensor = r.ts;
+    if (lastSensor >= 0 && r.ts - runStart < SAME_READING_MS) { out[lastSensor] = r; continue; }
+    runStart = r.ts;
+    lastSensor = out.length;
     out.push(r);
   }
   return out;

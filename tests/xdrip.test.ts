@@ -111,3 +111,41 @@ test("odd entries from the bridge are skipped, not stored", async () => {
   assert.equal(row.delta, 6);
   assert.equal(row.trend, "None");
 });
+
+test("catching up after a while: nothing between the last reading held and the newest is skipped", async () => {
+  // the bridge holds about two rows per 5 minutes (the Eversense app re-posts its
+  // notification), newest first, and hands over the newest `count`
+  const all = Array.from({ length: 60 }, (_, i) => ({ date: T - i * 2.5 * MIN, sgv: 100 + (i % 7), direction: "Flat" }));
+  const asked: number[] = [];
+  setNative({ sgv: (count: number) => { asked.push(count); return JSON.stringify(all.slice(0, count)); } });
+  // the page already holds the reading from 100 minutes ago (index 40)
+  await db().bg.add({ ts: all[40].date, mgdl: all[40].sgv, trend: "Flat", source: "xdrip" });
+  // one per 5 minutes would be 22 readings: not enough, so it asks again for more
+  const added = await syncXdripOnce(BASE, countSince(all[40].date, T));
+  assert.equal(added, 40);
+  const ts = (await db().bg.orderBy("ts").toArray()).map((r) => r.ts);
+  for (let i = 0; i <= 40; i++) assert.ok(ts.includes(all[i].date), `reading ${i} missing`);
+  assert.ok(asked.length >= 2 && asked[asked.length - 1] > asked[0], JSON.stringify(asked));
+});
+
+test("catching up stops asking once the bridge has nothing older", async () => {
+  const all = Array.from({ length: 10 }, (_, i) => ({ date: T - i * 5 * MIN, sgv: 120, direction: "Flat" }));
+  const asked: number[] = [];
+  setNative({ sgv: (count: number) => { asked.push(count); return JSON.stringify(all.slice(0, count)); } });
+  await db().bg.add({ ts: T - 500 * MIN, mgdl: 90, trend: "Flat", source: "xdrip" });
+  assert.equal(await syncXdripOnce(BASE, 5), 10);
+  assert.deepEqual(asked, [5, 10, 20]); // 20 came back short: that's all there is
+});
+
+test("the first sync after opening fills holes earlier syncs left", async () => {
+  const all = Array.from({ length: 30 }, (_, i) => ({ date: T - i * 5 * MIN, sgv: 100 + i, direction: "Flat" }));
+  setNative({ sgv: (count: number) => JSON.stringify(all.slice(0, count)) });
+  // the page holds the newest 5 and the oldest 10, with a hole in between
+  for (const e of [...all.slice(0, 5), ...all.slice(20)]) {
+    await db().bg.add({ ts: e.date, mgdl: e.sgv, trend: "Flat", source: "xdrip" });
+  }
+  assert.equal(await syncXdripOnce(BASE, 1000), 0); // a normal sync: only newer ones
+  assert.equal(await syncXdripOnce(BASE, 1000, true), 15); // filling holes: the 15 missing
+  assert.equal(await db().bg.count(), 30);
+  assert.equal(await syncXdripOnce(BASE, 1000, true), 0); // and nothing twice
+});
