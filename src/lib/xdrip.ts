@@ -85,19 +85,52 @@ export async function fetchXdrip(base: string, count = DEFAULT_COUNT): Promise<X
   return Array.isArray(json) ? json : [];
 }
 
-export async function syncXdripOnce(base: string, count = DEFAULT_COUNT): Promise<number> {
-  const entries = await fetchXdrip(base, count);
-  if (!entries.length) return 0;
+// The most the bridge hands over in one go (its own limit).
+const MAX_FETCH = 1000;
+
+// Oldest reading time in what the bridge returned.
+function oldestDate(entries: XdripEntry[]): number {
+  let m = Infinity;
+  for (const e of entries) if (e && e.date && e.date < m) m = e.date;
+  return m;
+}
+
+/**
+ * Stores the bridge's readings that the page doesn't have yet. Normally only
+ * those newer than the newest held; with `fillHoles`, also any older one
+ * missing in between (the first sync after the app opens: it repairs gaps left
+ * by earlier syncs).
+ */
+export async function syncXdripOnce(base: string, count = DEFAULT_COUNT, fillHoles = false): Promise<number> {
   const last = await latestBridgeBg();
   const cutoff = last?.ts ?? 0;
+  let n = count;
+  let entries = await fetchXdrip(base, n);
+  // The bridge can hold more than one reading per 5 minutes (the Eversense app
+  // posts its notification many times a minute), so "readings since the last one,
+  // at one per 5 minutes" can fall short. Anything between what we hold and the
+  // oldest reading returned would then be skipped for good, leaving a gap on the
+  // graph. While the bridge filled the whole request and still didn't reach back
+  // to the newest reading we hold, ask for more.
+  while (cutoff > 0 && entries.length >= n && n < MAX_FETCH && oldestDate(entries) > cutoff) {
+    n = Math.min(MAX_FETCH, n * 2);
+    entries = await fetchXdrip(base, n);
+  }
+  if (!entries.length) return 0;
   // Build the full set of new readings first, then bulkAdd in a single
   // transaction so the Dexie live query fires once instead of N times —
   // that's what was causing the chart and BG tile to "flicker" while
   // backfilling many readings at once.
   const sorted = entries.filter((e) => e && e.date && e.sgv).sort((a, b) => a.date - b.date);
+  // with fillHoles: the times already held over the span returned, to add only what's missing
+  const held = new Set<number>();
+  if (fillHoles && sorted.length && sorted[0].date <= cutoff) {
+    await db().bg.where("ts").between(sorted[0].date, cutoff, true, true)
+      .each((r) => { if (r.source === "xdrip") held.add(r.ts); });
+  }
   const fresh: Omit<BgReading, "id">[] = [];
   for (const e of sorted) {
-    if (e.date <= cutoff) continue;
+    if (e.date <= cutoff && !(fillHoles && !held.has(e.date))) continue;
     fresh.push({
       ts: e.date,
       mgdl: Math.round(e.sgv),
@@ -188,8 +221,9 @@ export class XdripPoller {
       // anything missed while the app was closed; after that, only what's new.
       const before = await latestBridgeBg();
       lastTs = before?.ts; // kept if the fetch fails, so a due reading is still checked for
-      const count = forceCount ?? (this.firstRun ? CATCHUP_COUNT : countSince(before?.ts, Date.now()));
-      const added = await syncXdripOnce(this.base, count);
+      // the first sync after opening also fills any holes earlier syncs left
+      const count = forceCount ?? (this.firstRun ? MAX_FETCH : countSince(before?.ts, Date.now()));
+      const added = await syncXdripOnce(this.base, count, this.firstRun || forceCount != null);
       this.firstRun = false;
       if (added > 0) {
         lastTs = (await latestBridgeBg())?.ts;

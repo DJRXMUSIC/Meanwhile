@@ -53,7 +53,6 @@ export function StatsPanel({
           value={tir72.n ? `${(tir72.tir * 100).toFixed(0)}%` : "—"}
           hint={tir72.n ? pts(tir72.n, 3 * DAY) : "no data"}
         />
-        <CaptureTile day={cap24} threeDays={cap72} />
         <Tile
           label="Median BG · 3d"
           value={median3d != null ? `${Math.round(median3d)}` : "—"}
@@ -73,43 +72,23 @@ export function StatsPanel({
           label="Total bolus · today"
           value={`${today.units.toFixed(1)}`}
           hint={`${today.n} dose${today.n === 1 ? "" : "s"}`}
-          wide
         />
+        <Tile label="Caught · 24h" value={caughtPct(cap24)} hint={caughtHint(cap24)} />
+        <Tile label="Caught · 3d" value={caughtPct(cap72)} hint={caughtHint(cap72)} />
       </div>
     </section>
   );
 }
 
-// Readings caught vs estimated vs missing, as a split bar with the counts beside it.
-function CaptureTile({ day, threeDays }: { day: Capture; threeDays: Capture }) {
-  const pct = (n: number, c: Capture) => (c.expected ? Math.round((n / c.expected) * 100) : 0);
-  const parts = [
-    { n: day.caught, label: "caught", style: { background: "rgb(var(--g-in))" } },
-    { n: day.estimated, label: "estimated", style: { background: "rgb(var(--g-in) / 0.35)" } },
-    { n: day.missing, label: "missing", style: { background: "rgb(var(--c-ink) / 0.12)" } },
-  ];
-  return (
-    <div className="col-span-2 rounded-xl bg-surface2/60 p-3 ring-1 ring-white/5">
-      <div className="flex items-baseline justify-between">
-        <div className="text-[10px] uppercase tracking-wider text-muted">Readings caught · 24h</div>
-        <div className="text-[11px] text-muted">3d {pct(threeDays.caught, threeDays)}%</div>
-      </div>
-      <div className="num text-2xl font-semibold mt-0.5 text-ink">{pct(day.caught, day)}%</div>
-      <div className="mt-2 flex h-2 gap-0.5 overflow-hidden rounded-full" aria-hidden>
-        {parts.filter((p) => p.n > 0).map((p) => (
-          <div key={p.label} style={{ ...p.style, flexGrow: p.n }} />
-        ))}
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
-        {parts.map((p) => (
-          <span key={p.label} className="flex items-center gap-1">
-            <span className="inline-block size-2 rounded-full" style={p.style} />
-            <span className="num text-ink">{p.n}</span> {p.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+// Readings caught: the share of 5-minute readings that arrived; the rest were estimated or missing.
+function caughtPct(c: Capture): string {
+  return c.expected ? `${Math.round((c.caught / c.expected) * 100)}%` : "—";
+}
+
+function caughtHint(c: Capture): string {
+  if (!c.expected) return "no data";
+  if (!c.estimated && !c.missing) return "all caught";
+  return [c.estimated ? `${c.estimated} est.` : "", c.missing ? `${c.missing} missing` : ""].filter(Boolean).join(" · ");
 }
 
 function Tile({
