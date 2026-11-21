@@ -21,6 +21,10 @@ const DESIGN = 166;
 // After this long without a new reading the age tag fills in, so it catches the eye.
 const LATE_SEC = 360;
 
+// The bottom row (IOB, steps): its centre line and the gap between the two, design px.
+const ROW_Y_DESIGN = 142;
+const ROW_GAP_DESIGN = 9;
+
 // Glucose first, as approved in the design:
 //
 //      10:47          ( 68 )   <- subscreen: heart rate
@@ -80,15 +84,38 @@ class EverBridgeView extends WatchUi.WatchFace {
             _sh = p(53);
         }
         var g = Graphics.FONT_XTINY;
-        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(40), "388", p(104));
+        // glucose: as big as fits between the date (ends ~p(57)) and the change row (starts ~p(116))
+        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(50), "388", p(130));
         _fTime = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM], NUM_GLYPH, p(19), "2358", p(60));
         _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(8), "28 Sep", p(40));
         _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(12), "-12", p(30));
         _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(7), "24 MIN", p(36));
-        _fRow = pick(dc, [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(10), "18,412", p(36));
         _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(6), "IOB", p(14));
+        // the bottom row: the largest font whose widest row fits the round screen at that height
+        var rowFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g];
+        _fRow = g;
+        for (var i = 0; i < rowFonts.size(); i++) {
+            var h = glyph(rowFonts[i], TEXT_GLYPH);
+            if (h <= p(10) && rowWidth(dc, rowFonts[i], "12.5U", "18,412") <= chord(ROW_Y_DESIGN * _w / DESIGN + h / 2) - p(8)) {
+                _fRow = rowFonts[i];
+                break;
+            }
+        }
         _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
         checkFit(dc);
+    }
+
+    // Width of the round screen at row y, px.
+    private function chord(y as Number) as Number {
+        var r = _w / 2.0;
+        var d = (y - _h / 2.0).abs();
+        return d >= r ? 0 : (2 * Math.sqrt(r * r - d * d)).toNumber();
+    }
+
+    // Width of the bottom row "IOB <iob>   <steps>" in the given font.
+    private function rowWidth(dc as Graphics.Dc, font, iob as String, steps as String) as Number {
+        return dc.getTextWidthInPixels("IOB", _fLabel) + p(3) + dc.getTextWidthInPixels(iob, font) + ROW_GAP_DESIGN * _w / DESIGN
+            + dc.getTextWidthInPixels(steps, font);
     }
 
     // A design coordinate (40 mm screen) on this screen.
@@ -188,7 +215,7 @@ class EverBridgeView extends WatchUi.WatchFace {
             drawDeltaAndAge(dc, cx, p(124), (d instanceof String) ? d : "--", nowSec - at);
         }
         var iob = (r == null) ? null : r[Bg.K_IOB];
-        drawBottomRow(dc, cx, p(143), iobText(iob), stepsText());
+        drawBottomRow(dc, cx, p(ROW_Y_DESIGN), iobText(iob), stepsText());
     }
 
     // "+4 [2 MIN]": the tag outlined while fresh, solid once LATE_SEC has passed.
@@ -224,7 +251,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         var iw = dc.getTextWidthInPixels(iob, _fRow);
         var sw = dc.getTextWidthInPixels(steps, _fRow);
         var g1 = p(3);
-        var g2 = p(12);
+        var g2 = p(ROW_GAP_DESIGN);
         var x = cx - (lw + g1 + iw + g2 + sw) / 2;
         ink(dc);
         // the small label sits on the value's baseline
@@ -281,6 +308,13 @@ class EverBridgeView extends WatchUi.WatchFace {
     (:debug)
     private function checkFit(dc as Graphics.Dc) as Void {
         System.println("layout " + _w + "x" + _h + " sub " + _sx + "," + _sy + " " + _sw + "x" + _sh);
+        var names = ["XTINY", "TINY", "SMALL", "MEDIUM", "LARGE", "NUM_MILD", "NUM_MEDIUM", "NUM_HOT", "NUM_THAI_HOT"];
+        var fonts = [Graphics.FONT_XTINY, Graphics.FONT_TINY, Graphics.FONT_SMALL, Graphics.FONT_MEDIUM, Graphics.FONT_LARGE,
+            Graphics.FONT_NUMBER_MILD, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_THAI_HOT];
+        for (var i = 0; i < fonts.size(); i++) {
+            System.println("font " + names[i] + " ascent " + Graphics.getFontAscent(fonts[i]) + " '388' " + dc.getTextWidthInPixels("388", fonts[i])
+                + " '18,412' " + dc.getTextWidthInPixels("18,412", fonts[i]));
+        }
         var fails = 0;
         var tg = glyph(_fTime, NUM_GLYPH);
         var tw = dc.getTextWidthInPixels("2358", _fTime) + 2 * p(2) + (tg / 7 < 2 ? 2 : tg / 7);
@@ -294,15 +328,25 @@ class EverBridgeView extends WatchUi.WatchFace {
         var rw = dc.getTextWidthInPixels("-12", _fDelta) + p(6) + dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(4);
         var rh = glyph(_fDelta, TEXT_GLYPH) > th ? glyph(_fDelta, TEXT_GLYPH) : th;
         fails += box(dc, "change+age", _w / 2 - rw / 2, p(124) - rh / 2, rw, rh, false);
-        var bw2 = dc.getTextWidthInPixels("IOB", _fLabel) + p(3) + dc.getTextWidthInPixels("12.5U", _fRow) + p(12) + dc.getTextWidthInPixels("18,412", _fRow);
+        var bw2 = rowWidth(dc, _fRow, "12.5U", "18,412");
         var bh = glyph(_fRow, TEXT_GLYPH);
-        fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, p(143) - bh / 2, bw2, bh, false);
+        fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, p(ROW_Y_DESIGN) - bh / 2, bw2, bh, false);
         var hg = glyph(_fHr, NUM_GLYPH);
         var hw = dc.getTextWidthInPixels("188", _fHr);
         fails += box(dc, "heart rate", _sx + _sw / 2 - hw / 2, _sy + _sh / 2 - _sh / 10 - hg / 2, hw, hg, true);
         var lg = glyph(_fLabel, TEXT_GLYPH);
         var lw = dc.getTextWidthInPixels("BPM", _fLabel);
         fails += box(dc, "BPM", _sx + _sw / 2 - lw / 2, _sy + _sh / 2 + _sh / 4 - lg / 2, lw, lg, true);
+        // stacked rows must not touch: date, glucose, change+age, IOB+steps
+        var tops = [p(52) - dg / 2, p(86) - bg / 2, p(124) - rh / 2, p(ROW_Y_DESIGN) - bh / 2];
+        var bottoms = [p(52) + dg / 2, p(86) + bg / 2, p(124) + rh / 2, p(ROW_Y_DESIGN) + bh / 2];
+        var rows = ["date", "glucose", "change+age", "iob+steps"];
+        for (var i = 1; i < 4; i++) {
+            if (tops[i] - bottoms[i - 1] < 2) {
+                fails++;
+                System.println("FIT FAIL " + rows[i - 1] + " and " + rows[i] + " overlap (gap " + (tops[i] - bottoms[i - 1]) + " px)");
+            }
+        }
         System.println(fails == 0 ? "FIT ok" : "FIT FAIL " + fails + " element(s)");
     }
 
