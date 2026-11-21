@@ -21,8 +21,13 @@ const DESIGN = 166;
 // After this long without a new reading the age tag fills in, so it catches the eye.
 const LATE_SEC = 360;
 
+// Centre lines of the stacked rows, design px. Measured on the Instinct E's own fonts
+// (glucose 27 px, change row 17, bottom row 11 on the 40 mm): placed so each row clears
+// the next by 4+ px and the bottom row sits where the round screen is wide enough for it.
+const GLUCOSE_Y = 79;
+const CHANGE_Y = 106;
 // The bottom row (IOB, steps): its centre line and the gap between the two, design px.
-const ROW_Y_DESIGN = 142;
+const ROW_Y_DESIGN = 124;
 const ROW_GAP_DESIGN = 9;
 
 // Glucose first, as approved in the design:
@@ -96,7 +101,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         _fRow = g;
         for (var i = 0; i < rowFonts.size(); i++) {
             var h = glyph(rowFonts[i], TEXT_GLYPH);
-            if (h <= p(10) && rowWidth(dc, rowFonts[i], "12.5U", "18,412") <= chord(ROW_Y_DESIGN * _w / DESIGN + h / 2) - p(8)) {
+            if (h <= p(12) && rowWidth(dc, rowFonts[i], "12.5U", "18,412") <= chord(ROW_Y_DESIGN * _w / DESIGN + h / 2) - p(8)) {
                 _fRow = rowFonts[i];
                 break;
             }
@@ -155,7 +160,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         if (Sched.version() == _drawn) {
             return;
         }
-        var top = p(62);
+        var top = p(60);
         dc.setClip(0, top, _w, _h - top);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
@@ -208,11 +213,11 @@ class EverBridgeView extends WatchUi.WatchFace {
         var at = (r == null) ? null : r[Bg.K_AT];
         ink(dc);
         if (!(sgv instanceof String) || !(at instanceof Number)) {
-            text(dc, cx, p(86), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_CENTER);
+            text(dc, cx, p(GLUCOSE_Y), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_CENTER);
         } else {
-            text(dc, cx, p(86), _fBg, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_CENTER);
+            text(dc, cx, p(GLUCOSE_Y), _fBg, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_CENTER);
             var d = r[Bg.K_DELTA];
-            drawDeltaAndAge(dc, cx, p(124), (d instanceof String) ? d : "--", nowSec - at);
+            drawDeltaAndAge(dc, cx, p(CHANGE_Y), (d instanceof String) ? d : "--", nowSec - at);
         }
         var iob = (r == null) ? null : r[Bg.K_IOB];
         drawBottomRow(dc, cx, p(ROW_Y_DESIGN), iobText(iob), stepsText());
@@ -323,11 +328,11 @@ class EverBridgeView extends WatchUi.WatchFace {
         fails += box(dc, "date", p(33), p(52) - dg / 2, dc.getTextWidthInPixels("28 Sep", _fDate), dg, false);
         var bg = glyph(_fBg, NUM_GLYPH);
         var bw = dc.getTextWidthInPixels("388", _fBg);
-        fails += box(dc, "glucose", _w / 2 - bw / 2, p(86) - bg / 2, bw, bg, false);
+        fails += box(dc, "glucose", _w / 2 - bw / 2, p(GLUCOSE_Y) - bg / 2, bw, bg, false);
         var th = glyph(_fTag, TEXT_GLYPH) + 2 * p(3);
         var rw = dc.getTextWidthInPixels("-12", _fDelta) + p(6) + dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(4);
         var rh = glyph(_fDelta, TEXT_GLYPH) > th ? glyph(_fDelta, TEXT_GLYPH) : th;
-        fails += box(dc, "change+age", _w / 2 - rw / 2, p(124) - rh / 2, rw, rh, false);
+        fails += box(dc, "change+age", _w / 2 - rw / 2, p(CHANGE_Y) - rh / 2, rw, rh, false);
         var bw2 = rowWidth(dc, _fRow, "12.5U", "18,412");
         var bh = glyph(_fRow, TEXT_GLYPH);
         fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, p(ROW_Y_DESIGN) - bh / 2, bw2, bh, false);
@@ -338,8 +343,8 @@ class EverBridgeView extends WatchUi.WatchFace {
         var lw = dc.getTextWidthInPixels("BPM", _fLabel);
         fails += box(dc, "BPM", _sx + _sw / 2 - lw / 2, _sy + _sh / 2 + _sh / 4 - lg / 2, lw, lg, true);
         // stacked rows must not touch: date, glucose, change+age, IOB+steps
-        var tops = [p(52) - dg / 2, p(86) - bg / 2, p(124) - rh / 2, p(ROW_Y_DESIGN) - bh / 2];
-        var bottoms = [p(52) + dg / 2, p(86) + bg / 2, p(124) + rh / 2, p(ROW_Y_DESIGN) + bh / 2];
+        var tops = [p(52) - dg / 2, p(GLUCOSE_Y) - bg / 2, p(CHANGE_Y) - rh / 2, p(ROW_Y_DESIGN) - bh / 2];
+        var bottoms = [p(52) + dg / 2, p(GLUCOSE_Y) + bg / 2, p(CHANGE_Y) + rh / 2, p(ROW_Y_DESIGN) + bh / 2];
         var rows = ["date", "glucose", "change+age", "iob+steps"];
         for (var i = 1; i < 4; i++) {
             if (tops[i] - bottoms[i - 1] < 2) {
