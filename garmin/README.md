@@ -1,18 +1,18 @@
 # EverBridge watch face (Garmin Instinct E)
 
-A Connect IQ watch face for the Instinct E (40 mm and 45 mm), laid out like the watch's own "Instinct" face:
+A Connect IQ watch face for the Instinct E (designed for 40 mm, also built for 45 mm), glucose first:
 
-* **top-left panel** (where that face says INSTINCT): your glucose, and under it the trend arrow and a countdown, in minutes, to the watch's next reading
-* **subscreen:** today's steps
-* **centre:** the time, hours solid and minutes striped
-* **right panel:** heart rate
-* **bottom:** the date (`24 OCT`)
+* **top left:** the time (`10:47`) and the date (`21 Nov`)
+* **subscreen:** heart rate (`68 BPM`)
+* **centre:** your glucose, large
+* **under it:** the change from the reading before (`+4`) and an age tag (`2 MIN`). The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
+* **bottom:** insulin on board from Meanwhile (`IOB 2.4U`) and today's steps (`8,412`)
 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
 ```
-Eversense app ─▶ Meanwhile v6 (127.0.0.1:17590/pebble on the phone)
-             ─▶ Garmin Connect app ─Bluetooth─▶ watch face background fetch ─▶ screen
+Eversense app ─▶ Meanwhile v6 on the phone ─push, each reading─▶ Garmin Connect ─Bluetooth─▶ watch face
+                                            ◀──backup fetch every 5 min (127.0.0.1:17590/pebble)──
 ```
 
 ## Install
@@ -36,22 +36,21 @@ The first reading shows up within about 5 minutes of choosing the face.
 
 ## How fresh is the number
 
-Eversense sends a reading every 5 minutes, and Connect IQ lets a watch face fetch at most once every 5 minutes. A plain 5-minute timer would show each reading 0–5 minutes after it arrived, 2.5 minutes on average.
+**Pushed (normal):** the moment Meanwhile v6 stores a reading, it sends it to the watch face through Garmin Connect (Connect IQ Mobile SDK). The watch face's background wakes on that message, and the face redraws the reading area within about a second (`onPartialUpdate`), instead of waiting for its once-a-minute refresh. A reading normally reaches the wrist a few seconds after it reaches the phone. On average the number you see is about 2.5 minutes old: Eversense only sends a reading every 5 minutes, so that is the floor.
 
-Instead each fetch is a one-shot timer set for 15 seconds after the next reading is due, worked out from the time of the last one (`source/Sched.mc`). The timer can only drift later, never earlier, so when it's more than a minute behind it skips one reading to get back in step. If readings arrive later than expected, the 15 seconds grows (up to 2 minutes) and then shrinks back.
+Meanwhile v6 sends the newest reading only, and resends it when a send fails, when the watch reconnects, and on its once-a-minute check, until the watch has it.
 
-Simulated over two days of readings, a reading typically reaches the watch about a minute after it reaches the phone. The number on the watch averages 3.3–3.6 minutes old, against 5.1 with a plain timer (2.5 is the floor with 5-minute readings). How punctual the watch's timer really is decides where in that range you land.
-
-The number next to the arrow counts down the minutes until the watch fetches its next reading (rounded up, so 2½ minutes shows 3). The watch sets that time itself, so the countdown is exact; it reads 0 while the fetch is under way, and the new number usually appears within seconds. If a fetch finds no new reading yet (a late Eversense reading, or the phone out of range), the countdown restarts from the next fetch.
+**Backup (if a push is lost):** the face also fetches `/pebble` itself, at most every 5 minutes (Connect IQ's limit for a watch face). Each fetch is timed for just after the next reading is due, based on the last one (`source/Sched.mc`). If the timer drifts more than a minute late, it skips one reading to get back in step. If readings keep arriving late, its 15-second wait grows, up to 2 minutes.
 
 ## Build and test
 
 CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-tester`, a public image with the Connect IQ SDK, device files and simulator. It:
 
 * builds release, debug and test versions for both sizes (debug builds log each fetch and schedule to the simulator console)
-* runs the unit tests (`source/Tests.mc`: reply parsing, countdown, scheduler) in the simulator
+* runs the unit tests (`source/Tests.mc`: reply and pushed-message parsing, change/age/IOB/steps text, scheduler) in the simulator
 * runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
-* if all of that passes, replaces the **watchface-latest** release
+* checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+ MIN`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. The screenshot is also printed into the log as text.
+* if all of that passes, replaces the **watchface-latest** release (from `main`) or **watchface-preview** (from any other branch)
 
 Locally, with the Connect IQ SDK installed:
 
@@ -68,4 +67,5 @@ Builds are signed with a throwaway key unless the repository secret `GARMIN_DEVE
 
 * No alarms: watch faces can't vibrate or alert. Keep the Eversense app's alerts on; they reach the watch as normal phone notifications.
 * The phone must be in Bluetooth range with Garmin Connect running.
-* The minutes number keeps counting if readings stop; there is no separate stale warning.
+* If readings stop, the age tag keeps counting (solid after 6 minutes); there is no other stale warning.
+* Pushing needs Meanwhile v6 with Garmin Connect installed on the same phone. Without a push, the backup fetch still updates the face every 5 minutes.
