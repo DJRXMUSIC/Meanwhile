@@ -202,15 +202,23 @@ public final class AlertEngine {
         /** Fraction of the stream's maximum volume; 0 means no sound this time. */
         public final float volume;
         public final boolean vibrate;
+        /** Why there is no sound this time (the volume profile); null when there is. */
+        public final String quietBecause;
 
         Sound(float volume, boolean vibrate) {
+            this(volume, vibrate, null);
+        }
+
+        Sound(float volume, boolean vibrate, String quietBecause) {
             this.volume = volume;
             this.vibrate = vibrate;
+            this.quietBecause = quietBecause;
         }
 
         @Override
         public String toString() {
-            return "volume " + Math.round(volume * 100) + "%" + (vibrate ? " + vibrate" : "");
+            return "volume " + Math.round(volume * 100) + "%" + (vibrate ? " + vibrate" : "")
+                    + (quietBecause != null ? " (" + quietBecause + ")" : "");
         }
     }
 
@@ -238,6 +246,13 @@ public final class AlertEngine {
             volume = volume * rule.volumePercent / 100f;
         }
         final boolean vibrate = !AlertSettings.SILENT.equals(profile) && rule.vibrate;
-        return new Sound(volume, vibrate);
+        String quiet = null;
+        if (volume <= 0) {
+            if (AlertSettings.VIBRATE_ONLY.equals(profile)) quiet = "alarm volume is Vibrate only";
+            else if (AlertSettings.SILENT.equals(profile)) quiet = "alarm volume is Silent";
+            else if (ascending) quiet = "Ascending: vibration only for the first " + (MAX_VIBRATING_MINUTES + 1) + " minutes";
+            else quiet = "volume works out at 0";
+        }
+        return new Sound(volume, vibrate, quiet);
     }
 }

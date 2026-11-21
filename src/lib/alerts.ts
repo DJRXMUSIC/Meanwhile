@@ -80,6 +80,26 @@ export interface AlertsNative {
 }
 
 // The app's alert functions, or null outside the app (or in an app without them).
+/**
+ * Why alarms won't make a sound with these options, in plain words; null when they will.
+ * The Test button ignores the volume profile, so a test can beep while real alarms don't:
+ * the Alerts tab shows this as a warning.
+ */
+export function silentReason(o: Pick<AlertOptions, "bg_alert_profile" | "delay_ascending_3min">): string | null {
+  switch (o.bg_alert_profile) {
+    case "vibrate only":
+      return "Alarm volume is set to Vibrate only: alarms vibrate but make no sound.";
+    case "Silent":
+      return "Alarm volume is set to Silent: alarms make no sound and don't vibrate.";
+    case "ascending":
+      return o.delay_ascending_3min
+        ? "Alarm volume is Ascending with vibration first: each alarm only vibrates for its first 3 minutes."
+        : null;
+    default:
+      return null;
+  }
+}
+
 export function alertsApp(): AlertsNative | null {
   const n = everBridge() as unknown as AlertsNative | null;
   return n && typeof n.alertsState === "function" ? n : null;

@@ -11,8 +11,10 @@ import {
   offForever,
   onAlertsChanged,
   parseThreshold,
+  PROFILES,
   readState,
   showThreshold,
+  silentReason,
   snoozeMinutes,
   snoozeStepLabel,
   SNOOZE_STEPS,
@@ -21,6 +23,7 @@ import {
   summary,
   unitLabel,
   validate,
+  type AlertOptions,
   type AlertRule,
   type AlertsState,
 } from "@/lib/alerts";
@@ -60,6 +63,13 @@ export default function AlertsPage() {
   const rules = st.config.alerts;
   const activeRule = st.active ? rules.find((r) => r.uuid === st.active!.uuid) ?? null : null;
   const snoozedNow = !!st.active && st.active.snoozed && st.active.next_alert_at > st.now;
+
+  const saveOptions = (patch: Partial<AlertOptions>) => {
+    const err = app.alertsSaveSettings?.(JSON.stringify({ ...opts, ...patch }));
+    setMsg(err ?? "");
+    if (!err) load();
+  };
+  const silent = silentReason(opts);
 
   const openEditor = (r: AlertRule) => {
     setMsg("");
@@ -115,6 +125,16 @@ export default function AlertsPage() {
   return (
     <div className="px-3 py-3 space-y-4 pb-24">
       <h1 className="text-xl font-semibold">Alerts</h1>
+
+      {silent && (
+        <section role="alert" className="rounded-2xl bg-red-600/30 p-4 space-y-3">
+          <p className="text-sm font-medium">{silent}</p>
+          <button className="w-full rounded-xl bg-white text-black py-3 font-semibold"
+            onClick={() => saveOptions({ bg_alert_profile: "High", delay_ascending_3min: false })}>
+            Turn alarm sound on (High)
+          </button>
+        </section>
+      )}
 
       {activeRule && !snoozedNow && (
         <section className={`rounded-2xl p-4 space-y-3 ${activeRule.above ? "bg-amber-600/25" : "bg-red-600/30"}`}>
@@ -253,6 +273,29 @@ export default function AlertsPage() {
               ))}
             </div>
           ))}
+        </Section>
+      )}
+
+      {!edit && (
+        <Section title="Alarm volume">
+          <div className="grid grid-cols-5 gap-1">
+            {PROFILES.map((p) => (
+              <button key={p.id} onClick={() => saveOptions({ bg_alert_profile: p.id })} aria-pressed={opts.bg_alert_profile === p.id}
+                className={`rounded-lg px-1 py-2 text-[12px] ${opts.bg_alert_profile === p.id ? "bg-accent/15 ring-1 ring-accent/50" : "bg-surface2/60"}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {opts.bg_alert_profile === "ascending" && (
+            <>
+              <Toggle label="Ascending: 3 min vibration first" on={opts.delay_ascending_3min}
+                set={(v) => saveOptions({ delay_ascending_3min: v })} />
+              <Toggle label="Ascending: up to medium" on={opts.ascending_volume_to_medium}
+                set={(v) => saveOptions({ ascending_volume_to_medium: v })} />
+            </>
+          )}
+          <Toggle label="Silent during calls" on={opts.no_alarms_during_calls}
+            set={(v) => saveOptions({ no_alarms_during_calls: v })} />
         </Section>
       )}
 

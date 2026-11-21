@@ -54,7 +54,10 @@ final class AlertSound implements Alerts.Noise {
         final boolean inCall = settings.noAlarmsDuringCalls && am != null && am.getMode() == AudioManager.MODE_IN_CALL;
         final int ringer = am != null ? am.getRingerMode() : AudioManager.RINGER_MODE_NORMAL;
         if (rule.overrideSilent && !inCall && (sound.volume > 0 || sound.vibrate)) throughDoNotDisturb(c);
-        if (sound.volume > 0) {
+        if (sound.volume <= 0) {
+            EventLog.log(c, "SOUND", "no sound: " + (sound.quietBecause != null ? sound.quietBecause : "volume 0")
+                    + " (change it on the Alerts tab under Alarm volume)");
+        } else {
             if (inCall) {
                 EventLog.log(c, "SOUND", "no sound: on a call");
             } else if (rule.overrideSilent || ringer == AudioManager.RINGER_MODE_NORMAL) {

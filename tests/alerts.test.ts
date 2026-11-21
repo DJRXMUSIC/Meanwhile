@@ -10,6 +10,7 @@ import {
   parseThreshold,
   readState,
   showThreshold,
+  silentReason,
   snoozeMinutes,
   summary,
   validate,
@@ -175,4 +176,13 @@ test("the Now pill: turning one back on calls the app for that one only", async 
   turnQuietOn(low);
   assert.deepEqual(calls, ["disable all 0", "disable low 0"]);
   setNative(undefined);
+});
+
+test("a warning when alarms won't make a sound (the Test button ignores the volume profile)", () => {
+  assert.equal(silentReason({ bg_alert_profile: "High", delay_ascending_3min: true }), null);
+  assert.equal(silentReason({ bg_alert_profile: "medium", delay_ascending_3min: false }), null);
+  assert.match(silentReason({ bg_alert_profile: "vibrate only", delay_ascending_3min: false })!, /Vibrate only: alarms vibrate but make no sound/);
+  assert.match(silentReason({ bg_alert_profile: "Silent", delay_ascending_3min: false })!, /no sound and don't vibrate/);
+  assert.match(silentReason({ bg_alert_profile: "ascending", delay_ascending_3min: true })!, /first 3 minutes/);
+  assert.equal(silentReason({ bg_alert_profile: "ascending", delay_ascending_3min: false }), null);
 });

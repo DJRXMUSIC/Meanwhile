@@ -320,6 +320,21 @@ public class AlertEngineTest {
     }
 
     @Test
+    public void aSoundlessAlarmSaysWhy() {
+        assertNull(AlertEngine.sound(LOW90, highProfile(), 0).quietBecause);
+        assertEquals("alarm volume is Vibrate only",
+                AlertEngine.sound(LOW90, highProfile().withProfile(AlertSettings.VIBRATE_ONLY), 0).quietBecause);
+        assertEquals("alarm volume is Silent",
+                AlertEngine.sound(LOW90, highProfile().withProfile(AlertSettings.SILENT), 0).quietBecause);
+        // ascending with the delay: silent for the alarm's first minutes, then says nothing
+        assertEquals("Ascending: vibration only for the first 3 minutes",
+                AlertEngine.sound(LOW90, AlertSettings.defaults(), 2).quietBecause);
+        assertNull(AlertEngine.sound(LOW90, AlertSettings.defaults(), 3).quietBecause);
+        assertTrue(AlertEngine.sound(LOW90, highProfile().withProfile(AlertSettings.VIBRATE_ONLY), 0).toString()
+                .contains("(alarm volume is Vibrate only)"));
+    }
+
+    @Test
     public void ascendingWithoutTheDelayAndCappedAtMedium() {
         final AlertSettings noDelay = new AlertSettings(AlertSettings.ASCENDING, true, true, false, 15, false, false, false, false, 0, 0, 0);
         assertEquals(0.3333f, AlertEngine.sound(LOW90, noDelay, 0).volume, 1e-4);
