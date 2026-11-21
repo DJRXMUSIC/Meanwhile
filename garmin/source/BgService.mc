@@ -5,8 +5,11 @@ import Toybox.PersistedContent;
 import Toybox.System;
 import Toybox.Time;
 
-// Background process: fetch the newest reading from EverBridge and hand it to
-// the face. Garmin Connect on the phone performs the request, so 127.0.0.1 is the phone.
+// Background process. Two ways a reading arrives, both handed to the face the same way:
+//  - pushed: Meanwhile v6 sends each reading the moment it gets it, as a phone-app
+//    message through Garmin Connect (onPhoneAppMessage). This is the fast path.
+//  - fetched: the timed backup (onTemporalEvent), at most every 5 minutes, asks the
+//    phone's /pebble. Garmin Connect performs the request, so 127.0.0.1 is the phone.
 (:background)
 class BgService extends System.ServiceDelegate {
 
@@ -21,6 +24,13 @@ class BgService extends System.ServiceDelegate {
 
     (:release)
     function log(code as Number, r) as Void {
+    }
+
+    // A reading pushed by Meanwhile v6: the same shape as the /pebble reply.
+    function onPhoneAppMessage(msg as Communications.PhoneAppMessage) as Void {
+        var r = Bg.parse(200, msg.data, Time.now().value());
+        log(0, r);
+        Background.exit(r);
     }
 
     function onTemporalEvent() as Void {

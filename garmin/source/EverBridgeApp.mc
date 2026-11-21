@@ -1,4 +1,5 @@
 import Toybox.Application;
+import Toybox.Background;
 import Toybox.Lang;
 import Toybox.System;
 import Toybox.WatchUi;
@@ -12,6 +13,10 @@ class EverBridgeApp extends Application.AppBase {
 
     function getInitialView() {
         Sched.arm();
+        // Wake the background whenever Meanwhile v6 pushes a reading.
+        if (Background has :registerForPhoneAppMessageEvent) {
+            Background.registerForPhoneAppMessageEvent();
+        }
         return [new EverBridgeView()];
     }
 

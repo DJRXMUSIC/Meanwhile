@@ -131,6 +131,14 @@ for d in $DEVICES; do
   shot "$OUT/screen-$d.png"
   kill $RUN 2>/dev/null
   echo "simulator output:"; cat "/tmp/run-$d.txt"
+  # The debug build measures every element on this device's own fonts (worst-case text).
+  grep -q "FIT ok" "/tmp/run-$d.txt" || fail "no fit check output on $d"
+  grep -q "FIT FAIL" "/tmp/run-$d.txt" && fail "layout doesn't fit on $d"
+  # The screenshot as text, so it can be checked from the log alone.
+  echo "--- $d screen as text (# = lit pixel, 2x2 per character)"
+  python3 "$GARMIN/tools/ascii_shot.py" "$OUT/screen-$d.png" || true
+  echo "--- OCR of the screen"
+  convert "$OUT/screen-$d.png" -negate -resize 300% /tmp/ocr.png && tesseract /tmp/ocr.png - --psm 11 2>/dev/null | tr -s '\n' ' '; echo
 done
 kill $FAKE 2>/dev/null
 echo "--- fake endpoint log"; cat /tmp/fake.log

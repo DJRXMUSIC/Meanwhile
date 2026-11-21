@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getProfile, profileNeedsMigration } from "./db";
 import { totalIOB } from "./insulin";
+import { reportInsulinNatively } from "./native";
 import type { Profile } from "./types";
 import { bucket, useNow } from "./useNow";
 import { XdripPoller } from "./xdrip";
@@ -65,6 +66,12 @@ export function useLiveData() {
     () => totalIOB(insulinList, Math.max(now, Date.now()), dia, peak, delay),
     [insulinList, now, dia, peak, delay]
   );
+
+  // Keep the phone app's copy of the doses current, for the watch face's IOB.
+  useEffect(() => {
+    if (!profile) return;
+    reportInsulinNatively(insulinList, dia, peak, delay);
+  }, [profile, insulinList, dia, peak, delay]);
 
   // `now` is returned so consumers (the chart, in particular) share this
   // clock instead of starting their own.

@@ -69,4 +69,39 @@ public class PebbleJsonTest {
         assertEquals(7, PebbleJson.ordinal("DoubleDown"));
         assertEquals(0, PebbleJson.ordinal("NONE"));
     }
+
+    @Test
+    public void iobIsAddedWhenKnown() {
+        final JSONObject bg = new JSONObject(PebbleJson.reply(
+                Arrays.asList(r(T + 5 * MIN, 135), r(T, 120)), "mgdl", T + 6 * MIN, 2.4567))
+                .getJSONArray("bgs").getJSONObject(0);
+        assertEquals(2.46, bg.getDouble("iob"), 1e-9);
+        final JSONObject none = new JSONObject(PebbleJson.reply(
+                Arrays.asList(r(T + 5 * MIN, 135), r(T, 120)), "mgdl", T + 6 * MIN, null))
+                .getJSONArray("bgs").getJSONObject(0);
+        assertTrue(!none.has("iob"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void watchMessageHasThePebbleShapeWithStringTimes() {
+        final java.util.Map<String, Object> m = PebbleJson.message(
+                Arrays.asList(r(T + 5 * MIN, 135), r(T, 120)), "mgdl", T + 6 * MIN, 1.5);
+        final java.util.Map<String, Object> status = ((java.util.List<java.util.Map<String, Object>>) m.get("status")).get(0);
+        assertEquals(String.valueOf(T + 6 * MIN), status.get("now"));
+        final java.util.Map<String, Object> bg = ((java.util.List<java.util.Map<String, Object>>) m.get("bgs")).get(0);
+        assertEquals("135", bg.get("sgv"));
+        assertEquals("SingleUp", bg.get("direction"));
+        assertEquals(String.valueOf(T + 5 * MIN), bg.get("datetime"));
+        assertEquals(15, bg.get("bgdelta"));
+        assertEquals(1.5f, (Float) bg.get("iob"), 0);
+
+        final java.util.Map<String, Object> one = PebbleJson.message(
+                Collections.singletonList(r(T, 100)), "mmol", T, null);
+        final java.util.Map<String, Object> b1 = ((java.util.List<java.util.Map<String, Object>>) one.get("bgs")).get(0);
+        assertEquals("5.5", b1.get("sgv")); // 100 mg/dL = 5.55 mmol/L, shown as the app shows it
+        assertTrue(!b1.containsKey("bgdelta"));
+        assertTrue(!b1.containsKey("iob"));
+        assertEquals(null, PebbleJson.message(Collections.<Reading>emptyList(), "mgdl", T, null));
+    }
 }

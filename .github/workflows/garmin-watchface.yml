@@ -56,13 +56,15 @@ jobs:
           name: garmin-watchface
           path: out
 
-      - name: Replace the watchface-latest release
+      # main publishes watchface-latest; any other branch publishes watchface-preview.
+      - name: Replace the download release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete watchface-latest --cleanup-tag --yes || true
-          gh release create watchface-latest out/*.prg out/screen-instincte40mm.png out/screen-instincte45mm.png \
+          TAG=watchface-latest; [ "$GITHUB_REF_NAME" = main ] || TAG=watchface-preview
+          gh release delete $TAG --cleanup-tag --yes || true
+          gh release create $TAG out/*.prg out/screen-instincte40mm.png out/screen-instincte45mm.png \
             --target "$GITHUB_SHA" \
             --title "EverBridge watch face for Instinct E (build ${{ github.run_number }})" \
             --notes "Download the file for your watch size: **everbridge-instincte40mm.prg** or **everbridge-instincte45mm.prg**. Copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).

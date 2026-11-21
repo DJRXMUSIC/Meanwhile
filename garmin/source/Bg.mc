@@ -1,8 +1,9 @@
 import Toybox.Lang;
 
-// The glucose reading as fetched from the phone. This module also runs in the
-// background process, which has very little memory, so it holds only the URL,
-// the storage keys and the parser.
+// The glucose reading as the phone sends it: pushed by Meanwhile v6 the moment it
+// arrives (a phone-app message), or fetched from its /pebble endpoint as a backup.
+// Both have the same shape. This module also runs in the background process, which
+// has very little memory, so it holds only the URL, the storage keys and the parser.
 (:background)
 module Bg {
     // EverBridge app on the phone (its own port; xDrip+, which may also be
@@ -16,6 +17,8 @@ module Bg {
     const K_DT = "dt";   // reading time on the phone's clock, ms (identifies the reading)
     const K_AT = "at";   // reading time on the watch's clock, s
     const K_F = "f";     // when the fetch completed, watch clock, s
+    const K_DELTA = "d"; // change from the reading before, as shown ("+4", "-12", "--")
+    const K_IOB = "i";   // insulin on board, units (Float), or null if Meanwhile hasn't reported
     const K_LAG = "lag"; // scheduler state, see Sched
 
     // Turns a /pebble reply into the dictionary the face stores, or null if the
@@ -56,13 +59,43 @@ module Bg {
             at = (dt / 1000l).toNumber();
         }
         var dir = bg["direction"];
+        var iob = bg["iob"];
         return {
             K_SGV => sgv.toString(),
             K_DIR => (dir instanceof String) ? dir : "",
             K_DT => dt,
             K_AT => at,
-            K_F => nowSec
+            K_F => nowSec,
+            K_DELTA => delta(bg["bgdelta"]),
+            K_IOB => (iob instanceof Number || iob instanceof Float || iob instanceof Double || iob instanceof Long)
+                ? iob.toFloat() : null
         };
+    }
+
+    // The change from the reading before, signed: "+4", "-12", "0"; "+0.3" in mmol/L;
+    // "--" when there is no reading close enough before it.
+    function delta(v) as String {
+        if (v == null) {
+            return "--";
+        }
+        if (v instanceof Number || v instanceof Long) {
+            return v > 0 ? "+" + v.toString() : v.toString();
+        }
+        if (v instanceof Float || v instanceof Double) {
+            var t = v.format("%.1f");
+            return v > 0 ? "+" + t : t;
+        }
+        if (v instanceof String) {
+            if (v.length() == 0) {
+                return "--";
+            }
+            var f = v.toFloat();
+            if (f != null && f > 0 && !v.substring(0, 1).equals("+")) {
+                return "+" + v;
+            }
+            return v;
+        }
+        return "--";
     }
 
     function toLong(v) as Long? {

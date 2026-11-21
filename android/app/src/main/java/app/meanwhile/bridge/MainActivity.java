@@ -537,6 +537,15 @@ public class MainActivity extends Activity {
         // The Alerts tab. Reads return JSON; changes return null or what's wrong, and when they
         // have been applied the page hears window.__alertsChanged().
 
+        /**
+         * Meanwhile's recent doses and insulin curve, so the phone can keep IOB for the watch
+         * face while the page is closed. Returns null when stored, else what was wrong.
+         */
+        @JavascriptInterface
+        public String setInsulin(String json) {
+            return trusted ? bridge.setInsulin(json) : "not allowed";
+        }
+
         @JavascriptInterface
         public String alertsState() {
             return trusted ? AlertsBridge.state(MainActivity.this) : null;

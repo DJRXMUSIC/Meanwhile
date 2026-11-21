@@ -2,6 +2,7 @@ package app.meanwhile.bridge;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.PowerManager;
@@ -14,6 +15,7 @@ import app.meanwhile.bridge.core.BridgeRoutes;
 import app.meanwhile.bridge.core.CaptureEngine;
 import app.meanwhile.bridge.core.CaptureLog;
 import app.meanwhile.bridge.core.HttpServer;
+import app.meanwhile.bridge.core.InsulinOnBoard;
 import app.meanwhile.bridge.core.Json;
 import app.meanwhile.bridge.core.NotificationParser;
 import app.meanwhile.bridge.core.Reading;
@@ -63,6 +65,8 @@ public final class Bridge {
     private volatile long listenerChangedAt;
     private volatile long lastMonitoredPostAt;
     private String appliedServerConfig;
+    /** Doses and curve as Meanwhile's page last reported them; null if it never has. */
+    private volatile InsulinOnBoard insulin;
 
     private Bridge(Context app) {
         this.app = app;
@@ -77,15 +81,89 @@ public final class Bridge {
 
             @Override
             public String unitsHint() {
-                return settings.units() == NotificationParser.Units.MMOL ? "mmol" : "mgdl";
+                return Bridge.this.unitsHint();
+            }
+
+            @Override
+            public Double iob(long nowMs) {
+                return Bridge.this.iob(nowMs);
             }
         });
         this.server = new HttpServer(routes);
         engine.setListener(reading -> {
             BridgeService.refresh(app);
             Alerts.check(app, "reading " + reading.mgdl);
+            pushToWatch("new reading");
         });
+        insulin = loadInsulin();
         applySettings();
+    }
+
+    String unitsHint() {
+        return settings.units() == NotificationParser.Units.MMOL ? "mmol" : "mgdl";
+    }
+
+    // ------------------------------------------------------------------ insulin on board
+
+    static final String INSULIN_PREFS = "insulin";
+    private static final String KEY_INSULIN_REPORT = "report";
+    private static final String KEY_INSULIN_AT = "reported_at";
+
+    /** IOB now (units), as Meanwhile's IOB tile would show it; null if never reported. */
+    Double iob(long nowMs) {
+        final InsulinOnBoard i = insulin;
+        return i == null ? null : i.total(nowMs);
+    }
+
+    InsulinOnBoard insulin() {
+        return insulin;
+    }
+
+    /**
+     * Meanwhile's page reports its recent doses and insulin curve whenever they change, so
+     * IOB keeps decaying for the watch when the page is closed. Returns null when stored,
+     * else what was wrong.
+     */
+    String setInsulin(String json) {
+        final long now = System.currentTimeMillis();
+        final InsulinOnBoard parsed;
+        try {
+            parsed = InsulinOnBoard.parse(json, now);
+        } catch (RuntimeException e) {
+            return "bad insulin report: " + e.getMessage();
+        }
+        final InsulinOnBoard before = insulin;
+        insulin = parsed;
+        app.getSharedPreferences(INSULIN_PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_INSULIN_REPORT, parsed.toJson()).putLong(KEY_INSULIN_AT, now).apply();
+        if (before == null || !before.toJson().equals(parsed.toJson())) {
+            EventLog.log(app, "IOB", parsed.doses.size() + " doses reported; IOB now " + parsed.total(now) + " U");
+            pushToWatch("insulin changed");
+        }
+        return null;
+    }
+
+    private InsulinOnBoard loadInsulin() {
+        final SharedPreferences p = app.getSharedPreferences(INSULIN_PREFS, Context.MODE_PRIVATE);
+        final String json = p.getString(KEY_INSULIN_REPORT, null);
+        if (json == null) return null;
+        try {
+            return InsulinOnBoard.parse(json, p.getLong(KEY_INSULIN_AT, 0));
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Sends the newest reading to the Garmin watch face, if Garmin Connect is there. */
+    void pushToWatch(String why) {
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        main.post(() -> {
+            try {
+                GarminPush.get(app).push(why);
+            } catch (RuntimeException e) {
+                EventLog.log(app, "GARMIN", "push failed: " + e);
+            }
+        });
     }
 
     void applySettings() {
@@ -185,7 +263,8 @@ public final class Bridge {
                 .field("notification_access", hasNotificationAccess())
                 .field("battery_unrestricted", isIgnoringBatteryOptimizations())
                 .field("eversense_installed", installedEversensePackage())
-                .field("last_eversense_post", lastMonitoredPostAt);
+                .field("last_eversense_post", lastMonitoredPostAt)
+                .field("iob", iob(now) == null ? Double.NaN : iob(now));
         j.name("last_reading");
         if (last == null) {
             j.value((String) null);

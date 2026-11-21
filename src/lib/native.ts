@@ -27,6 +27,8 @@ export interface EverBridgeNative {
   apiBase?(): string;
   /** Saves it. Returns the cleaned-up address, or null if it isn't usable. */
   setApiBase?(url: string): string | null;
+  /** Recent doses + insulin curve, so the phone keeps IOB for the watch face. null = stored. */
+  setInsulin?(json: string): string | null;
 }
 
 export function everBridge(): EverBridgeNative | null {
@@ -86,5 +88,28 @@ export function copyTextNatively(text: string): boolean {
     return !!n && typeof n.copyText === "function" && n.copyText(text) === true;
   } catch {
     return false;
+  }
+}
+
+// The watch face shows insulin on board even while this page is closed, so the app
+// computes it itself (the same curve as lib/insulin.ts). Hand it the doses that can
+// still be active and the curve whenever either changes. A no-op outside the app.
+export function reportInsulinNatively(
+  doses: { ts: number; units: number; kind: string }[],
+  diaHours: number,
+  peakMin: number,
+  delayMin: number,
+  now: number = Date.now()
+): void {
+  const n = everBridge();
+  if (!n || typeof n.setInsulin !== "function") return;
+  const since = now - (delayMin + diaHours * 60 + 60) * 60_000;
+  const recent = doses
+    .filter((d) => d.ts >= since)
+    .map((d) => ({ ts: d.ts, units: d.units, kind: d.kind }));
+  try {
+    n.setInsulin(JSON.stringify({ dia: diaHours, peak: peakMin, delay: delayMin, doses: recent }));
+  } catch {
+    // an older app without IOB for the watch: nothing to do
   }
 }

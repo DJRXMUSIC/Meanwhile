@@ -189,18 +189,22 @@ jobs:
           name: meanwhile-apk
           path: apks
 
-      - name: Replace the bridge-latest release
+      # main publishes bridge-latest; any other branch publishes bridge-preview, so trying
+      # a branch never replaces the main download link.
+      - name: Replace the download release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          TAG=bridge-latest; KIND=""
+          [ "$GITHUB_REF_NAME" = main ] || { TAG=bridge-preview; KIND=" preview"; }
           cp apks/app-release.apk meanwhile-v6.apk
-          gh release delete bridge-latest --cleanup-tag --yes || true
-          gh release create bridge-latest meanwhile-v6.apk \
+          gh release delete $TAG --cleanup-tag --yes || true
+          gh release create $TAG meanwhile-v6.apk \
             --target "$GITHUB_SHA" \
-            --title "Meanwhile v6 (build ${{ github.run_number }})" \
+            --title "Meanwhile v6$KIND (build ${{ github.run_number }})" \
             --notes "Tap **meanwhile-v6.apk** below on your phone to download, then open it to install or update.
 
           Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed all unit, Robolectric, lint and Android 15 emulator end-to-end tests.
 
-          Direct link: https://github.com/${{ github.repository }}/releases/download/bridge-latest/meanwhile-v6.apk"
+          Direct link: https://github.com/${{ github.repository }}/releases/download/$TAG/meanwhile-v6.apk"

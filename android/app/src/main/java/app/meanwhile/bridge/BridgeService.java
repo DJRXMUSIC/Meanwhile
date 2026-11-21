@@ -132,6 +132,11 @@ public class BridgeService extends Service {
     void tick() {
         final Bridge bridge = Bridge.get(this);
         bridge.ensureServer();
+        try {
+            GarminPush.get(this).tick(); // re-send anything the watch hasn't accepted
+        } catch (RuntimeException e) {
+            EventLog.log(this, "GARMIN", "watchdog push failed: " + e);
+        }
 
         final long now = System.currentTimeMillis();
         if (bridge.hasNotificationAccess() && !bridge.isListenerConnected()

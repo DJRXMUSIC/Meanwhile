@@ -19,6 +19,56 @@ function parseReadsBridgePebbleReply(logger as Test.Logger) as Boolean {
     // 90 s old by the phone's clock; the watch's clock is 5 s ahead.
     Test.assertEqual(r[Bg.K_AT], T0 + 5);
     Test.assertEqual(r[Bg.K_F], T0 + 95);
+    Test.assertEqual(r[Bg.K_DELTA], "-2");
+    Test.assert(r[Bg.K_IOB] == null);
+    return true;
+}
+
+(:test)
+function parseReadsAPushedMessageWithIob(logger as Test.Logger) as Boolean {
+    // What Meanwhile v6 pushes: the /pebble shape, times as strings (Monkey C Numbers
+    // are 32-bit), IOB as a float.
+    var r = Bg.parse(200, {
+        "status" => [{"now" => "1790000002000"}],
+        "bgs" => [{"sgv" => "142", "direction" => "FortyFiveUp", "datetime" => "1790000000000", "bgdelta" => 4, "iob" => 2.37}]
+    }, T0 + 2);
+    Test.assertEqual(r[Bg.K_SGV], "142");
+    Test.assertEqual(r[Bg.K_DT], 1790000000000l);
+    Test.assertEqual(r[Bg.K_AT], T0);
+    Test.assertEqual(r[Bg.K_DELTA], "+4");
+    Test.assertEqual(iobText(r[Bg.K_IOB]), "2.4U");
+    return true;
+}
+
+(:test)
+function deltaIsSignedAndDashedWhenUnknown(logger as Test.Logger) as Boolean {
+    Test.assertEqual(Bg.delta(4), "+4");
+    Test.assertEqual(Bg.delta(-12), "-12");
+    Test.assertEqual(Bg.delta(0), "0");
+    Test.assertEqual(Bg.delta(null), "--");
+    Test.assertEqual(Bg.delta("0.3"), "+0.3"); // mmol/L arrive as strings
+    Test.assertEqual(Bg.delta("-0.2"), "-0.2");
+    Test.assertEqual(Bg.delta("0.0"), "0.0");
+    Test.assertEqual(Bg.delta(""), "--");
+    Test.assertEqual(Bg.delta(1.5), "+1.5");
+    return true;
+}
+
+(:test)
+function ageTagIoBAndStepsText(logger as Test.Logger) as Boolean {
+    Test.assertEqual(ageText(0), "0 MIN");
+    Test.assertEqual(ageText(119), "1 MIN");
+    Test.assertEqual(ageText(24 * 60 + 5), "24 MIN");
+    Test.assertEqual(ageText(-30), "0 MIN");
+    Test.assertEqual(ageText(200 * 60), "99+ MIN");
+    Test.assertEqual(iobText(null), "--");
+    Test.assertEqual(iobText(0), "0.0U");
+    Test.assertEqual(iobText(12.46), "12.5U");
+    Test.assertEqual(groupThousands(0), "0");
+    Test.assertEqual(groupThousands(999), "999");
+    Test.assertEqual(groupThousands(8412), "8,412");
+    Test.assertEqual(groupThousands(18412), "18,412");
+    Test.assertEqual(groupThousands(1234567), "1,234,567");
     return true;
 }
 
@@ -37,19 +87,6 @@ function parseRejectsErrorsAndEmptyReplies(logger as Test.Logger) as Boolean {
     Test.assert(Bg.parse(200, {"status" => [{"now" => 1}], "bgs" => []}, T0) == null);
     Test.assert(Bg.parse(200, {"bgs" => [{"direction" => "Flat"}]}, T0) == null);
     Test.assert(Bg.parse(200, "nope", T0) == null);
-    return true;
-}
-
-(:test)
-function minutesUntilCountsDownRoundingUp(logger as Test.Logger) as Boolean {
-    Test.assertEqual(minutesUntil(T0 + 300, T0), 5);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 1), 5);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 150), 3);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 240), 1);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 299), 1);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 300), 0);
-    Test.assertEqual(minutesUntil(T0 + 300, T0 + 400), 0);
-    Test.assertEqual(minutesUntil(T0 + 100000, T0), 99);
     return true;
 }
 

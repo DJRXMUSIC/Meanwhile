@@ -18,20 +18,21 @@ const TEXT_GLYPH = 70;
 // Width of the screen the layout is designed on (Instinct E 40 mm).
 const DESIGN = 166;
 
-// Modelled on the Instinct E's own "Instinct" face:
+// After this long without a new reading the age tag fills in, so it catches the eye.
+const LATE_SEC = 360;
+
+// Glucose first, as approved in the design:
 //
-//   ┌──────────────┐   (steps)    <- subscreen
-//   │   123        │
-//   │ ///////////  /
-//   │   ↗  3      /
-//   │ //////////// ____________
-//   ────────────    │  ♥
-//      15 00     /  │  71
-//   ────────────    ////
-//         24 OCT
+//      10:47          ( 68 )   <- subscreen: heart rate
+//      21 Nov         ( BPM)
 //
-// Glucose sits in the top-left panel where that face says INSTINCT, with the trend
-// arrow and the countdown to the next reading on the row below, in place of its arrow.
+//           142
+//
+//        +4  [2 MIN]           <- change from the reading before, age tag
+//     IOB 2.4U   8,412         <- insulin on board, steps
+//
+// The glucose number is never altered, however old: only the age tag changes
+// (outlined while fresh, solid after 6 minutes).
 //
 // Coordinates are designed on the 40 mm screen (166 px) and scaled to the 45 mm.
 class EverBridgeView extends WatchUi.WatchFace {
@@ -43,13 +44,18 @@ class EverBridgeView extends WatchUi.WatchFace {
     private var _sw as Number = 0;
     private var _sh as Number = 0;
 
-    // Vertical offsets that centre each font's glyphs on a y, and the time's glyph
-    // height: worked out once here rather than on every redraw.
-    private var _dyNum as Number = 0;   // FONT_NUMBER_MEDIUM (glucose)
-    private var _dyTime as Number = 0;  // FONT_NUMBER_THAI_HOT (time)
-    private var _dySmall as Number = 0; // FONT_SMALL
-    private var _dyMed as Number = 0;   // FONT_MEDIUM
-    private var _gTime as Number = 0;
+    // Fonts, chosen at layout from the device's own: the largest that fits each slot.
+    private var _fBg = Graphics.FONT_NUMBER_HOT;
+    private var _fTime = Graphics.FONT_NUMBER_MILD;
+    private var _fDate = Graphics.FONT_TINY;
+    private var _fDelta = Graphics.FONT_SMALL;
+    private var _fTag = Graphics.FONT_XTINY;
+    private var _fRow = Graphics.FONT_SMALL;
+    private var _fLabel = Graphics.FONT_XTINY;
+    private var _fHr = Graphics.FONT_NUMBER_MILD;
+
+    // The reading version last drawn, for the instant redraw in onPartialUpdate.
+    private var _drawn as Number = -1;
 
     function initialize() {
         WatchFace.initialize();
@@ -68,26 +74,21 @@ class EverBridgeView extends WatchUi.WatchFace {
             _sw = sub.width;
             _sh = sub.height;
         } else {
-            _sx = p(113);
-            _sy = 0;
-            _sw = p(52);
-            _sh = p(52);
+            _sx = p(110);
+            _sy = p(3);
+            _sw = p(53);
+            _sh = p(53);
         }
-        _dyNum = dy(Graphics.FONT_NUMBER_MEDIUM, NUM_GLYPH);
-        _dyTime = dy(Graphics.FONT_NUMBER_THAI_HOT, NUM_GLYPH);
-        _dySmall = dy(Graphics.FONT_SMALL, TEXT_GLYPH);
-        _dyMed = dy(Graphics.FONT_MEDIUM, TEXT_GLYPH);
-        _gTime = glyph(Graphics.FONT_NUMBER_THAI_HOT, NUM_GLYPH);
-        logLayout();
-    }
-
-    (:debug)
-    private function logLayout() as Void {
-        System.println("layout " + _w + "x" + _h + " sub " + _sx + "," + _sy + " " + _sw + "x" + _sh);
-    }
-
-    (:release)
-    private function logLayout() as Void {
+        var g = Graphics.FONT_XTINY;
+        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(40), "388", p(104));
+        _fTime = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM], NUM_GLYPH, p(19), "2358", p(60));
+        _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(8), "28 Sep", p(40));
+        _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(12), "-12", p(30));
+        _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(7), "24 MIN", p(36));
+        _fRow = pick(dc, [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(10), "18,412", p(36));
+        _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(6), "IOB", p(14));
+        _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
+        checkFit(dc);
     }
 
     // A design coordinate (40 mm screen) on this screen.
@@ -95,79 +96,48 @@ class EverBridgeView extends WatchUi.WatchFace {
         return v * _w / DESIGN;
     }
 
+    // The first (largest) font whose glyphs are at most maxH tall and whose widest
+    // expected text is at most maxW wide; else the last.
+    private function pick(dc as Graphics.Dc, fonts as Array, pct as Number, maxH as Number, sample as String, maxW as Number) {
+        for (var i = 0; i < fonts.size(); i++) {
+            if (glyph(fonts[i], pct) <= maxH && dc.getTextWidthInPixels(sample, fonts[i]) <= maxW) {
+                return fonts[i];
+            }
+        }
+        return fonts[fonts.size() - 1];
+    }
+
+    // ---------------------------------------------------------------- drawing
+
     function onUpdate(dc as Graphics.Dc) as Void {
         Sched.ensureArmed();
-
+        dc.clearClip();
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(1);
-
         var now = Time.now();
-        drawFrame(dc);
-        drawGlucose(dc, now.value());
         drawTime(dc, Gregorian.info(now, Time.FORMAT_MEDIUM));
-        drawSteps(dc);
         drawHeartRate(dc);
+        drawReading(dc, now.value());
+        _drawn = Sched.version();
     }
 
-    // ---------------------------------------------------------------- panels
-
-    // The lines and hatching the Instinct face is built from.
-    private function drawFrame(dc as Graphics.Dc) as Void {
-        // top-left panel: diagonal right edge, hatch under it
-        dc.drawLine(p(106), p(10), p(94), p(60));
-        hatch(dc, p(30), p(91), p(60));
-        // rule above the time, stepping up into the right panel
-        dc.drawLine(p(14), p(64), p(116), p(64));
-        dc.drawLine(p(128), p(68), p(152), p(68));
-        // diagonal between the time and the right panel
-        dc.drawLine(p(130), p(68), p(118), p(112));
-        // rule under the time; hatch under the heart rate
-        dc.drawLine(p(14), p(115), p(116), p(115));
-        hatch(dc, p(124), p(150), p(115));
-        // short hatch under the date
-        hatch(dc, p(62), p(104), p(146));
-    }
-
-    // A row of short diagonal ticks from x0 to x1, its bottom on y.
-    private function hatch(dc as Graphics.Dc, x0 as Number, x1 as Number, y as Number) as Void {
-        var t = p(3);
-        if (t < 3) {
-            t = 3;
-        }
-        for (var x = x0; x + t <= x1; x += t) {
-            dc.drawLine(x, y, x + t - 1, y - t + 1);
-        }
-    }
-
-    // Glucose in the top-left panel; arrow and countdown to the next reading below it.
-    private function drawGlucose(dc as Graphics.Dc, nowSec as Number) as Void {
-        var cx = p(62);
-        var r = Sched.reading();
-        var sgv = (r == null) ? null : r[Bg.K_SGV];
-        var at = (r == null) ? null : r[Bg.K_AT];
-        if (!(sgv instanceof String) || !(at instanceof Number)) {
-            text(dc, cx, p(28), Graphics.FONT_MEDIUM, _dyMed, "---", Graphics.TEXT_JUSTIFY_CENTER);
+    // Called every second in low-power mode on watches that support it. A reading pushed
+    // by the phone is drawn straight away instead of at the next minute; nothing else
+    // is drawn here, to stay well inside the power budget.
+    function onPartialUpdate(dc as Graphics.Dc) as Void {
+        if (Sched.version() == _drawn) {
             return;
         }
-        text(dc, cx, p(28), Graphics.FONT_NUMBER_MEDIUM, _dyNum, sgv, Graphics.TEXT_JUSTIFY_CENTER);
-
-        var dir = r[Bg.K_DIR];
-        var next = Sched.nextFetchAt();
-        var minStr = (next == null) ? "-" : minutesUntil(next, nowSec).format("%d");
-        var font = Graphics.FONT_SMALL;
-        var size = p(15);
-        var arrowW = arrowWidth(dir, size);
-        var gap = arrowW > 0 ? p(7) : 0;
-        var total = arrowW + gap + dc.getTextWidthInPixels(minStr, font);
-        var x = cx - total / 2;
-        var y = p(47);
-        drawArrow(dc, x + arrowW / 2, y, size, dir);
-        text(dc, x + arrowW + gap, y, font, _dySmall, minStr, Graphics.TEXT_JUSTIFY_LEFT);
+        var top = p(62);
+        dc.setClip(0, top, _w, _h - top);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+        dc.clear();
+        drawReading(dc, Time.now().value());
+        dc.clearClip();
+        _drawn = Sched.version();
     }
 
-    // "15 00": hours solid, minutes striped, as on the Instinct face.
+    // "10:47" top left (hours, square colon, minutes) and "21 Nov" under it.
     private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
         var hour = info.hour;
         var hStr;
@@ -178,45 +148,97 @@ class EverBridgeView extends WatchUi.WatchFace {
             hStr = (hour == 0 ? 12 : hour).format("%d");
         }
         var mStr = info.min.format("%02d");
-        var font = Graphics.FONT_NUMBER_THAI_HOT;
-        var gap = p(3);
-        var hw = dc.getTextWidthInPixels(hStr, font);
-        var mw = dc.getTextWidthInPixels(mStr, font);
-        var x = p(66) - (hw + gap + mw) / 2;
-        var y = p(90);
-        text(dc, x, y, font, _dyTime, hStr, Graphics.TEXT_JUSTIFY_LEFT);
-        var mx = x + hw + gap;
-        text(dc, mx, y, font, _dyTime, mStr, Graphics.TEXT_JUSTIFY_LEFT);
+        var cy = p(32);
+        var gh = glyph(_fTime, NUM_GLYPH);
+        var dot = gh / 7 < 2 ? 2 : gh / 7;
+        var x = p(32);
+        ink(dc);
+        text(dc, x, cy, _fTime, NUM_GLYPH, hStr, Graphics.TEXT_JUSTIFY_LEFT);
+        x += dc.getTextWidthInPixels(hStr, _fTime) + p(2);
+        dc.fillRectangle(x, cy - gh / 4 - dot / 2, dot, dot);
+        dc.fillRectangle(x, cy + gh / 4 - dot / 2, dot, dot);
+        x += dot + p(2);
+        text(dc, x, cy, _fTime, NUM_GLYPH, mStr, Graphics.TEXT_JUSTIFY_LEFT);
 
-        // Stripe the minutes: blank every other row of their glyphs.
-        var g = _gTime;
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        for (var row = y - g / 2 + 1; row < y + g / 2; row += 2) {
-            dc.drawLine(mx, row, mx + mw, row);
-        }
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-
-        // date
-        text(dc, _w / 2, p(132), Graphics.FONT_SMALL, _dySmall,
-            info.day.format("%d") + " " + info.month.toString().toUpper(), Graphics.TEXT_JUSTIFY_CENTER);
+        text(dc, p(33), p(52), _fDate, TEXT_GLYPH, info.day.format("%d") + " " + info.month.toString(), Graphics.TEXT_JUSTIFY_LEFT);
     }
 
-    // Steps in the subscreen: footprints over the count.
-    private function drawSteps(dc as Graphics.Dc) as Void {
-        var steps = ActivityMonitor.getInfo().steps;
-        var cx = _sx + _sw / 2;
-        var cy = _sy + _sh / 2;
-        drawFootprints(dc, cx, cy - _sh / 5, _sh / 11);
-        text(dc, cx, cy + _sh / 6, Graphics.FONT_SMALL, _dySmall,
-            steps == null ? "--" : steps.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
-    }
-
-    // Heart rate in the right panel.
+    // Heart rate in the subscreen: the number, "BPM" under it.
     private function drawHeartRate(dc as Graphics.Dc) as Void {
         var hr = heartRate();
-        var cx = p(140);
-        drawHeart(dc, cx, p(80), p(5));
-        text(dc, cx, p(100), Graphics.FONT_SMALL, _dySmall, hr == null ? "--" : hr.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
+        var cx = _sx + _sw / 2;
+        var cy = _sy + _sh / 2;
+        ink(dc);
+        text(dc, cx, cy - _sh / 10, _fHr, NUM_GLYPH, hr == null ? "--" : hr.format("%d"), Graphics.TEXT_JUSTIFY_CENTER);
+        text(dc, cx, cy + _sh / 4, _fLabel, TEXT_GLYPH, "BPM", Graphics.TEXT_JUSTIFY_CENTER);
+    }
+
+    // Glucose, the change and age tag under it, then IOB and steps.
+    private function drawReading(dc as Graphics.Dc, nowSec as Number) as Void {
+        var cx = _w / 2;
+        var r = Sched.reading();
+        var sgv = (r == null) ? null : r[Bg.K_SGV];
+        var at = (r == null) ? null : r[Bg.K_AT];
+        ink(dc);
+        if (!(sgv instanceof String) || !(at instanceof Number)) {
+            text(dc, cx, p(86), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_CENTER);
+        } else {
+            text(dc, cx, p(86), _fBg, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_CENTER);
+            var d = r[Bg.K_DELTA];
+            drawDeltaAndAge(dc, cx, p(124), (d instanceof String) ? d : "--", nowSec - at);
+        }
+        var iob = (r == null) ? null : r[Bg.K_IOB];
+        drawBottomRow(dc, cx, p(143), iobText(iob), stepsText());
+    }
+
+    // "+4 [2 MIN]": the tag outlined while fresh, solid once LATE_SEC has passed.
+    private function drawDeltaAndAge(dc as Graphics.Dc, cx as Number, cy as Number, delta as String, ageSec as Number) as Void {
+        var tag = ageText(ageSec);
+        var padX = p(4);
+        var padY = p(3);
+        var tw = dc.getTextWidthInPixels(tag, _fTag) + 2 * padX;
+        var th = glyph(_fTag, TEXT_GLYPH) + 2 * padY;
+        var dw = dc.getTextWidthInPixels(delta, _fDelta);
+        var gap = p(6);
+        var x = cx - (dw + gap + tw) / 2;
+        ink(dc);
+        text(dc, x, cy, _fDelta, TEXT_GLYPH, delta, Graphics.TEXT_JUSTIFY_LEFT);
+        var tx = x + dw + gap;
+        var ty = cy - th / 2;
+        if (ageSec > LATE_SEC) {
+            dc.fillRectangle(tx, ty, tw, th);
+            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+            text(dc, tx + padX, cy, _fTag, TEXT_GLYPH, tag, Graphics.TEXT_JUSTIFY_LEFT);
+            ink(dc);
+        } else {
+            dc.setPenWidth(p(2) < 2 ? 2 : p(2));
+            dc.drawRectangle(tx, ty, tw, th);
+            dc.setPenWidth(1);
+            text(dc, tx + padX, cy, _fTag, TEXT_GLYPH, tag, Graphics.TEXT_JUSTIFY_LEFT);
+        }
+    }
+
+    // "IOB 2.4U   8,412"
+    private function drawBottomRow(dc as Graphics.Dc, cx as Number, cy as Number, iob as String, steps as String) as Void {
+        var lw = dc.getTextWidthInPixels("IOB", _fLabel);
+        var iw = dc.getTextWidthInPixels(iob, _fRow);
+        var sw = dc.getTextWidthInPixels(steps, _fRow);
+        var g1 = p(3);
+        var g2 = p(12);
+        var x = cx - (lw + g1 + iw + g2 + sw) / 2;
+        ink(dc);
+        // the small label sits on the value's baseline
+        var rowH = glyph(_fRow, TEXT_GLYPH);
+        var labH = glyph(_fLabel, TEXT_GLYPH);
+        text(dc, x, cy + (rowH - labH) / 2, _fLabel, TEXT_GLYPH, "IOB", Graphics.TEXT_JUSTIFY_LEFT);
+        x += lw + g1;
+        text(dc, x, cy, _fRow, TEXT_GLYPH, iob, Graphics.TEXT_JUSTIFY_LEFT);
+        x += iw + g2;
+        text(dc, x, cy, _fRow, TEXT_GLYPH, steps, Graphics.TEXT_JUSTIFY_LEFT);
+    }
+
+    private function ink(dc as Graphics.Dc) as Void {
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
     }
 
     // ---------------------------------------------------------------- text
@@ -226,110 +248,15 @@ class EverBridgeView extends WatchUi.WatchFace {
         return Graphics.getFontAscent(font) * pct / 100;
     }
 
-    // Offset from a glyph centre line to where drawText puts the font's top.
-    private function dy(font, pct as Number) as Number {
-        return glyph(font, pct) / 2 - Graphics.getFontAscent(font);
+    // Draws text with its glyphs (not its font box) centred on y.
+    private function text(dc as Graphics.Dc, x as Number, y as Number, font, pct as Number, str as String, justify as Number) as Void {
+        dc.drawText(x, y + glyph(font, pct) / 2 - Graphics.getFontAscent(font), font, str, justify);
     }
 
-    // Draws text with its glyphs (not its font box) centred on y; dy from dy().
-    private function text(dc as Graphics.Dc, x as Number, y as Number, font, off as Number, str as String, justify as Number) as Void {
-        dc.drawText(x, y + off, font, str, justify);
+    private function stepsText() as String {
+        var info = ActivityMonitor.getInfo();
+        return (info == null || info.steps == null) ? "--" : groupThousands(info.steps);
     }
-
-    // ---------------------------------------------------------------- arrows
-
-    private function isDouble(dir) as Boolean {
-        return "DoubleUp".equals(dir) || "DoubleDown".equals(dir);
-    }
-
-    private function arrowWidth(dir, size as Number) as Number {
-        if (arrowAngle(dir) == null) {
-            return 0;
-        }
-        return isDouble(dir) ? size * 3 / 2 : size;
-    }
-
-    // Degrees clockwise from pointing right (screen y grows downwards), or null for
-    // no arrow (trend not computable yet).
-    private function arrowAngle(dir) {
-        if ("Flat".equals(dir)) {
-            return 0;
-        }
-        if ("FortyFiveUp".equals(dir)) {
-            return -45;
-        }
-        if ("SingleUp".equals(dir) || "DoubleUp".equals(dir)) {
-            return -90;
-        }
-        if ("FortyFiveDown".equals(dir)) {
-            return 45;
-        }
-        if ("SingleDown".equals(dir) || "DoubleDown".equals(dir)) {
-            return 90;
-        }
-        return null;
-    }
-
-    private function drawArrow(dc as Graphics.Dc, cx as Number, cy as Number, size as Number, dir) as Void {
-        var angle = arrowAngle(dir);
-        if (angle == null) {
-            return;
-        }
-        if (isDouble(dir)) {
-            var off = size * 3 / 8;
-            drawOneArrow(dc, cx - off, cy, size, angle);
-            drawOneArrow(dc, cx + off, cy, size, angle);
-        } else {
-            drawOneArrow(dc, cx, cy, size, angle);
-        }
-    }
-
-    // A filled arrow of the given length, centred on (cx, cy).
-    private function drawOneArrow(dc as Graphics.Dc, cx as Number, cy as Number, size as Number, angle as Number) as Void {
-        var h = size / 2.0;
-        var head = size * 0.45;
-        var shaft = size * 0.07 + 0.5; // half the shaft's thickness
-        var wing = size * 0.3;         // half the head's width
-        var pts = [
-            [-h, -shaft], [h - head, -shaft], [h - head, -wing], [h, 0.0],
-            [h - head, wing], [h - head, shaft], [-h, shaft]
-        ];
-        var a = Math.toRadians(angle);
-        var c = Math.cos(a);
-        var s = Math.sin(a);
-        var out = [];
-        for (var i = 0; i < pts.size(); i++) {
-            var x = pts[i][0];
-            var y = pts[i][1];
-            out.add([Math.round(cx + x * c - y * s).toNumber(), Math.round(cy + x * s + y * c).toNumber()]);
-        }
-        dc.fillPolygon(out);
-    }
-
-    // ---------------------------------------------------------------- icons
-
-    // A heart about 4r wide, centred on (cx, cy).
-    private function drawHeart(dc as Graphics.Dc, cx as Number, cy as Number, r as Number) as Void {
-        var top = cy - r / 2;
-        dc.fillCircle(cx - r, top, r);
-        dc.fillCircle(cx + r, top, r);
-        dc.fillPolygon([[cx - 2 * r, top + r / 3], [cx + 2 * r, top + r / 3], [cx, cy + 2 * r]]);
-    }
-
-    // Two footprints about 4r wide, centred on (cx, cy).
-    private function drawFootprints(dc as Graphics.Dc, cx as Number, cy as Number, r as Number) as Void {
-        var fw = r * 2 / 3;
-        if (fw < 2) {
-            fw = 2;
-        }
-        // left foot lower, right foot higher; each a sole and a heel
-        dc.fillEllipse(cx - r, cy, fw, r);
-        dc.fillCircle(cx - r, cy + r + fw, fw * 2 / 3);
-        dc.fillEllipse(cx + r, cy - r, fw, r);
-        dc.fillCircle(cx + r, cy + fw, fw * 2 / 3);
-    }
-
-    // ---------------------------------------------------------------- helpers
 
     private function heartRate() as Number? {
         var ai = Activity.getActivityInfo();
@@ -345,15 +272,118 @@ class EverBridgeView extends WatchUi.WatchFace {
         }
         return null;
     }
+
+    // ---------------------------------------------------------------- fit check
+
+    // Debug builds measure every element with the widest text it can show, on this
+    // device's own fonts, and report anything that would leave the round screen or run
+    // into the subscreen. CI fails the build on "FIT FAIL".
+    (:debug)
+    private function checkFit(dc as Graphics.Dc) as Void {
+        System.println("layout " + _w + "x" + _h + " sub " + _sx + "," + _sy + " " + _sw + "x" + _sh);
+        var fails = 0;
+        var tg = glyph(_fTime, NUM_GLYPH);
+        var tw = dc.getTextWidthInPixels("2358", _fTime) + 2 * p(2) + (tg / 7 < 2 ? 2 : tg / 7);
+        fails += box(dc, "time", p(32), p(32) - tg / 2, tw, tg, false);
+        var dg = glyph(_fDate, TEXT_GLYPH);
+        fails += box(dc, "date", p(33), p(52) - dg / 2, dc.getTextWidthInPixels("28 Sep", _fDate), dg, false);
+        var bg = glyph(_fBg, NUM_GLYPH);
+        var bw = dc.getTextWidthInPixels("388", _fBg);
+        fails += box(dc, "glucose", _w / 2 - bw / 2, p(86) - bg / 2, bw, bg, false);
+        var th = glyph(_fTag, TEXT_GLYPH) + 2 * p(3);
+        var rw = dc.getTextWidthInPixels("-12", _fDelta) + p(6) + dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(4);
+        var rh = glyph(_fDelta, TEXT_GLYPH) > th ? glyph(_fDelta, TEXT_GLYPH) : th;
+        fails += box(dc, "change+age", _w / 2 - rw / 2, p(124) - rh / 2, rw, rh, false);
+        var bw2 = dc.getTextWidthInPixels("IOB", _fLabel) + p(3) + dc.getTextWidthInPixels("12.5U", _fRow) + p(12) + dc.getTextWidthInPixels("18,412", _fRow);
+        var bh = glyph(_fRow, TEXT_GLYPH);
+        fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, p(143) - bh / 2, bw2, bh, false);
+        var hg = glyph(_fHr, NUM_GLYPH);
+        var hw = dc.getTextWidthInPixels("188", _fHr);
+        fails += box(dc, "heart rate", _sx + _sw / 2 - hw / 2, _sy + _sh / 2 - _sh / 10 - hg / 2, hw, hg, true);
+        var lg = glyph(_fLabel, TEXT_GLYPH);
+        var lw = dc.getTextWidthInPixels("BPM", _fLabel);
+        fails += box(dc, "BPM", _sx + _sw / 2 - lw / 2, _sy + _sh / 2 + _sh / 4 - lg / 2, lw, lg, true);
+        System.println(fails == 0 ? "FIT ok" : "FIT FAIL " + fails + " element(s)");
+    }
+
+    (:release)
+    private function checkFit(dc as Graphics.Dc) as Void {
+    }
+
+    // 1 if the box (glyph ink, px) leaves the screen or touches the subscreen (or, for
+    // the subscreen's own text, leaves the subscreen), else 0. Logs the box either way.
+    (:debug)
+    private function box(dc as Graphics.Dc, name as String, x as Number, y as Number, w as Number, h as Number, inSub as Boolean) as Number {
+        var cx = _w / 2.0;
+        var cy = _h / 2.0;
+        var r = _w / 2.0 - 2;
+        var scx = _sx + _sw / 2.0;
+        var scy = _sy + _sh / 2.0;
+        var sr = _sw / 2.0;
+        var corners = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+        var ok = true;
+        var why = "";
+        for (var i = 0; i < 4; i++) {
+            var px = corners[i][0];
+            var py = corners[i][1];
+            if (inSub) {
+                if (dist(px, py, scx, scy) > sr - 1) {
+                    ok = false;
+                    why = "leaves the subscreen";
+                }
+            } else if (dist(px, py, cx, cy) > r) {
+                ok = false;
+                why = "leaves the screen";
+            }
+        }
+        if (!inSub && ok) {
+            // nearest point of the box to the subscreen's centre
+            var nx = scx < x ? x : (scx > x + w ? x + w : scx);
+            var ny = scy < y ? y : (scy > y + h ? y + h : scy);
+            if (dist(nx, ny, scx, scy) < sr + 2) {
+                ok = false;
+                why = "runs into the subscreen";
+            }
+        }
+        System.println("FIT " + (ok ? "ok   " : "FAIL ") + name + " box " + x + "," + y + " " + w + "x" + h + (ok ? "" : " " + why));
+        return ok ? 0 : 1;
+    }
+
+    (:debug)
+    private function dist(x1, y1, x2, y2) as Float {
+        var dx = (x1 - x2).toFloat();
+        var dy = (y1 - y2).toFloat();
+        return Math.sqrt(dx * dx + dy * dy).toFloat();
+    }
 }
 
-// Whole minutes until the next fetch, rounded up (2:30 to go shows 3), 0-99. Shows 0
-// while the fetch is due and its reply is on the way.
-function minutesUntil(next as Number, nowSec as Number) as Number {
-    var s = next - nowSec;
-    if (s <= 0) {
-        return 0;
+// "2 MIN", "14 MIN", "99+ MIN": whole minutes since the reading.
+function ageText(ageSec as Number) as String {
+    var m = ageSec / 60;
+    if (m < 0) {
+        m = 0;
     }
-    var m = (s + 59) / 60;
-    return m > 99 ? 99 : m;
+    return m > 99 ? "99+ MIN" : m.format("%d") + " MIN";
+}
+
+// "2.4U"; "--" when Meanwhile hasn't reported insulin.
+function iobText(iob) as String {
+    if (iob instanceof Float || iob instanceof Double || iob instanceof Number || iob instanceof Long) {
+        return iob.toFloat().format("%.1f") + "U";
+    }
+    return "--";
+}
+
+// 8412 -> "8,412"
+function groupThousands(n as Number) as String {
+    var s = n.format("%d");
+    var out = "";
+    var len = s.length();
+    for (var i = 0; i < len; i++) {
+        if (i > 0 && (len - i) % 3 == 0) {
+            out += ",";
+        }
+        out += s.substring(i, i + 1);
+    }
+    return out;
 }

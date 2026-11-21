@@ -85,6 +85,17 @@ final class DiagnosticsReport {
         kv(sb, "last Eversense notification", ago(now, bridge.lastMonitoredPostAt()));
         kv(sb, "when unreliable (per package)", whenUnreliable(bridge));
 
+        section(sb, "Garmin watch face");
+        try {
+            kv(sb, "push", GarminPush.get(app).status());
+        } catch (RuntimeException e) {
+            kv(sb, "push", "unavailable: " + e);
+        }
+        final app.meanwhile.bridge.core.InsulinOnBoard ins = bridge.insulin();
+        kv(sb, "insulin on board", ins == null ? "never reported by Meanwhile's page"
+                : bridge.iob(now) + " U from " + ins.doses.size() + " doses (DIA " + ins.diaHours + " h, peak "
+                + ins.peakMin + " min, delay " + ins.delayMin + " min), reported " + full(ins.reportedAt));
+
         section(sb, "Settings");
         final Settings s = bridge.settings;
         kv(sb, "port", s.port());

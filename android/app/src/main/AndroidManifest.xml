@@ -27,6 +27,8 @@
         <package android:name="com.senseonics.eversense365.us" />
         <package android:name="com.senseonics.gen12androidapp" />
         <package android:name="com.senseonics.androidapp" />
+        <!-- Garmin Connect: carries readings to the watch face (Connect IQ Mobile SDK) -->
+        <package android:name="com.garmin.android.apps.connectmobile" />
     </queries>
 
     <application

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setNative } from "./env";
-import { copyTextNatively, everBridge, saveTextNatively } from "../src/lib/native";
+import { copyTextNatively, everBridge, reportInsulinNatively, saveTextNatively } from "../src/lib/native";
 import { createDictation, speechSupported } from "../src/lib/speech";
 
 function recorder() {
@@ -108,4 +108,36 @@ test("without the app or a browser speech engine, voice is reported unsupported"
   assert.equal(createDictation({}), null);
   setNative({ sgv: () => "[]" }); // an app too old to have voice
   assert.equal(speechSupported(), false);
+});
+
+test("recent doses and the insulin curve are reported to the app for the watch face", () => {
+  const sent: string[] = [];
+  setNative({ sgv: () => "[]", setInsulin: (json: string) => { sent.push(json); return null; } });
+  const now = 1_790_000_000_000;
+  const M = 60_000;
+  reportInsulinNatively(
+    [
+      { ts: now - 30 * M, units: 3, kind: "bolus" },
+      { ts: now - 60 * M, units: 20, kind: "basal" },
+      { ts: now - 9 * 60 * M, units: 5, kind: "bolus" }, // past DIA + delay + an hour: left out
+    ],
+    5.5, 64, 15, now
+  );
+  assert.equal(sent.length, 1);
+  const r = JSON.parse(sent[0]);
+  assert.deepEqual(r, {
+    dia: 5.5, peak: 64, delay: 15,
+    doses: [
+      { ts: now - 30 * M, units: 3, kind: "bolus" },
+      { ts: now - 60 * M, units: 20, kind: "basal" },
+    ],
+  });
+
+  // an older app without setInsulin, a failing one, and no app at all: nothing breaks
+  setNative({ sgv: () => "[]" });
+  reportInsulinNatively([], 5.5, 64, 15, now);
+  setNative({ sgv: () => "[]", setInsulin: () => { throw new Error("bridge died"); } });
+  reportInsulinNatively([], 5.5, 64, 15, now);
+  setNative(undefined);
+  reportInsulinNatively([], 5.5, 64, 15, now);
 });

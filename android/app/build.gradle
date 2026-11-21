@@ -113,6 +113,8 @@ tasks.named('preBuild') {
 
 dependencies {
     implementation project(':core')
+    // Garmin Connect IQ Mobile SDK: pushes each reading to the watch face through Garmin Connect
+    implementation 'com.garmin.connectiq:ciq-companion-app-sdk:2.4.0@aar'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.16.1'

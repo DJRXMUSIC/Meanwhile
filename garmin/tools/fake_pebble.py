@@ -3,7 +3,8 @@
 
 usage: fake_pebble.py SGV DIRECTION AGE_MINUTES [PORT]
 
-Serves the bridge's /pebble with one reading taken AGE_MINUTES ago.
+Serves the bridge's /pebble with one reading taken AGE_MINUTES ago, a change of -12
+from the reading before and 12.5 U on board (the widest values the face shows).
 """
 import json
 import sys
@@ -22,7 +23,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         body = json.dumps({
             "status": [{"now": int(time.time() * 1000)}],
-            "bgs": [{"sgv": SGV, "trend": 4, "direction": DIRECTION, "datetime": TAKEN, "bgdelta": 0}],
+            "bgs": [{"sgv": SGV, "trend": 4, "direction": DIRECTION, "datetime": TAKEN, "bgdelta": -12, "iob": 12.46}],
             "cals": [],
         }).encode()
         self.send_response(200)

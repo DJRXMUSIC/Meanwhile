@@ -81,8 +81,14 @@ module Sched {
     const K_READING = "r";
     var _reading = null;
     var _lag = null;
-    // When the next fetch is set for (watch clock, s): the face counts down to it.
+    // When the next fetch is set for (watch clock, s).
     var _next = null;
+    // Goes up whenever a new reading or IOB is stored, so the face can redraw at once.
+    var _version = 0;
+
+    function version() as Number {
+        return _version;
+    }
 
     function reading() as Dictionary? {
         if (_reading == null) {
@@ -114,9 +120,17 @@ module Sched {
                     Bg.K_SGV => data[Bg.K_SGV],
                     Bg.K_DIR => data[Bg.K_DIR],
                     Bg.K_DT => dt,
-                    Bg.K_AT => data[Bg.K_AT]
+                    Bg.K_AT => data[Bg.K_AT],
+                    Bg.K_DELTA => data[Bg.K_DELTA],
+                    Bg.K_IOB => data[Bg.K_IOB]
                 };
                 Application.Storage.setValue(K_READING, _reading);
+                _version++;
+            } else if (dt == prev[Bg.K_DT] && data[Bg.K_IOB] != prev[Bg.K_IOB]) {
+                // same reading, IOB moved on (a dose was logged, or it decayed)
+                prev[Bg.K_IOB] = data[Bg.K_IOB];
+                Application.Storage.setValue(K_READING, prev);
+                _version++;
             }
             if (lag != _lag) {
                 _lag = lag;

@@ -1,6 +1,9 @@
 package app.meanwhile.bridge.core;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -26,6 +29,11 @@ public final class PebbleJson {
      * @param now         phone time, ms since epoch
      */
     public static String reply(List<Reading> newestFirst, String unitsHint, long now) {
+        return reply(newestFirst, unitsHint, now, null);
+    }
+
+    /** As above, with insulin on board (units) in {@code bgs[0].iob} when known. */
+    public static String reply(List<Reading> newestFirst, String unitsHint, long now, Double iob) {
         final Json j = new Json().beginObject();
         j.name("status").beginArray().beginObject().field("now", now).endObject().endArray();
         j.name("bgs").beginArray();
@@ -48,6 +56,7 @@ public final class PebbleJson {
             } else {
                 j.field("bgdelta", (long) change);
             }
+            if (iob != null) j.field("iob", round2(iob));
             j.field("ts_source", r.timestampSource).endObject();
         }
         j.endArray();
@@ -68,6 +77,37 @@ public final class PebbleJson {
             case Trend.NOT_COMPUTABLE: return 8;
             default: return 0;
         }
+    }
+
+    /**
+     * The same reading as a Connect IQ phone-app message for the watch face: the shape of
+     * {@link #reply} (so the watch parses both the same way), as the maps, lists, strings
+     * and numbers the Connect IQ Mobile SDK sends. Times are strings, since Monkey C
+     * Numbers are 32-bit; null when there is no reading.
+     */
+    public static Map<String, Object> message(List<Reading> newestFirst, String unitsHint, long now, Double iob) {
+        if (newestFirst.isEmpty()) return null;
+        final Reading r = newestFirst.get(0);
+        final Reading prev = newestFirst.size() > 1 ? newestFirst.get(1) : null;
+        final String direction = Trend.direction(Trend.slope(r, prev));
+        final Integer change = Trend.change(r, prev);
+        final boolean mmol = "mmol".equals(unitsHint);
+        final Map<String, Object> bg = new LinkedHashMap<>();
+        bg.put("sgv", mmol ? mmol(r.mgdl) : String.valueOf(r.mgdl));
+        bg.put("direction", direction);
+        bg.put("datetime", String.valueOf(r.timestamp));
+        if (change != null) bg.put("bgdelta", mmol ? mmol(change) : (Object) change);
+        if (iob != null) bg.put("iob", (float) round2(iob));
+        final Map<String, Object> status = new LinkedHashMap<>();
+        status.put("now", String.valueOf(now));
+        final Map<String, Object> msg = new LinkedHashMap<>();
+        msg.put("status", Collections.singletonList(status));
+        msg.put("bgs", Collections.singletonList(bg));
+        return msg;
+    }
+
+    private static double round2(double v) {
+        return Math.round(v * 100) / 100.0;
     }
 
     private static String mmol(double mgdl) {

@@ -20,6 +20,11 @@ public final class BridgeRoutes implements HttpServer.Handler {
         default long nowMs() {
             return System.currentTimeMillis();
         }
+
+        /** Insulin on board now (units), or null if Meanwhile has never reported doses. */
+        default Double iob(long nowMs) {
+            return null;
+        }
     }
 
     private final ReadingStore store;
@@ -56,7 +61,8 @@ public final class BridgeRoutes implements HttpServer.Handler {
 
     /** Latest reading as a JSON object, for clients (Garmin watch faces) that can't take an array. */
     public String pebble() {
-        return PebbleJson.reply(store.latest(2), status.unitsHint(), status.nowMs());
+        final long now = status.nowMs();
+        return PebbleJson.reply(store.latest(2), status.unitsHint(), now, status.iob(now));
     }
 
     static int parseCount(String raw) {
