@@ -64,9 +64,9 @@ jobs:
         run: |
           TAG=watchface-latest; [ "$GITHUB_REF_NAME" = main ] || TAG=watchface-preview
           gh release delete $TAG --cleanup-tag --yes || true
-          gh release create $TAG out/*.prg out/screen-instincte40mm.png out/screen-instincte45mm.png \
+          gh release create $TAG out/*.prg out/screen-instincte40mm.png \
             --target "$GITHUB_SHA" \
             --title "EverBridge watch face for Instinct E (build ${{ github.run_number }})" \
-            --notes "Download the file for your watch size: **everbridge-instincte40mm.prg** or **everbridge-instincte45mm.prg**. Copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).
+            --notes "Download **everbridge-instincte40mm.prg** and copy it to the watch's GARMIN/APPS folder over USB (see garmin/README.md).
 
-          Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed the simulator unit tests on both sizes. The screen-*.png files are simulator screenshots of this build."
+          Build ${{ github.run_number }} from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Passed the simulator unit tests and layout checks. screen-instincte40mm.png is a simulator screenshot of this build."

@@ -8,7 +8,7 @@ set -uo pipefail
 
 GARMIN=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$(mkdir -p "$1" && cd "$1" && pwd)
-DEVICES="instincte40mm instincte45mm"
+DEVICES="instincte40mm"
 CIQ=/root/.Garmin/ConnectIQ
 # The simulator looks for device files and fonts under $HOME; Actions sets HOME elsewhere.
 [ "$HOME" != /root ] && mkdir -p "$HOME" && ln -sfn /root/.Garmin "$HOME/.Garmin"

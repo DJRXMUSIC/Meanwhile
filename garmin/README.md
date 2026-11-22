@@ -1,6 +1,6 @@
 # EverBridge watch face (Garmin Instinct E)
 
-A Connect IQ watch face for the Instinct E (designed for 40 mm, also built for 45 mm), glucose first:
+A Connect IQ watch face for the Instinct E 40 mm, glucose first:
 
 * **top:** your glucose, with the change from the reading before (`+4`) and an age tag (`2 MIN`) stacked to its right. The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
 * **subscreen:** heart rate (`68 BPM`)
@@ -16,9 +16,7 @@ Eversense app ─▶ Meanwhile v6 on the phone ─push, each reading─▶ Garmi
 
 ## Install
 
-1. Download the file for your watch from the **watchface-latest** release:
-   * 40 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte40mm.prg
-   * 45 mm: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte45mm.prg
+1. Download it from the **watchface-latest** release: https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/everbridge-instincte40mm.prg
 2. Connect the watch to a computer with its charging cable. It shows up as a drive (on a Mac, use Garmin Express or Android File Transfer).
 3. Copy the `.prg` into the watch's `GARMIN/APPS` folder, then unplug it.
 4. On the watch, hold **MENU** → **Watch Face**, and pick **EverBridge**.
@@ -45,7 +43,7 @@ Meanwhile v6 sends the newest reading only, and resends it when a send fails, wh
 
 CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-tester`, a public image with the Connect IQ SDK, device files and simulator. It:
 
-* builds release, debug and test versions for both sizes (debug builds log each fetch and schedule to the simulator console)
+* builds release, debug and test versions for the 40 mm (debug builds log each fetch and schedule to the simulator console)
 * runs the unit tests (`source/Tests.mc`: reply and pushed-message parsing, change/age/IOB/steps text, scheduler) in the simulator
 * runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
 * checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+ MIN`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. Then the real screenshot is checked: nothing may be drawn within 2 px of either divider line. The screenshot is also printed into the log as text.

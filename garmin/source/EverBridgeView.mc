@@ -44,7 +44,7 @@ const ROW_GAP_DESIGN = 5; // IOB to the steps
 // The glucose number is never altered, however old: only the age tag changes
 // (outlined while fresh, solid after 6 minutes).
 //
-// Coordinates are designed on the 40 mm screen (166 px) and scaled to the 45 mm.
+// Coordinates are designed on the 40 mm screen (166 px), the only size built.
 class EverBridgeView extends WatchUi.WatchFace {
 
     private var _w as Number = 0;
