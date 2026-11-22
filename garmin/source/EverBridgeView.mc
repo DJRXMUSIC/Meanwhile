@@ -27,8 +27,7 @@ const LATE_SEC = 360;
 const GLUCOSE_X = 22;     // left edge of the widest glucose ("388"); shorter ones right-align to it
 const COL_GAP = 5;        // glucose to the change / age column
 const GAP_OUT = 3;        // glucose block to the top line, bottom line to IOB and steps
-const GAP_MAX = 10;       // around the time: the most...
-const GAP_MIN = 4;        // ...and the least
+const GAP_MIN = 3;        // the least room above and below the time
 const ROW_GAP_DESIGN = 5; // IOB to the steps
 
 // The layout:
@@ -100,79 +99,67 @@ class EverBridgeView extends WatchUi.WatchFace {
             _sh = p(53);
         }
         var g = Graphics.FONT_XTINY;
-        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(30), "388", p(70));
+        // glucose: clearly smaller than the time (about two thirds of its height)
+        _fBg = pick(dc, [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE], NUM_GLYPH, p(18), "388", p(50));
         _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "28 Sep", p(50));
         _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(12), "-12", p(30));
         _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(7), "99+ MIN", p(52));
         _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(6), "IOB", p(14));
         _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
 
-        // Top: the glucose, with the change over the age tag to its right. The tag is wide,
-        // so it goes just under the subscreen; the change sits right above it, pushed down
-        // further only if it would touch the subscreen's circle.
+        // Top: the glucose, with the change over the age tag to its right, as high as the
+        // subscreen's circle and the round screen allow.
         _bgX = p(GLUCOSE_X);
         _colX = _bgX + dc.getTextWidthInPixels("388", _fBg) + p(COL_GAP);
         var cg = glyph(_fDelta, TEXT_GLYPH);
         var cw = dc.getTextWidthInPixels("-12", _fDelta);
         var th = tagHeight();
-        var chTop = _sy + _sh + 3 - p(3) - cg;
-        while (chTop < _h / 2 && clearOfSub(_colX, chTop, cw, cg) == false) {
+        var tw = dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(3);
+        var bg = glyph(_fBg, NUM_GLYPH);
+        var chTop = p(10);
+        while (chTop < _h / 2) {
+            var tTop = chTop + cg + p(3);
+            var bgTop = (chTop + tTop + th) / 2 - bg / 2;
+            if (clearOfSub(_colX, chTop, cw, cg) && clearOfSub(_colX, tTop, tw, th)
+                    && inRound(_colX, chTop) && inRound(_colX + cw, chTop) && inRound(_bgX, bgTop)) {
+                break;
+            }
             chTop++;
         }
         var tagTop = chTop + cg + p(3);
         _chY = chTop + cg / 2;
         _tagY = tagTop + th / 2;
-        var bg = glyph(_fBg, NUM_GLYPH);
         _bgY = (chTop + tagTop + th) / 2;
         var blockBottom = tagTop + th;
         if (_bgY + bg / 2 > blockBottom) {
             blockBottom = _bgY + bg / 2;
         }
 
-        // Middle and bottom: line, time and date, line, IOB and steps. The middle is the
-        // biggest section: the biggest time font first, then the widest gaps around it, for
-        // which the bottom row still fits the round screen; the bottom row in the biggest
-        // font that fits there.
-        var timeFonts = [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
-        var rowFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g];
+        // Bottom: IOB and steps as low as the round screen lets their widest row go.
         var lt = lineThickness();
-        var done = false;
-        for (var t = 0; t < timeFonts.size() && !done; t++) {
-            if (timeWidth(dc, timeFonts[t]) > p(146)) {
-                continue;
-            }
-            var tg = glyph(timeFonts[t], NUM_GLYPH);
-            for (var gap = p(GAP_MAX); gap >= p(GAP_MIN) && !done; gap--) {
-                for (var r = 0; r < rowFonts.size() && !done; r++) {
-                    var rh = glyph(rowFonts[r], TEXT_GLYPH);
-                    if (rh > p(12)) {
-                        continue;
-                    }
-                    var line1 = blockBottom + p(GAP_OUT) + lt / 2;
-                    var timeY = line1 + lt / 2 + gap + tg / 2;
-                    var line2 = timeY + tg / 2 + gap + lt / 2;
-                    var rowY = line2 + lt / 2 + p(GAP_OUT) + rh / 2;
-                    if (rowWidth(dc, rowFonts[r], "12.5U", "18,412") <= chord(rowY + rh / 2) - p(8)) {
-                        _fTime = timeFonts[t];
-                        _fRow = rowFonts[r];
-                        _line1Y = line1;
-                        _timeY = timeY;
-                        _line2Y = line2;
-                        _rowY = rowY;
-                        done = true;
-                    }
-                }
+        _fRow = Graphics.FONT_TINY;
+        var rh = glyph(_fRow, TEXT_GLYPH);
+        var rw = rowWidth(dc, _fRow, "12.5U", "18,412");
+        var rowBottom = _h - 1;
+        while (rowBottom > _h / 2 && !fitsRound(_w / 2 - rw / 2, rowBottom, rw)) {
+            rowBottom--;
+        }
+        _rowY = rowBottom - rh + rh / 2; // glyphs rowBottom - rh .. rowBottom
+        _line2Y = rowBottom - rh - p(GAP_OUT) - lt / 2;
+        _line1Y = blockBottom + p(GAP_OUT) + lt / 2;
+
+        // Middle: the time in the biggest number font that fits between the two lines,
+        // centred between them.
+        var room = (_line2Y - lt / 2) - (_line1Y + lt / 2) - 2 * p(GAP_MIN);
+        var timeFonts = [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
+        _fTime = timeFonts[timeFonts.size() - 1];
+        for (var t = 0; t < timeFonts.size(); t++) {
+            if (glyph(timeFonts[t], NUM_GLYPH) <= room && timeWidth(dc, timeFonts[t]) <= p(146)) {
+                _fTime = timeFonts[t];
+                break;
             }
         }
-        if (!done) {
-            // never on the Instinct E; the fit check will say so
-            _fTime = Graphics.FONT_NUMBER_MILD;
-            _fRow = g;
-            _line1Y = blockBottom + p(GAP_OUT);
-            _timeY = _line1Y + p(GAP_MIN) + glyph(_fTime, NUM_GLYPH) / 2;
-            _line2Y = _timeY + glyph(_fTime, NUM_GLYPH) / 2 + p(GAP_MIN);
-            _rowY = _line2Y + p(GAP_OUT) + glyph(_fRow, TEXT_GLYPH) / 2;
-        }
+        _timeY = (_line1Y + _line2Y) / 2;
         checkFit(dc);
     }
 
@@ -221,6 +208,20 @@ class EverBridgeView extends WatchUi.WatchFace {
 
     private function lineThickness() as Number {
         return p(2) < 2 ? 2 : p(2);
+    }
+
+    // True if a row w wide, centred, with its bottom at y, stays inside the round screen
+    // (2 px in from the edge, as the fit check measures).
+    private function fitsRound(x as Number, y as Number, w as Number) as Boolean {
+        return inRound(x, y) && inRound(x + w, y);
+    }
+
+    // True if the point is inside the round screen, 2 px in from the edge.
+    private function inRound(x as Number, y as Number) as Boolean {
+        var dx = x - _w / 2.0;
+        var dy = y - _h / 2.0;
+        var r = _w / 2.0 - 2;
+        return dx * dx + dy * dy <= r * r;
     }
 
     // True if the box keeps at least 2 px from the subscreen's circle.
