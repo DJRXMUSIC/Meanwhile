@@ -31,6 +31,7 @@ const COL_GAP = 5;        // glucose to the change / age column
 const GAP_OUT = 3;        // glucose block to the top line, bottom line to IOB and steps
 const GAP_MIN = 3;        // the least room above and below the time
 const ROW_GAP_DESIGN = 5; // IOB to the steps
+const DATE_GAP = 6;       // the clock to the date beside it
 // Text may go right to the screen's edge, but its box is measured 2 px in from each side:
 // the glyphs' corners are rounded and empty.
 const CORNER = 2;
@@ -40,7 +41,8 @@ const CORNER = 2;
 //       142 +4      ( 68 )   <- subscreen: heart rate
 //           [2m]    ( BPM)   <- change from the reading before, age tag
 //    ─────────────────────
-//       10:47  21 Nov               <- time and date
+//       10:47  21                   <- time (scaled up) and date
+//              Nov
 //    ─────────────────────
 //        2.4U  ⁚⁚ 8,412            <- insulin on board, steps
 //
@@ -175,12 +177,19 @@ class EverBridgeView extends WatchUi.WatchFace {
             var tg = glyph(_fTime, NUM_GLYPH);
             var tw1 = clockWidth(dc, "23", "58");
             var tRoom = (_line2Y - lt / 2) - (_line1Y + lt / 2) - 2 * p(GAP_MIN);
-            var c1 = chord(_timeY - tRoom / 2);
-            var c2 = chord(_timeY + tRoom / 2);
-            var avail = (c1 < c2 ? c1 : c2) - 2 * p(4) - p(8) - dc.getTextWidthInPixels("28 Sep", _fDate);
-            var sH = tRoom.toFloat() / tg;
-            var sW = avail.toFloat() / tw1;
-            var sc = sH < sW ? sH : sW;
+            var dw = dateWidth(dc);
+            // the biggest scale whose clock, beside the date, fits the screen's width at the
+            // clock's top and bottom
+            var sc = tRoom.toFloat() / tg;
+            while (sc > 1.0f) {
+                var hh = (tg * sc / 2).toNumber();
+                var c1 = chord(_timeY - hh);
+                var c2 = chord(_timeY + hh);
+                if ((tw1 * sc).toNumber() + p(DATE_GAP) + dw <= (c1 < c2 ? c1 : c2) - 2 * p(4)) {
+                    break;
+                }
+                sc -= 0.02f;
+            }
             if (sc > 1.05f) {
                 _timeScale = sc;
                 _tbW = tw1 + 2;
@@ -228,6 +237,19 @@ class EverBridgeView extends WatchUi.WatchFace {
     // Width of the clock "hh:mm" in the time font at 1x (hours, square colon, minutes).
     private function clockWidth(dc as Graphics.Dc, h as String, m as String) as Number {
         return dc.getTextWidthInPixels(h, _fTime) + colonWidth(_fTime) + dc.getTextWidthInPixels(m, _fTime);
+    }
+
+    // Width of the date block: the day ("28") over the month ("Sep"), at its widest.
+    private function dateWidth(dc as Graphics.Dc) as Number {
+        var w = dc.getTextWidthInPixels("28", _fDate);
+        var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        for (var i = 0; i < months.size(); i++) {
+            var m = dc.getTextWidthInPixels(months[i], _fDate);
+            if (m > w) {
+                w = m;
+            }
+        }
+        return w;
     }
 
     // Width of the middle row "23:58  28 Sep" with the time in the given font.
@@ -369,7 +391,8 @@ class EverBridgeView extends WatchUi.WatchFace {
         onUpdate(dc);
     }
 
-    // "10:47  21 Nov" across the middle: hours, square colon, minutes, then the date
+    // "10:47" across the middle, the date beside it (day over month): hours, square colon,
+    // minutes, then the date
     // sitting on the same baseline.
     private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
         var hour = info.hour;
@@ -381,20 +404,28 @@ class EverBridgeView extends WatchUi.WatchFace {
             hStr = (hour == 0 ? 12 : hour).format("%d");
         }
         var mStr = info.min.format("%02d");
-        var dStr = info.day.format("%d") + " " + info.month.toString();
         var sc = _timeScale;
         var w1 = clockWidth(dc, hStr, mStr);
+        var day = info.day.format("%d");
+        var mon = info.month.toString();
+        var dw = dc.getTextWidthInPixels(day, _fDate);
+        var mw = dc.getTextWidthInPixels(mon, _fDate);
+        if (mw > dw) {
+            dw = mw;
+        }
         var tw = (w1 * sc).toNumber();
-        var x = _w / 2 - (tw + p(8) + dc.getTextWidthInPixels(dStr, _fDate)) / 2;
+        var x = _w / 2 - (tw + p(DATE_GAP) + dw) / 2;
         ink(dc);
         if (sc <= 1.0f || !drawScaledClock(dc, x, hStr, mStr, sc)) {
             tw = w1;
-            x = _w / 2 - (tw + p(8) + dc.getTextWidthInPixels(dStr, _fDate)) / 2;
+            x = _w / 2 - (tw + p(DATE_GAP) + dw) / 2;
             drawClock(dc, x, _timeY, hStr, mStr);
         }
-        // the date, centred on the time's height
+        // the date beside it, the day over the month, centred on the time's height
         ink(dc);
-        text(dc, x + tw + p(8), _timeY, _fDate, TEXT_GLYPH, dStr, Graphics.TEXT_JUSTIFY_LEFT);
+        var dy = (glyph(_fDate, TEXT_GLYPH) + p(4)) / 2;
+        text(dc, x + tw + p(DATE_GAP), _timeY - dy, _fDate, TEXT_GLYPH, day, Graphics.TEXT_JUSTIFY_LEFT);
+        text(dc, x + tw + p(DATE_GAP), _timeY + dy, _fDate, TEXT_GLYPH, mon, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // "10:47" at 1x with its left edge at x and its glyphs centred on cy.
@@ -615,7 +646,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         var lt = lineThickness();
         fails += box(dc, "top line", _w / 2 - lineWidth(_line1Y) / 2, _line1Y - lt / 2, lineWidth(_line1Y), lt, false);
         var tg = (glyph(_fTime, NUM_GLYPH) * _timeScale).toNumber();
-        var tw = (clockWidth(dc, "23", "58") * _timeScale).toNumber() + p(8) + dc.getTextWidthInPixels("28 Sep", _fDate);
+        var tw = (clockWidth(dc, "23", "58") * _timeScale).toNumber() + p(DATE_GAP) + dateWidth(dc);
         fails += box(dc, "time and date", _w / 2 - tw / 2, _timeY - tg / 2, tw, tg, false);
         fails += box(dc, "bottom line", _w / 2 - lineWidth(_line2Y) / 2, _line2Y - lt / 2, lineWidth(_line2Y), lt, false);
         var bw2 = rowWidth(dc, _fRow, "12.5U", "18,412");
