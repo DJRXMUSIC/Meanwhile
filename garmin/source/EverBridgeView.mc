@@ -34,7 +34,7 @@ const CHANGE_Y = 79;     // change from the reading before, right of the glucose
 const TAG_Y = 95;        // age tag, under the change
 const LINE2_Y = 109;     // under the glucose
 const ROW_Y_DESIGN = 124; // IOB and steps
-const ROW_GAP_DESIGN = 7;
+const ROW_GAP_DESIGN = 5;
 
 // Layout A, as approved in the design:
 //
