@@ -122,14 +122,10 @@ class EverBridgeView extends WatchUi.WatchFace {
         var th = tagHeight();
         var bg = glyph(_fBg, NUM_GLYPH);
         var bw = dc.getTextWidthInPixels("388", _fBg);
-        var chTop = _h;
-        for (var x = p(GLUCOSE_X); x <= p(GLUCOSE_X + 24); x++) {
-            var top = blockTop(dc, x, x + bw + p(COL_GAP));
-            if (top < chTop) {
-                chTop = top;
-                _bgX = x;
-            }
-        }
+        var m = [cg, dc.getTextWidthInPixels("-12", _fDelta), th,
+            dc.getTextWidthInPixels("99+m", _fTag) + 2 * p(3), bg, bw];
+        _bgX = p(GLUCOSE_X);
+        var chTop = placeBlock(m);
         _colX = _bgX + bw + p(COL_GAP);
         var tagTop = chTop + cg + p(3);
         _chY = chTop + cg / 2;
@@ -170,14 +166,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         // as high as the subscreen's circle and the edge allow (the bottom row is placed
         // when drawn, by the width of what it shows).
         _margin = 0;
-        chTop = _h;
-        for (var x = p(GLUCOSE_X) - p(8); x <= p(GLUCOSE_X + 24); x++) {
-            var top = blockTop(dc, x, x + bw + p(COL_GAP));
-            if (top < chTop) {
-                chTop = top;
-                _bgX = x;
-            }
-        }
+        chTop = placeBlock(m);
         _colX = _bgX + bw + p(COL_GAP);
         tagTop = chTop + cg + p(3);
         _chY = chTop + cg / 2;
@@ -234,26 +223,43 @@ class EverBridgeView extends WatchUi.WatchFace {
         return p(2) < 2 ? 2 : p(2);
     }
 
-    // The highest top for the change (and so the glucose block) with the glucose's left
-    // edge at bgX and the change / age column at colX: clear of the subscreen's circle
-    // and inside the round screen.
-    private function blockTop(dc as Graphics.Dc, bgX as Number, colX as Number) as Number {
-        var cg = glyph(_fDelta, TEXT_GLYPH);
-        var cw = dc.getTextWidthInPixels("-12", _fDelta);
-        var th = tagHeight();
-        var tw = dc.getTextWidthInPixels("99+m", _fTag) + 2 * p(3);
-        var bg = glyph(_fBg, NUM_GLYPH);
-        var bw = dc.getTextWidthInPixels("388", _fBg);
-        for (var y = p(4); y < _h / 2; y++) {
-            var tTop = y + cg + p(3);
+    // The highest top for the change (and so the glucose block), at most `limit`, with the
+    // glucose's left edge at bgX and the change / age column at colX: clear of the
+    // subscreen's circle and inside the round screen. `limit` if none is higher.
+    // m: the measurements [change height, change width, tag height, tag width, glucose
+    // height, glucose width], taken once by the caller (this runs often in onLayout).
+    private function blockTop(bgX as Number, colX as Number, m as Array, limit as Number) as Number {
+        var cg = m[0];
+        var cw = m[1];
+        var th = m[2];
+        var tw = m[3];
+        var bg = m[4];
+        var bw = m[5];
+        var gap = p(3);
+        for (var y = p(4); y < limit; y++) {
+            var tTop = y + cg + gap;
             var bgTop = (y + tTop + th) / 2 - bg / 2;
-            if (clearOfSub(colX, y, cw, cg) && clearOfSub(colX, tTop, tw, th) && clearOfSub(bgX, bgTop, bw, bg)
-                    && inRound(colX + CORNER, y) && inRound(colX + cw - CORNER, y) && inRound(colX + tw, tTop)
-                    && inRound(bgX + CORNER, bgTop) && inRound(bgX + bw - CORNER, bgTop)) {
+            if (inRound(bgX + CORNER, bgTop) && inRound(colX + CORNER, y) && inRound(colX + cw - CORNER, y)
+                    && inRound(colX + tw, tTop) && inRound(bgX + bw - CORNER, bgTop)
+                    && clearOfSub(colX, y, cw, cg) && clearOfSub(colX, tTop, tw, th) && clearOfSub(bgX, bgTop, bw, bg)) {
                 return y;
             }
         }
-        return _h / 2;
+        return limit;
+    }
+
+    // Where the glucose block goes highest: sets _bgX and returns the change's top.
+    private function placeBlock(m as Array) as Number {
+        var best = _h / 2;
+        var bw = m[5];
+        for (var x = p(GLUCOSE_X - 8); x <= p(GLUCOSE_X + 24); x += 2) {
+            var top = blockTop(x, x + bw + p(COL_GAP), m, best);
+            if (top < best) {
+                best = top;
+                _bgX = x;
+            }
+        }
+        return best;
     }
 
     // Centre y of the bottom row when it is w wide: as low as the round screen allows.
