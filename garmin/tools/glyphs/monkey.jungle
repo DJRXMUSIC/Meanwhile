@@ -1,0 +1,5 @@
+# A CI-only tool: draws the digits 0-9 in the Instinct E's biggest number font so their
+# exact pixels can be read from a simulator screenshot (tools/print_pixels.py).
+project.manifest = manifest.xml
+base.sourcePath = source
+base.resourcePath = ../../resources
