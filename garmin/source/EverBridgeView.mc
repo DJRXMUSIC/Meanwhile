@@ -483,7 +483,19 @@ class EverBridgeView extends WatchUi.WatchFace {
 
     private function stepsText() as String {
         var info = ActivityMonitor.getInfo();
-        return (info == null || info.steps == null) ? "--" : groupThousands(info.steps);
+        return (info == null || info.steps == null) ? "--" : groupThousands(previewSteps(info.steps));
+    }
+
+    // The simulator counts no steps; debug builds (simulator previews only) show a typical
+    // day's count instead, so the preview's bottom row is as wide as on the wrist.
+    (:debug)
+    private function previewSteps(n as Number) as Number {
+        return n == 0 ? 8412 : n;
+    }
+
+    (:release)
+    private function previewSteps(n as Number) as Number {
+        return n;
     }
 
     private function heartRate() as Number? {
