@@ -190,6 +190,16 @@ public final class CaptureEngine {
                         "outside " + ReadingGate.MIN_MGDL + "-" + ReadingGate.MAX_MGDL + " mg/dL");
             case DUPLICATE:
                 return new Result(Outcome.DUPLICATE, in, candidate, "reading already stored near this time");
+            case LONE_REPEAT:
+                return new Result(Outcome.DUPLICATE, in, candidate,
+                        "same value posted on its own: the app refreshing, not a new reading");
+            case REPLACE_REPEAT: {
+                final Reading stale = store.latest(1).get(0);
+                store.delete(stale.timestamp);
+                store.insert(candidate);
+                return new Result(Outcome.STORED, in, candidate,
+                        "replaces " + stale.mgdl + " at " + stale.timestamp + ", the old value posted just before it");
+            }
             case JAMMED:
                 return new Result(Outcome.JAMMED, in, candidate,
                         "same value more than " + ReadingGate.JAM_THRESHOLD + " times in a row");

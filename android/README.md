@@ -24,7 +24,7 @@ Source: `NightscoutFoundation/xDrip` master at commit `eebfd19` (2 Oct 2026).
 | xDrip+ code | Kept as | Notes |
 | --- | --- | --- |
 | `services/UiBasedCollector` – package list (`com.senseonics.eversense365.us`, `…gen12androidapp`, `…androidapp`), `processRemote`/`getTextViews`, `filterString`, `arrowFilterString`, `basicFilterString`, `filterUnicodeRange`, `isValidMmol`, `tryExtractString` | `core/NotificationParser`, `app/NotificationTexts` | Same filters and the "exactly one number" rule |
-| `UiBasedCollector.handleNewValue`, `isDifferentToLast`, `isJammed`, `jamThreshold`; `DexCollectionType.getCurrentDeduplicationPeriod` | `core/ReadingGate` | 40–405 mg/dL, 10 s / 250 s dedupe, jam after 6 repeats |
+| `UiBasedCollector.handleNewValue`, `isDifferentToLast`, `isJammed`, `jamThreshold`; `DexCollectionType.getCurrentDeduplicationPeriod` | `core/ReadingGate` | 40–405 mg/dL, 10 s / 250 s dedupe, jam after 6 repeats. Added for how Eversense 365 posts: a repeat of the last value counts only in a burst of 3+ posts within 1 s (the app re-posts the shown value about once a minute), and a new value replaces a repeat taken just before it (a reading's first posts still show the old value) |
 | `BgReading.calculateSlope`, `Dex_Constants.TREND_ARROW_VALUES` thresholds | `core/Trend` | Same direction names and thresholds |
 | `webservices/WebServiceSgv`, `XdripWebService` | `core/SgvJson`, `core/HttpServer`, `core/BridgeRoutes` | Port 17590 (xDrip+ keeps 17580), loopback-only by default, `count` 1–1000 (default 24), xDrip-style `api-secret` for LAN clients, `Access-Control-Allow-Origin: *` |
 | `UiBasedCollectorTest` | `core/…/NotificationParserTest`, `ReadingGateTest` | Ported test-for-test |

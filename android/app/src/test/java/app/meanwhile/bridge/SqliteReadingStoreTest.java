@@ -39,6 +39,16 @@ public class SqliteReadingStoreTest {
     }
 
     @Test
+    public void deleteRemovesOnlyThatReading() {
+        store.insert(r(T, 100));
+        store.insert(r(T + 300_000, 100));
+        store.delete(T + 300_000);
+        store.delete(T + 1); // nothing there
+        assertEquals(1, store.count());
+        assertEquals(T, store.latest(1).get(0).timestamp);
+    }
+
+    @Test
     public void roundTripNewestFirst() {
         store.insert(r(T, 100));
         store.insert(r(T + 600_000, 120));

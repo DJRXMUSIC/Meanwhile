@@ -66,6 +66,11 @@ final class SqliteReadingStore extends SQLiteOpenHelper implements ReadingStore 
     }
 
     @Override
+    public void delete(long timestamp) {
+        getWritableDatabase().delete("readings", "ts = ?", new String[]{String.valueOf(timestamp)});
+    }
+
+    @Override
     public void insert(Reading r) {
         final ContentValues v = new ContentValues();
         v.put("ts", r.timestamp);

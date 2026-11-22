@@ -10,6 +10,9 @@ public interface ReadingStore {
 
     void insert(Reading reading);
 
+    /** Removes the reading taken at exactly this time, if there is one. */
+    void delete(long timestamp);
+
     /** Up to {@code count} readings, newest first. */
     List<Reading> latest(int count);
 }

@@ -47,16 +47,34 @@ public class CaptureEngineTest {
                 Arrays.asList(texts), Arrays.asList("Eversense", null));
     }
 
+    /** A new reading as the Eversense 365 app posts it: a burst of posts a few ms apart. */
+    private List<CaptureEngine.Result> burst(long readingTime, String... values) {
+        final List<CaptureEngine.Result> out = new ArrayList<>();
+        for (int k = 0; k < values.length; k++) {
+            out.add(engine.process(view(readingTime + 5 * k, readingTime + 5 * k + 3, values[k], "mg/dL")));
+        }
+        return out;
+    }
+
+    private static List<CaptureEngine.Result> storedOnly(List<CaptureEngine.Result> results) {
+        final List<CaptureEngine.Result> out = new ArrayList<>();
+        for (CaptureEngine.Result r : results) {
+            if (r.outcome == STORED) out.add(r);
+        }
+        return out;
+    }
+
     @Test
     public void realisticFiveMinuteStreamWithReadingTimeInWhen() {
         final int[] values = {112, 115, 119, 124, 124, 121};
         for (int i = 0; i < values.length; i++) {
             final long readingTime = T + i * 5 * MIN;
-            // the app posts ~1.2 s after the transmitter reading, and sets when = reading time
-            final CaptureEngine.Result r = engine.process(view(readingTime, readingTime + 1_200,
-                    String.valueOf(values[i]), "mg/dL", "↗"));
-            assertEquals("i=" + i, STORED, r.outcome);
-            assertEquals(readingTime, r.reading.timestamp);
+            final String v = String.valueOf(values[i]);
+            // the app sets when = reading time, and posts several times within a second
+            final List<CaptureEngine.Result> s = storedOnly(burst(readingTime, v, v, v, v));
+            assertEquals("i=" + i, 1, s.size());
+            final CaptureEngine.Result r = s.get(0);
+            assertTrue("i=" + i, r.reading.timestamp >= readingTime && r.reading.timestamp < readingTime + 1_000);
             assertEquals(TimestampSource.NOTIFICATION_WHEN, r.reading.timestampSource);
         }
         assertEquals(values.length, store.size());
@@ -156,6 +174,11 @@ public class CaptureEngineTest {
             }
 
             @Override
+            public void delete(long timestamp) {
+                store.delete(timestamp);
+            }
+
+            @Override
             public List<Reading> latest(int count) {
                 return store.latest(count);
             }
@@ -171,12 +194,56 @@ public class CaptureEngineTest {
         assertEquals(1, store.size());
     }
 
+    // As the Eversense 365 app posts (from a day of logs): a refresh about once a minute
+    // with the value shown, and each new reading as a burst whose first post still shows
+    // the old value.
+    @Test
+    public void eversenseRefreshesAndBurstsGiveOneReadingEachWithNoDelay() {
+        final long r0 = T;
+        assertEquals(1, storedOnly(burst(r0, "171", "171", "171")).size());
+        // refreshes: never a new reading, however long after
+        for (int m = 1; m <= 5; m++) {
+            assertEquals(DUPLICATE, engine.process(view(r0 + m * MIN - 150, r0 + m * MIN - 140, "171")).outcome);
+        }
+        // the next reading: the old value first, then the new one
+        final long r1 = r0 + 5 * MIN;
+        final List<CaptureEngine.Result> s1 = storedOnly(burst(r1, "171", "187", "187", "187", "187"));
+        assertEquals(1, s1.size());
+        assertEquals(187, s1.get(0).reading.mgdl);
+        assertEquals(r1 + 5, s1.get(0).reading.timestamp); // the first post showing 187
+        assertEquals(2, store.size());
+        // a reading with the same value comes as a burst too: stored, age back to 0
+        final long r2 = r1 + 5 * MIN;
+        assertEquals(1, storedOnly(burst(r2, "187", "187", "187", "187")).size());
+        assertEquals(3, store.size());
+        // when three old-value posts get in first, the new value replaces the repeat at once
+        final long r3 = r2 + 5 * MIN;
+        final List<CaptureEngine.Result> s3 = storedOnly(burst(r3, "187", "187", "187", "197", "197"));
+        assertEquals(2, s3.size());
+        assertEquals(187, s3.get(0).reading.mgdl);
+        assertEquals(197, s3.get(1).reading.mgdl);
+        assertTrue(s3.get(1).detail.startsWith("replaces 187"));
+        assertEquals(4, store.size());
+        assertEquals(197, store.latest(1).get(0).mgdl);
+        assertEquals(187, store.latest(2).get(1).mgdl);
+        assertEquals(r2 + 10, store.latest(2).get(1).timestamp);
+    }
+
     @Test
     public void jammedSourceIsRejected() {
         for (int i = 0; i <= ReadingGate.JAM_THRESHOLD; i++) {
-            assertEquals(STORED, engine.process(view(0, T + i * 5 * MIN, "150")).outcome);
+            final long t = T + i * 5 * MIN;
+            if (i > 0) {
+                // a repeat is a new reading only in a burst of posts
+                engine.process(view(0, t, "150"));
+                engine.process(view(0, t + 5, "150"));
+            }
+            assertEquals(STORED, engine.process(view(0, t + 10, "150")).outcome);
         }
-        assertEquals(JAMMED, engine.process(view(0, T + (ReadingGate.JAM_THRESHOLD + 1) * 5 * MIN, "150")).outcome);
+        final long t = T + (ReadingGate.JAM_THRESHOLD + 1) * 5 * MIN;
+        engine.process(view(0, t, "150"));
+        engine.process(view(0, t + 5, "150"));
+        assertEquals(JAMMED, engine.process(view(0, t + 10, "150")).outcome);
     }
 
     @Test

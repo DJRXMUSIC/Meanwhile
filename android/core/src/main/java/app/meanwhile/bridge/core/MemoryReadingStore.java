@@ -25,6 +25,11 @@ public final class MemoryReadingStore implements ReadingStore {
     }
 
     @Override
+    public synchronized void delete(long timestamp) {
+        readings.removeIf(r -> r.timestamp == timestamp);
+    }
+
+    @Override
     public synchronized List<Reading> latest(int count) {
         return new ArrayList<>(readings.subList(0, Math.min(count, readings.size())));
     }

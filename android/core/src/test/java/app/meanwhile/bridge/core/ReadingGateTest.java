@@ -26,9 +26,24 @@ public class ReadingGateTest {
     }
 
     private boolean handleNewValue(long ts, int mgdl) {
-        if (gate.check(ts, mgdl) != ReadingGate.Verdict.ACCEPT) return false;
+        final ReadingGate.Verdict v = gate.check(ts, mgdl);
+        if (v == ReadingGate.Verdict.REPLACE_REPEAT) {
+            store.delete(store.latest(1).get(0).timestamp);
+        } else if (v != ReadingGate.Verdict.ACCEPT) {
+            return false;
+        }
         store.insert(new Reading(ts, mgdl, TimestampSource.POST_TIME, 0, ts, ts, "test", String.valueOf(mgdl)));
         return true;
+    }
+
+    /**
+     * A repeat of the last value as the Eversense app posts a real reading: a burst of
+     * posts within a second (the two before it are not new readings on their own).
+     */
+    private boolean burst(long ts, int mgdl) {
+        gate.check(ts - 20, mgdl);
+        gate.check(ts - 10, mgdl);
+        return handleNewValue(ts, mgdl);
     }
 
     // standard 5 minute apart readings are all accepted
@@ -79,7 +94,7 @@ public class ReadingGateTest {
     @Test
     public void deDupeTest7() {
         assertEquals(true, handleNewValue(start, 100));
-        assertEquals(true, handleNewValue(start + MINUTE * 5, 100));
+        assertEquals(true, burst(start + MINUTE * 5, 100));
     }
 
     @Test
@@ -92,7 +107,7 @@ public class ReadingGateTest {
     @Test
     public void sameValue10minApartAccepted() {
         assertEquals(true, handleNewValue(start, 100));
-        assertEquals(true, handleNewValue(start + MINUTE * 10, 100));
+        assertEquals(true, burst(start + MINUTE * 10, 100));
     }
 
     @Test
@@ -106,12 +121,16 @@ public class ReadingGateTest {
     @Test
     public void jamDetectionRejectsExcessiveRepeats() {
         for (int i = 0; i <= ReadingGate.JAM_THRESHOLD; i++) {
-            assertEquals("reading " + i, true, handleNewValue(start + MINUTE * 5 * i, 100));
+            final long t = start + MINUTE * 5 * i;
+            assertEquals("reading " + i, true, i == 0 ? handleNewValue(t, 100) : burst(t, 100));
         }
-        assertEquals(ReadingGate.Verdict.JAMMED, gate.check(start + MINUTE * 5 * (ReadingGate.JAM_THRESHOLD + 1), 100));
+        final long t = start + MINUTE * 5 * (ReadingGate.JAM_THRESHOLD + 1);
+        gate.check(t - 20, 100);
+        gate.check(t - 10, 100);
+        assertEquals(ReadingGate.Verdict.JAMMED, gate.check(t, 100));
         // a changed value clears the jam
         assertEquals(true, handleNewValue(start + MINUTE * 5 * (ReadingGate.JAM_THRESHOLD + 2), 101));
-        assertEquals(true, handleNewValue(start + MINUTE * 5 * (ReadingGate.JAM_THRESHOLD + 3), 101));
+        assertEquals(true, burst(start + MINUTE * 5 * (ReadingGate.JAM_THRESHOLD + 3), 101));
     }
 
     @Test
@@ -126,8 +145,51 @@ public class ReadingGateTest {
     public void dedupeWindowIs250Seconds() {
         assertEquals(250_000L, ReadingGate.DEDUPE_SAME_VALUE_MS);
         assertEquals(true, handleNewValue(start, 100));
-        assertEquals(false, handleNewValue(start + 250 * SECOND, 100));
-        assertEquals(true, handleNewValue(start + 251 * SECOND, 100));
+        assertEquals(false, burst(start + 250 * SECOND, 100));
+        assertEquals(true, burst(start + 251 * SECOND, 100));
+    }
+
+    // Eversense re-posts the value it shows about once a minute: a lone post of the same
+    // value is never a new reading, however long since the last one
+    @Test
+    public void loneRepeatIsNotANewReading() {
+        assertEquals(true, handleNewValue(start, 100));
+        assertEquals(ReadingGate.Verdict.LONE_REPEAT, gate.check(start + MINUTE * 5, 100));
+        assertEquals(ReadingGate.Verdict.LONE_REPEAT, gate.check(start + MINUTE * 6, 100));
+        assertEquals(ReadingGate.Verdict.LONE_REPEAT, gate.check(start + MINUTE * 20, 100));
+        assertEquals(1, store.size());
+        // two posts a few hundred ms apart (two refreshes landing together) are not a burst either
+        assertEquals(ReadingGate.Verdict.LONE_REPEAT, gate.check(start + MINUTE * 21, 100));
+        assertEquals(ReadingGate.Verdict.LONE_REPEAT, gate.check(start + MINUTE * 21 + 400, 100));
+        // a real reading's burst is
+        assertEquals(true, burst(start + MINUTE * 25, 100));
+        // a different value needs no burst
+        assertEquals(true, handleNewValue(start + MINUTE * 30, 104));
+    }
+
+    // From the log: the first posts of a reading's burst still show the old value, the new
+    // value follows ~150 ms later. If the old value got in, the new one replaces it at once.
+    @Test
+    public void oldValueTakenJustBeforeANewOneIsReplaced() {
+        assertEquals(true, handleNewValue(start, 171));
+        final long t = start + MINUTE * 5;
+        assertEquals(true, burst(t, 171)); // three posts of the old value
+        assertEquals(ReadingGate.Verdict.REPLACE_REPEAT, gate.check(t + 140, 187));
+        store.delete(store.latest(1).get(0).timestamp);
+        store.insert(new Reading(t + 140, 187, TimestampSource.POST_TIME, 0, t + 140, t + 140, "test", "187"));
+        assertEquals(2, store.size());
+        assertEquals(187, store.latest(1).get(0).mgdl);
+        assertEquals(171, store.latest(2).get(1).mgdl);
+        // the rest of the burst
+        assertEquals(ReadingGate.Verdict.DUPLICATE, gate.check(t + 150, 187));
+    }
+
+    // A changed value right after a reading that was itself a change is still a glitch
+    @Test
+    public void changeRightAfterAChangeIsStillAGlitch() {
+        assertEquals(true, handleNewValue(start, 100));
+        assertEquals(true, handleNewValue(start + MINUTE * 5, 110));
+        assertEquals(ReadingGate.Verdict.DUPLICATE, gate.check(start + MINUTE * 5 + 3 * SECOND, 112));
     }
 
     @Test
