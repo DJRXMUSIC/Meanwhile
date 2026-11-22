@@ -26,7 +26,8 @@ const LATE_SEC = 360;
 // and the gaps open up as far as the round screen allows the bottom row to go.
 const GLUCOSE_X = 22;     // left edge of the widest glucose ("388"); shorter ones right-align to it
 const COL_GAP = 5;        // glucose to the change / age column
-const GAP_MAX = 8;        // between the rows and lines: the most...
+const GAP_OUT = 3;        // glucose block to the top line, bottom line to IOB and steps
+const GAP_MAX = 10;       // around the time: the most...
 const GAP_MIN = 4;        // ...and the least
 const ROW_GAP_DESIGN = 5; // IOB to the steps
 
@@ -128,15 +129,16 @@ class EverBridgeView extends WatchUi.WatchFace {
             blockBottom = _bgY + bg / 2;
         }
 
-        // Middle and bottom: line, time and date, line, IOB and steps. The biggest time
-        // font first, then the widest gaps, for which the bottom row still fits the round
-        // screen; the bottom row in the biggest font that fits there.
-        var timeFonts = [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
+        // Middle and bottom: line, time and date, line, IOB and steps. The middle is the
+        // biggest section: the biggest time font first, then the widest gaps around it, for
+        // which the bottom row still fits the round screen; the bottom row in the biggest
+        // font that fits there.
+        var timeFonts = [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
         var rowFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g];
         var lt = lineThickness();
         var done = false;
         for (var t = 0; t < timeFonts.size() && !done; t++) {
-            if (timeWidth(dc, timeFonts[t]) > p(130)) {
+            if (timeWidth(dc, timeFonts[t]) > p(146)) {
                 continue;
             }
             var tg = glyph(timeFonts[t], NUM_GLYPH);
@@ -146,10 +148,10 @@ class EverBridgeView extends WatchUi.WatchFace {
                     if (rh > p(12)) {
                         continue;
                     }
-                    var line1 = blockBottom + gap + lt / 2;
+                    var line1 = blockBottom + p(GAP_OUT) + lt / 2;
                     var timeY = line1 + lt / 2 + gap + tg / 2;
                     var line2 = timeY + tg / 2 + gap + lt / 2;
-                    var rowY = line2 + lt / 2 + gap + rh / 2;
+                    var rowY = line2 + lt / 2 + p(GAP_OUT) + rh / 2;
                     if (rowWidth(dc, rowFonts[r], "12.5U", "18,412") <= chord(rowY + rh / 2) - p(8)) {
                         _fTime = timeFonts[t];
                         _fRow = rowFonts[r];
@@ -166,10 +168,10 @@ class EverBridgeView extends WatchUi.WatchFace {
             // never on the Instinct E; the fit check will say so
             _fTime = Graphics.FONT_NUMBER_MILD;
             _fRow = g;
-            _line1Y = blockBottom + p(GAP_MIN);
+            _line1Y = blockBottom + p(GAP_OUT);
             _timeY = _line1Y + p(GAP_MIN) + glyph(_fTime, NUM_GLYPH) / 2;
             _line2Y = _timeY + glyph(_fTime, NUM_GLYPH) / 2 + p(GAP_MIN);
-            _rowY = _line2Y + p(GAP_MIN) + glyph(_fRow, TEXT_GLYPH) / 2;
+            _rowY = _line2Y + p(GAP_OUT) + glyph(_fRow, TEXT_GLYPH) / 2;
         }
         checkFit(dc);
     }
