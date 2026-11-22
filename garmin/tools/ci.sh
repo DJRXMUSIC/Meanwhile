@@ -121,16 +121,27 @@ shot() { xwd -root -silent | convert xwd:- -crop 400x520+0+26 +repage "$1" || fa
 start_sim
 disable_device_https
 for d in $DEVICES; do
-  echo "--- screenshot on $d"
-  monkeydo "/tmp/debug-$d.prg" "$d" > "/tmp/run-$d.txt" 2>&1 &
-  RUN=$!
-  sleep 25
-  shot "$OUT/screen-$d-start.png"
-  # past the next minute boundary, when a watch face redraws in low-power mode
-  sleep $(( 65 - $(date +%S | sed 's/^0//') ))
-  shot "$OUT/screen-$d.png"
-  kill $RUN 2>/dev/null
-  echo "simulator output:"; cat "/tmp/run-$d.txt"
+  for attempt in 1 2; do
+    echo "--- screenshot on $d"
+    monkeydo "/tmp/debug-$d.prg" "$d" > "/tmp/run-$d.txt" 2>&1 &
+    RUN=$!
+    sleep 25
+    shot "$OUT/screen-$d-start.png"
+    # past the next minute boundary, when a watch face redraws in low-power mode
+    sleep $(( 65 - $(date +%S | sed 's/^0//') ))
+    shot "$OUT/screen-$d.png"
+    kill $RUN 2>/dev/null
+    echo "simulator output:"; cat "/tmp/run-$d.txt"
+    # Now and then the simulator shows nothing and runs nothing (no output at all, a
+    # one-colour screen). Start it again, once. A face that ran and failed isn't retried.
+    if [ $attempt = 1 ] && [ ! -s "/tmp/run-$d.txt" ]; then
+      echo "the simulator ran nothing on $d; restarting it"
+      start_sim
+      disable_device_https
+      continue
+    fi
+    break
+  done
   # The debug build measures every element on this device's own fonts (worst-case text).
   grep -q "FIT ok" "/tmp/run-$d.txt" || fail "no fit check output on $d"
   grep -q "FIT FAIL" "/tmp/run-$d.txt" && fail "layout doesn't fit on $d"
