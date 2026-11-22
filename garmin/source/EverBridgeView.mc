@@ -31,6 +31,9 @@ const COL_GAP = 5;        // glucose to the change / age column
 const GAP_OUT = 3;        // glucose block to the top line, bottom line to IOB and steps
 const GAP_MIN = 3;        // the least room above and below the time
 const ROW_GAP_DESIGN = 5; // IOB to the steps
+// Text may go right to the screen's edge, but its box is measured 2 px in from each side:
+// the glyphs' corners are rounded and empty.
+const CORNER = 2;
 
 // The layout:
 //
@@ -74,6 +77,8 @@ class EverBridgeView extends WatchUi.WatchFace {
     private var _timeY as Number = 0;
     private var _line2Y as Number = 0;
     private var _rowY as Number = 0;
+    // Px kept in from the round screen's edge: 2 while the lines are placed, 0 for the data.
+    private var _margin as Number = 2;
 
     // The reading version last drawn, for the instant redraw in onPartialUpdate.
     private var _drawn as Number = -1;
@@ -100,6 +105,7 @@ class EverBridgeView extends WatchUi.WatchFace {
             _sw = p(53);
             _sh = p(53);
         }
+        _margin = 2;
         var g = Graphics.FONT_XTINY;
         // glucose: clearly smaller than the time (about two thirds of its height)
         _fBg = pick(dc, [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE], NUM_GLYPH, p(24), "388", p(50));
@@ -159,6 +165,25 @@ class EverBridgeView extends WatchUi.WatchFace {
             }
         }
         _timeY = (_line1Y + _line2Y) / 2;
+
+        // The lines stay there; the data moves out to the screen's edge. The glucose block
+        // as high as the subscreen's circle and the edge allow (the bottom row is placed
+        // when drawn, by the width of what it shows).
+        _margin = 0;
+        chTop = _h;
+        for (var x = p(GLUCOSE_X) - p(8); x <= p(GLUCOSE_X + 24); x++) {
+            var top = blockTop(dc, x, x + bw + p(COL_GAP));
+            if (top < chTop) {
+                chTop = top;
+                _bgX = x;
+            }
+        }
+        _colX = _bgX + bw + p(COL_GAP);
+        tagTop = chTop + cg + p(3);
+        _chY = chTop + cg / 2;
+        _tagY = tagTop + th / 2;
+        _bgY = (chTop + tagTop + th) / 2;
+        _rowY = rowCentre(rw);
         checkFit(dc);
     }
 
@@ -223,12 +248,22 @@ class EverBridgeView extends WatchUi.WatchFace {
             var tTop = y + cg + p(3);
             var bgTop = (y + tTop + th) / 2 - bg / 2;
             if (clearOfSub(colX, y, cw, cg) && clearOfSub(colX, tTop, tw, th) && clearOfSub(bgX, bgTop, bw, bg)
-                    && inRound(colX, y) && inRound(colX + cw, y) && inRound(colX + tw, tTop)
-                    && inRound(bgX, bgTop) && inRound(bgX + bw, bgTop)) {
+                    && inRound(colX + CORNER, y) && inRound(colX + cw - CORNER, y) && inRound(colX + tw, tTop)
+                    && inRound(bgX + CORNER, bgTop) && inRound(bgX + bw - CORNER, bgTop)) {
                 return y;
             }
         }
         return _h / 2;
+    }
+
+    // Centre y of the bottom row when it is w wide: as low as the round screen allows.
+    private function rowCentre(w as Number) as Number {
+        var rh = glyph(_fRow, TEXT_GLYPH);
+        var bottom = _h - 1;
+        while (bottom > _h / 2 && !fitsRound(_w / 2 - w / 2 + CORNER, bottom, w - 2 * CORNER)) {
+            bottom--;
+        }
+        return bottom - rh + rh / 2; // glyphs bottom - rh .. bottom
     }
 
     // True if a row w wide, centred, with its bottom at y, stays inside the round screen
@@ -241,7 +276,7 @@ class EverBridgeView extends WatchUi.WatchFace {
     private function inRound(x as Number, y as Number) as Boolean {
         var dx = x - _w / 2.0;
         var dy = y - _h / 2.0;
-        var r = _w / 2.0 - 2;
+        var r = _w / 2.0 - _margin;
         return dx * dx + dy * dy <= r * r;
     }
 
@@ -355,7 +390,9 @@ class EverBridgeView extends WatchUi.WatchFace {
             drawDeltaAndAge(dc, _colX, (d instanceof String) ? d : "--", nowSec - at);
         }
         var iob = (r == null) ? null : r[Bg.K_IOB];
-        drawBottomRow(dc, _w / 2, _rowY, iobText(iob), stepsText());
+        var iobStr = iobText(iob);
+        var steps = stepsText();
+        drawBottomRow(dc, _w / 2, rowCentre(rowWidth(dc, _fRow, iobStr, steps)), iobStr, steps);
     }
 
     // Where the glucose ends on the right: the widest reading ("388") from GLUCOSE_X.
@@ -540,11 +577,13 @@ class EverBridgeView extends WatchUi.WatchFace {
     private function box(dc as Graphics.Dc, name as String, x as Number, y as Number, w as Number, h as Number, inSub as Boolean) as Number {
         var cx = _w / 2.0;
         var cy = _h / 2.0;
-        var r = _w / 2.0 - 2;
+        var r = _w / 2.0;
         var scx = _sx + _sw / 2.0;
         var scy = _sy + _sh / 2.0;
         var sr = _sw / 2.0;
-        var corners = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+        // the round screen's edge is checked CORNER px in from each side (glyph corners are empty)
+        var corners = inSub ? [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]
+            : [[x + CORNER, y], [x + w - CORNER, y], [x + CORNER, y + h], [x + w - CORNER, y + h]];
         var ok = true;
         var why = "";
         for (var i = 0; i < 4; i++) {
