@@ -2,10 +2,10 @@
 
 A Connect IQ watch face for the Instinct E 40 mm, glucose first:
 
-* **top:** your glucose, with the change from the reading before (`+4`) and an age tag (`2 MIN`) stacked to its right. The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
+* **top:** your glucose, with the change from the reading before (`+4`) and an age tag (`2m`, minutes) stacked to its right, beside the heart rate. The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
 * **subscreen:** heart rate (`68 BPM`)
 * **middle, between two lines, largest:** the time (`10:47`) and the date (`21 Nov`)
-* **bottom, as low as the round screen allows:** insulin on board from Meanwhile (`IOB 2.4U`) and today's steps (`8,412`)
+* **bottom, as low as the round screen allows:** insulin on board from Meanwhile (`2.4U`) and today's steps (`8,412`)
 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
 
@@ -46,7 +46,7 @@ CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-t
 * builds release, debug and test versions for the 40 mm (debug builds log each fetch and schedule to the simulator console)
 * runs the unit tests (`source/Tests.mc`: reply and pushed-message parsing, change/age/IOB/steps text, scheduler) in the simulator
 * runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
-* checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+ MIN`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. Then the real screenshot is checked: nothing may be drawn within 2 px of either divider line. The screenshot is also printed into the log as text.
+* checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+m`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. Then the real screenshot is checked: nothing may be drawn within 2 px of either divider line. The screenshot is also printed into the log as text.
 * if all of that passes, replaces the **watchface-latest** release (from `main`) or **watchface-preview** (from any other branch)
 
 Locally, with the Connect IQ SDK installed:

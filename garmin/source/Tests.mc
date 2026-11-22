@@ -56,11 +56,11 @@ function deltaIsSignedAndDashedWhenUnknown(logger as Test.Logger) as Boolean {
 
 (:test)
 function ageTagIoBAndStepsText(logger as Test.Logger) as Boolean {
-    Test.assertEqual(ageText(0), "0 MIN");
-    Test.assertEqual(ageText(119), "1 MIN");
-    Test.assertEqual(ageText(24 * 60 + 5), "24 MIN");
-    Test.assertEqual(ageText(-30), "0 MIN");
-    Test.assertEqual(ageText(200 * 60), "99+ MIN");
+    Test.assertEqual(ageText(0), "0m");
+    Test.assertEqual(ageText(119), "1m");
+    Test.assertEqual(ageText(24 * 60 + 5), "24m");
+    Test.assertEqual(ageText(-30), "0m");
+    Test.assertEqual(ageText(200 * 60), "99+m");
     Test.assertEqual(iobText(null), "--");
     Test.assertEqual(iobText(0), "0.0U");
     Test.assertEqual(iobText(12.46), "12.5U");

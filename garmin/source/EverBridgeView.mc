@@ -34,12 +34,12 @@ const ROW_GAP_DESIGN = 5; // IOB to the steps
 
 // The layout:
 //
-//      142   +4           ( 68 )   <- subscreen: heart rate
-//            [2 MIN]      ( BPM)   <- change from the reading before, age tag
+//       142 +4      ( 68 )   <- subscreen: heart rate
+//           [2m]    ( BPM)   <- change from the reading before, age tag
 //    ─────────────────────
 //       10:47  21 Nov               <- time and date
 //    ─────────────────────
-//     IOB 2.4U  ⁚⁚ 8,412            <- insulin on board, steps
+//        2.4U  ⁚⁚ 8,412            <- insulin on board, steps
 //
 // The glucose number is never altered, however old: only the age tag changes
 // (outlined while fresh, solid after 6 minutes).
@@ -105,29 +105,26 @@ class EverBridgeView extends WatchUi.WatchFace {
         _fBg = pick(dc, [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE], NUM_GLYPH, p(24), "388", p(50));
         _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(13), "28 Sep", p(50));
         _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(13), "-12", p(30));
-        _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "99+ MIN", p(52));
-        _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "IOB", p(24));
+        _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "99+m", p(36));
+        _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "BPM", p(30));
         _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
 
         // Top: the glucose, with the change over the age tag to its right, as high as the
-        // subscreen's circle and the round screen allow.
-        _bgX = p(GLUCOSE_X);
-        _colX = _bgX + dc.getTextWidthInPixels("388", _fBg) + p(COL_GAP);
+        // subscreen's circle and the round screen allow: the glucose's left edge is moved
+        // right while that lets the block go higher.
         var cg = glyph(_fDelta, TEXT_GLYPH);
-        var cw = dc.getTextWidthInPixels("-12", _fDelta);
         var th = tagHeight();
-        var tw = dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(3);
         var bg = glyph(_fBg, NUM_GLYPH);
-        var chTop = p(10);
-        while (chTop < _h / 2) {
-            var tTop = chTop + cg + p(3);
-            var bgTop = (chTop + tTop + th) / 2 - bg / 2;
-            if (clearOfSub(_colX, chTop, cw, cg) && clearOfSub(_colX, tTop, tw, th)
-                    && inRound(_colX, chTop) && inRound(_colX + cw, chTop) && inRound(_bgX, bgTop)) {
-                break;
+        var bw = dc.getTextWidthInPixels("388", _fBg);
+        var chTop = _h;
+        for (var x = p(GLUCOSE_X); x <= p(GLUCOSE_X + 24); x++) {
+            var top = blockTop(dc, x, x + bw + p(COL_GAP));
+            if (top < chTop) {
+                chTop = top;
+                _bgX = x;
             }
-            chTop++;
         }
+        _colX = _bgX + bw + p(COL_GAP);
         var tagTop = chTop + cg + p(3);
         _chY = chTop + cg / 2;
         _tagY = tagTop + th / 2;
@@ -172,9 +169,9 @@ class EverBridgeView extends WatchUi.WatchFace {
         return d >= r ? 0 : (2 * Math.sqrt(r * r - d * d)).toNumber();
     }
 
-    // Width of the bottom row "IOB <iob>   <footprints> <steps>" in the given font.
+    // Width of the bottom row "<iob>   <footprints> <steps>" in the given font.
     private function rowWidth(dc as Graphics.Dc, font, iob as String, steps as String) as Number {
-        return dc.getTextWidthInPixels("IOB", _fLabel) + p(3) + dc.getTextWidthInPixels(iob, font) + ROW_GAP_DESIGN * _w / DESIGN
+        return dc.getTextWidthInPixels(iob, font) + ROW_GAP_DESIGN * _w / DESIGN
             + feetWidth() + p(2) + dc.getTextWidthInPixels(steps, font);
     }
 
@@ -210,6 +207,28 @@ class EverBridgeView extends WatchUi.WatchFace {
 
     private function lineThickness() as Number {
         return p(2) < 2 ? 2 : p(2);
+    }
+
+    // The highest top for the change (and so the glucose block) with the glucose's left
+    // edge at bgX and the change / age column at colX: clear of the subscreen's circle
+    // and inside the round screen.
+    private function blockTop(dc as Graphics.Dc, bgX as Number, colX as Number) as Number {
+        var cg = glyph(_fDelta, TEXT_GLYPH);
+        var cw = dc.getTextWidthInPixels("-12", _fDelta);
+        var th = tagHeight();
+        var tw = dc.getTextWidthInPixels("99+m", _fTag) + 2 * p(3);
+        var bg = glyph(_fBg, NUM_GLYPH);
+        var bw = dc.getTextWidthInPixels("388", _fBg);
+        for (var y = p(4); y < _h / 2; y++) {
+            var tTop = y + cg + p(3);
+            var bgTop = (y + tTop + th) / 2 - bg / 2;
+            if (clearOfSub(colX, y, cw, cg) && clearOfSub(colX, tTop, tw, th) && clearOfSub(bgX, bgTop, bw, bg)
+                    && inRound(colX, y) && inRound(colX + cw, y) && inRound(colX + tw, tTop)
+                    && inRound(bgX, bgTop) && inRound(bgX + bw, bgTop)) {
+                return y;
+            }
+        }
+        return _h / 2;
     }
 
     // True if a row w wide, centred, with its bottom at y, stays inside the round screen
@@ -359,7 +378,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         return w > p(134) ? p(134) : w;
     }
 
-    // To the right of the glucose: the change ("+4") over the age tag ("2 MIN"). The tag is
+    // To the right of the glucose: the change ("+4") over the age tag ("2m"). The tag is
     // outlined while fresh and solid once LATE_SEC has passed.
     private function drawDeltaAndAge(dc as Graphics.Dc, x as Number, delta as String, ageSec as Number) as Void {
         ink(dc);
@@ -383,19 +402,12 @@ class EverBridgeView extends WatchUi.WatchFace {
         }
     }
 
-    // "IOB 2.4U   <footprints> 8,412"
+    // "2.4U   <footprints> 8,412" (the U marks it as insulin)
     private function drawBottomRow(dc as Graphics.Dc, cx as Number, cy as Number, iob as String, steps as String) as Void {
-        var lw = dc.getTextWidthInPixels("IOB", _fLabel);
         var iw = dc.getTextWidthInPixels(iob, _fRow);
-        var g1 = p(3);
         var g2 = p(ROW_GAP_DESIGN);
         var x = cx - rowWidth(dc, _fRow, iob, steps) / 2;
         ink(dc);
-        // the small label sits on the value's baseline
-        var rowH = glyph(_fRow, TEXT_GLYPH);
-        var labH = glyph(_fLabel, TEXT_GLYPH);
-        text(dc, x, cy + (rowH - labH) / 2, _fLabel, TEXT_GLYPH, "IOB", Graphics.TEXT_JUSTIFY_LEFT);
-        x += lw + g1;
         text(dc, x, cy, _fRow, TEXT_GLYPH, iob, Graphics.TEXT_JUSTIFY_LEFT);
         x += iw + g2;
         drawFootprints(dc, x + feetWidth() / 2, cy, feetR());
@@ -474,7 +486,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         var cg = glyph(_fDelta, TEXT_GLYPH);
         fails += box(dc, "change", _colX, _chY - cg / 2, dc.getTextWidthInPixels("-12", _fDelta), cg, false);
         var th = tagHeight();
-        var tagW = dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(3);
+        var tagW = dc.getTextWidthInPixels("99+m", _fTag) + 2 * p(3);
         fails += box(dc, "age tag", _colX, _tagY - th / 2, tagW, th, false);
         var lt = lineThickness();
         fails += box(dc, "top line", _w / 2 - lineWidth(_line1Y) / 2, _line1Y - lt / 2, lineWidth(_line1Y), lt, false);
@@ -569,13 +581,13 @@ class EverBridgeView extends WatchUi.WatchFace {
     }
 }
 
-// "2 MIN", "14 MIN", "99+ MIN": whole minutes since the reading.
+// "2m", "14m", "99+m": whole minutes since the reading.
 function ageText(ageSec as Number) as String {
     var m = ageSec / 60;
     if (m < 0) {
         m = 0;
     }
-    return m > 99 ? "99+ MIN" : m.format("%d") + " MIN";
+    return m > 99 ? "99+m" : m.format("%d") + "m";
 }
 
 // "2.4U"; "--" when Meanwhile hasn't reported insulin.
