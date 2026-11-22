@@ -88,6 +88,12 @@ public final class Bridge {
             public Double iob(long nowMs) {
                 return Bridge.this.iob(nowMs);
             }
+
+            @Override
+            public void pebbleServed(Reading newest, long nowMs) {
+                EventLog.log(app, "GARMIN", "watch asked for the newest reading: "
+                        + (newest == null ? "none yet" : newest.mgdl + ", taken " + (nowMs - newest.timestamp) / 1000 + " s ago"));
+            }
         });
         this.server = new HttpServer(routes);
         engine.setListener(reading -> {

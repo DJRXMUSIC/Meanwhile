@@ -25,6 +25,10 @@ public final class BridgeRoutes implements HttpServer.Handler {
         default Double iob(long nowMs) {
             return null;
         }
+
+        /** /pebble was asked for (the watch face's own check); newest is null if there is none. */
+        default void pebbleServed(Reading newest, long nowMs) {
+        }
     }
 
     private final ReadingStore store;
@@ -62,7 +66,9 @@ public final class BridgeRoutes implements HttpServer.Handler {
     /** Latest reading as a JSON object, for clients (Garmin watch faces) that can't take an array. */
     public String pebble() {
         final long now = status.nowMs();
-        return PebbleJson.reply(store.latest(2), status.unitsHint(), now, status.iob(now));
+        final List<Reading> latest = store.latest(2);
+        status.pebbleServed(latest.isEmpty() ? null : latest.get(0), now);
+        return PebbleJson.reply(latest, status.unitsHint(), now, status.iob(now));
     }
 
     static int parseCount(String raw) {
