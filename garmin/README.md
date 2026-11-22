@@ -48,7 +48,7 @@ CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-t
 * builds release, debug and test versions for both sizes (debug builds log each fetch and schedule to the simulator console)
 * runs the unit tests (`source/Tests.mc`: reply and pushed-message parsing, change/age/IOB/steps text, scheduler) in the simulator
 * runs the face in the simulator against `tools/fake_pebble.py` (a fake phone endpoint) and screenshots it. The simulator applies the watch's HTTPS rule to every request, while on the phone Garmin Connect allows plain http to 127.0.0.1, so CI first turns off the simulator's **Settings → Use Device HTTPS Requirements**
-* checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+ MIN`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. The screenshot is also printed into the log as text.
+* checks the layout fits: the debug build measures every element with the widest text it can show (`388`, `-12`, `99+ MIN`, `12.5U`, `18,412`, `23:58`) on the device's own fonts, and fails on anything that leaves the round screen or runs into the subscreen. Then the real screenshot is checked: nothing may be drawn within 2 px of either divider line. The screenshot is also printed into the log as text.
 * if all of that passes, replaces the **watchface-latest** release (from `main`) or **watchface-preview** (from any other branch)
 
 Locally, with the Connect IQ SDK installed:

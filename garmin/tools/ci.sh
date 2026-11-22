@@ -134,6 +134,8 @@ for d in $DEVICES; do
   # The debug build measures every element on this device's own fonts (worst-case text).
   grep -q "FIT ok" "/tmp/run-$d.txt" || fail "no fit check output on $d"
   grep -q "FIT FAIL" "/tmp/run-$d.txt" && fail "layout doesn't fit on $d"
+  # What was actually drawn: nothing may touch the two divider lines.
+  python3 "$GARMIN/tools/line_gap_check.py" "$OUT/screen-$d.png" || fail "something touches a divider line on $d"
   # The screenshot as text, so it can be checked from the log alone.
   echo "--- $d screen as text (# = lit pixel, 2x2 per character)"
   python3 "$GARMIN/tools/ascii_shot.py" "$OUT/screen-$d.png" || true

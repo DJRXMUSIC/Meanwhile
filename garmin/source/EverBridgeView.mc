@@ -9,11 +9,13 @@ import Toybox.Time;
 import Toybox.Time.Gregorian;
 import Toybox.WatchUi;
 
-// How much of a font's ascent its digits and capitals actually fill, in percent
-// (measured on the Instinct E in the simulator). Text is placed by its glyphs,
+// How much of a font's ascent its digits and capitals actually fill, in percent,
+// measured pixel by pixel on Instinct E simulator screenshots (number fonts 77%,
+// e.g. the time's 44 px ascent draws 34 px digits; text fonts 72-75%), rounded up
+// so nothing is placed tighter than it really is. Text is placed by its glyphs,
 // not by the fonts' much taller boxes.
-const NUM_GLYPH = 62;
-const TEXT_GLYPH = 70;
+const NUM_GLYPH = 78;
+const TEXT_GLYPH = 75;
 
 // Width of the screen the layout is designed on (Instinct E 40 mm).
 const DESIGN = 166;
@@ -100,11 +102,11 @@ class EverBridgeView extends WatchUi.WatchFace {
         }
         var g = Graphics.FONT_XTINY;
         // glucose: clearly smaller than the time (about two thirds of its height)
-        _fBg = pick(dc, [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE], NUM_GLYPH, p(18), "388", p(50));
-        _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "28 Sep", p(50));
-        _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(12), "-12", p(30));
-        _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(7), "99+ MIN", p(52));
-        _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(6), "IOB", p(14));
+        _fBg = pick(dc, [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE], NUM_GLYPH, p(24), "388", p(50));
+        _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(13), "28 Sep", p(50));
+        _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(13), "-12", p(30));
+        _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "99+ MIN", p(52));
+        _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "IOB", p(24));
         _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
 
         // Top: the glucose, with the change over the age tag to its right, as high as the
