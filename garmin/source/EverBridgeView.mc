@@ -21,30 +21,23 @@ const DESIGN = 166;
 // After this long without a new reading the age tag fills in, so it catches the eye.
 const LATE_SEC = 360;
 
-// Layout, design px (40 mm screen). Placed from the Instinct E's own fonts as measured
-// in the simulator (time 18 px, date 11, glucose 27, change 12, tag 15, bottom row 11),
-// so every row clears its neighbours and the bottom row sits where the round screen is
-// wide enough for it.
-const TIME_Y = 33;
-const DATE_Y = 53;
-const LINE1_Y = 62;      // under the time and date
-const GLUCOSE_X = 30;    // left edge of the widest glucose ("388"); shorter ones right-align to it
-const GLUCOSE_Y = 86;
-const CHANGE_Y = 79;     // change from the reading before, right of the glucose
-const TAG_Y = 95;        // age tag, under the change
-const LINE2_Y = 109;     // under the glucose
-const ROW_Y_DESIGN = 124; // IOB and steps
-const ROW_GAP_DESIGN = 5;
+// Layout, design px (40 mm screen). Rows are stacked in onLayout from the Instinct E's
+// own fonts and its subscreen, so the glucose block sits just clear of the heart rate
+// and the gaps open up as far as the round screen allows the bottom row to go.
+const GLUCOSE_X = 22;     // left edge of the widest glucose ("388"); shorter ones right-align to it
+const COL_GAP = 5;        // glucose to the change / age column
+const GAP_MAX = 8;        // between the rows and lines: the most...
+const GAP_MIN = 4;        // ...and the least
+const ROW_GAP_DESIGN = 5; // IOB to the steps
 
-// Layout A, as approved in the design:
+// The layout:
 //
-//      10:47          ( 68 )   <- subscreen: heart rate
-//      21 Nov         ( BPM)
+//      142   +4           ( 68 )   <- subscreen: heart rate
+//            [2 MIN]      ( BPM)   <- change from the reading before, age tag
 //    ─────────────────────
-//      142   +4
-//            [2 MIN]           <- change from the reading before, age tag
+//       10:47  21 Nov               <- time and date
 //    ─────────────────────
-//     IOB 2.4U  ⁚⁚ 8,412        <- insulin on board, steps
+//     IOB 2.4U  ⁚⁚ 8,412            <- insulin on board, steps
 //
 // The glucose number is never altered, however old: only the age tag changes
 // (outlined while fresh, solid after 6 minutes).
@@ -68,6 +61,17 @@ class EverBridgeView extends WatchUi.WatchFace {
     private var _fRow = Graphics.FONT_SMALL;
     private var _fLabel = Graphics.FONT_XTINY;
     private var _fHr = Graphics.FONT_NUMBER_MILD;
+
+    // Where things go on this screen, px (centres of each row's glyphs), set in onLayout.
+    private var _bgX as Number = 0;    // left edge of the widest glucose
+    private var _colX as Number = 0;   // left edge of the change / age column
+    private var _bgY as Number = 0;
+    private var _chY as Number = 0;
+    private var _tagY as Number = 0;
+    private var _line1Y as Number = 0;
+    private var _timeY as Number = 0;
+    private var _line2Y as Number = 0;
+    private var _rowY as Number = 0;
 
     // The reading version last drawn, for the instant redraw in onPartialUpdate.
     private var _drawn as Number = -1;
@@ -95,24 +99,78 @@ class EverBridgeView extends WatchUi.WatchFace {
             _sh = p(53);
         }
         var g = Graphics.FONT_XTINY;
-        // glucose: the biggest built-in number font that fits between the two lines
-        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(LINE2_Y - LINE1_Y - 14), "388", p(66));
-        _fTime = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_LARGE, Graphics.FONT_MEDIUM], NUM_GLYPH, p(19), "2358", p(60));
-        _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(8), "28 Sep", p(40));
+        _fBg = pick(dc, [Graphics.FONT_NUMBER_THAI_HOT, Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD], NUM_GLYPH, p(30), "388", p(70));
+        _fDate = pick(dc, [Graphics.FONT_SMALL, Graphics.FONT_TINY, g], TEXT_GLYPH, p(12), "28 Sep", p(50));
         _fDelta = pick(dc, [Graphics.FONT_LARGE, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], TEXT_GLYPH, p(12), "-12", p(30));
         _fTag = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(7), "99+ MIN", p(52));
         _fLabel = pick(dc, [Graphics.FONT_TINY, g], TEXT_GLYPH, p(6), "IOB", p(14));
-        // the bottom row: the largest font whose widest row fits the round screen at that height
+        _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
+
+        // Top: the glucose, with the change over the age tag to its right. The tag is wide,
+        // so it goes just under the subscreen; the change sits right above it, pushed down
+        // further only if it would touch the subscreen's circle.
+        _bgX = p(GLUCOSE_X);
+        _colX = _bgX + dc.getTextWidthInPixels("388", _fBg) + p(COL_GAP);
+        var cg = glyph(_fDelta, TEXT_GLYPH);
+        var cw = dc.getTextWidthInPixels("-12", _fDelta);
+        var th = tagHeight();
+        var chTop = _sy + _sh + 3 - p(3) - cg;
+        while (chTop < _h / 2 && clearOfSub(_colX, chTop, cw, cg) == false) {
+            chTop++;
+        }
+        var tagTop = chTop + cg + p(3);
+        _chY = chTop + cg / 2;
+        _tagY = tagTop + th / 2;
+        var bg = glyph(_fBg, NUM_GLYPH);
+        _bgY = (chTop + tagTop + th) / 2;
+        var blockBottom = tagTop + th;
+        if (_bgY + bg / 2 > blockBottom) {
+            blockBottom = _bgY + bg / 2;
+        }
+
+        // Middle and bottom: line, time and date, line, IOB and steps. The biggest time
+        // font first, then the widest gaps, for which the bottom row still fits the round
+        // screen; the bottom row in the biggest font that fits there.
+        var timeFonts = [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
         var rowFonts = [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY, g];
-        _fRow = g;
-        for (var i = 0; i < rowFonts.size(); i++) {
-            var h = glyph(rowFonts[i], TEXT_GLYPH);
-            if (h <= p(12) && rowWidth(dc, rowFonts[i], "12.5U", "18,412") <= chord(ROW_Y_DESIGN * _w / DESIGN + h / 2) - p(8)) {
-                _fRow = rowFonts[i];
-                break;
+        var lt = lineThickness();
+        var done = false;
+        for (var t = 0; t < timeFonts.size() && !done; t++) {
+            if (timeWidth(dc, timeFonts[t]) > p(130)) {
+                continue;
+            }
+            var tg = glyph(timeFonts[t], NUM_GLYPH);
+            for (var gap = p(GAP_MAX); gap >= p(GAP_MIN) && !done; gap--) {
+                for (var r = 0; r < rowFonts.size() && !done; r++) {
+                    var rh = glyph(rowFonts[r], TEXT_GLYPH);
+                    if (rh > p(12)) {
+                        continue;
+                    }
+                    var line1 = blockBottom + gap + lt / 2;
+                    var timeY = line1 + lt / 2 + gap + tg / 2;
+                    var line2 = timeY + tg / 2 + gap + lt / 2;
+                    var rowY = line2 + lt / 2 + gap + rh / 2;
+                    if (rowWidth(dc, rowFonts[r], "12.5U", "18,412") <= chord(rowY + rh / 2) - p(8)) {
+                        _fTime = timeFonts[t];
+                        _fRow = rowFonts[r];
+                        _line1Y = line1;
+                        _timeY = timeY;
+                        _line2Y = line2;
+                        _rowY = rowY;
+                        done = true;
+                    }
+                }
             }
         }
-        _fHr = pick(dc, [Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD, Graphics.FONT_MEDIUM, Graphics.FONT_SMALL], NUM_GLYPH, p(15), "188", _sw * 3 / 4);
+        if (!done) {
+            // never on the Instinct E; the fit check will say so
+            _fTime = Graphics.FONT_NUMBER_MILD;
+            _fRow = g;
+            _line1Y = blockBottom + p(GAP_MIN);
+            _timeY = _line1Y + p(GAP_MIN) + glyph(_fTime, NUM_GLYPH) / 2;
+            _line2Y = _timeY + glyph(_fTime, NUM_GLYPH) / 2 + p(GAP_MIN);
+            _rowY = _line2Y + p(GAP_MIN) + glyph(_fRow, TEXT_GLYPH) / 2;
+        }
         checkFit(dc);
     }
 
@@ -137,6 +195,42 @@ class EverBridgeView extends WatchUi.WatchFace {
     private function feetR() as Number {
         var r = p(3);
         return r < 3 ? 3 : r;
+    }
+
+    // Width of the middle row "23:58  28 Sep" with the time in the given font.
+    private function timeWidth(dc as Graphics.Dc, font) as Number {
+        return dc.getTextWidthInPixels("23", font) + colonWidth(font) + dc.getTextWidthInPixels("58", font)
+            + p(8) + dc.getTextWidthInPixels("28 Sep", _fDate);
+    }
+
+    // The square colon: its dots with a little space either side.
+    private function colonWidth(font) as Number {
+        return colonDot(font) + 2 * p(2);
+    }
+
+    private function colonDot(font) as Number {
+        var d = glyph(font, NUM_GLYPH) / 7;
+        return d < 2 ? 2 : d;
+    }
+
+    private function tagHeight() as Number {
+        return glyph(_fTag, TEXT_GLYPH) + 2 * p(2);
+    }
+
+    private function lineThickness() as Number {
+        return p(2) < 2 ? 2 : p(2);
+    }
+
+    // True if the box keeps at least 2 px from the subscreen's circle.
+    private function clearOfSub(x as Number, y as Number, w as Number, h as Number) as Boolean {
+        var scx = _sx + _sw / 2.0;
+        var scy = _sy + _sh / 2.0;
+        var nx = scx < x ? x : (scx > x + w ? x + w : scx);
+        var ny = scy < y ? y : (scy > y + h ? y + h : scy);
+        var dx = nx - scx;
+        var dy = ny - scy;
+        var r = _sw / 2.0 + 2;
+        return dx * dx + dy * dy >= r * r;
     }
 
     // A design coordinate (40 mm screen) on this screen.
@@ -170,22 +264,17 @@ class EverBridgeView extends WatchUi.WatchFace {
     }
 
     // Called every second in low-power mode on watches that support it. A reading pushed
-    // by the phone is drawn straight away instead of at the next minute; nothing else
-    // is drawn here, to stay well inside the power budget.
+    // by the phone is drawn straight away instead of at the next minute. Most seconds
+    // nothing has changed and nothing is drawn, which keeps well inside the power budget.
     function onPartialUpdate(dc as Graphics.Dc) as Void {
         if (Sched.version() == _drawn) {
             return;
         }
-        var top = p(LINE1_Y) + 2;
-        dc.setClip(0, top, _w, _h - top);
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-        dc.clear();
-        drawReading(dc, Time.now().value());
-        dc.clearClip();
-        _drawn = Sched.version();
+        onUpdate(dc);
     }
 
-    // "10:47" top left (hours, square colon, minutes) and "21 Nov" under it.
+    // "10:47  21 Nov" across the middle: hours, square colon, minutes, then the date
+    // sitting on the same baseline.
     private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
         var hour = info.hour;
         var hStr;
@@ -196,10 +285,13 @@ class EverBridgeView extends WatchUi.WatchFace {
             hStr = (hour == 0 ? 12 : hour).format("%d");
         }
         var mStr = info.min.format("%02d");
-        var cy = p(TIME_Y);
+        var dStr = info.day.format("%d") + " " + info.month.toString();
+        var cy = _timeY;
         var gh = glyph(_fTime, NUM_GLYPH);
-        var dot = gh / 7 < 2 ? 2 : gh / 7;
-        var x = p(32);
+        var dot = colonDot(_fTime);
+        var w = dc.getTextWidthInPixels(hStr, _fTime) + colonWidth(_fTime) + dc.getTextWidthInPixels(mStr, _fTime)
+            + p(8) + dc.getTextWidthInPixels(dStr, _fDate);
+        var x = _w / 2 - w / 2;
         ink(dc);
         text(dc, x, cy, _fTime, NUM_GLYPH, hStr, Graphics.TEXT_JUSTIFY_LEFT);
         x += dc.getTextWidthInPixels(hStr, _fTime) + p(2);
@@ -207,8 +299,9 @@ class EverBridgeView extends WatchUi.WatchFace {
         dc.fillRectangle(x, cy + gh / 4 - dot / 2, dot, dot);
         x += dot + p(2);
         text(dc, x, cy, _fTime, NUM_GLYPH, mStr, Graphics.TEXT_JUSTIFY_LEFT);
-
-        text(dc, p(33), p(DATE_Y), _fDate, TEXT_GLYPH, info.day.format("%d") + " " + info.month.toString(), Graphics.TEXT_JUSTIFY_LEFT);
+        x += dc.getTextWidthInPixels(mStr, _fTime) + p(8);
+        var dg = glyph(_fDate, TEXT_GLYPH);
+        text(dc, x, cy + gh / 2 - dg / 2, _fDate, TEXT_GLYPH, dStr, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // Heart rate in the subscreen: the number, "BPM" under it.
@@ -221,7 +314,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         text(dc, cx, cy + _sh / 4, _fLabel, TEXT_GLYPH, "BPM", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
-    // Glucose, the change and age tag under it, then IOB and steps.
+    // Glucose with the change and age tag beside it, the lines, IOB and steps.
     private function drawReading(dc as Graphics.Dc, nowSec as Number) as Void {
         var r = Sched.reading();
         var sgv = (r == null) ? null : r[Bg.K_SGV];
@@ -230,41 +323,47 @@ class EverBridgeView extends WatchUi.WatchFace {
         ink(dc);
         var right = glucoseRight(dc);
         if (!(sgv instanceof String) || !(at instanceof Number)) {
-            text(dc, right, p(GLUCOSE_Y), Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_RIGHT);
+            text(dc, right, _bgY, Graphics.FONT_MEDIUM, TEXT_GLYPH, "---", Graphics.TEXT_JUSTIFY_RIGHT);
         } else {
             // right-aligned to where the widest reading ends, so the column beside it never moves
-            text(dc, right, p(GLUCOSE_Y), _fBg, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_RIGHT);
+            text(dc, right, _bgY, _fBg, NUM_GLYPH, sgv, Graphics.TEXT_JUSTIFY_RIGHT);
             var d = r[Bg.K_DELTA];
-            drawDeltaAndAge(dc, right + p(7), (d instanceof String) ? d : "--", nowSec - at);
+            drawDeltaAndAge(dc, _colX, (d instanceof String) ? d : "--", nowSec - at);
         }
         var iob = (r == null) ? null : r[Bg.K_IOB];
-        drawBottomRow(dc, _w / 2, p(ROW_Y_DESIGN), iobText(iob), stepsText());
+        drawBottomRow(dc, _w / 2, _rowY, iobText(iob), stepsText());
     }
 
     // Where the glucose ends on the right: the widest reading ("388") from GLUCOSE_X.
     private function glucoseRight(dc as Graphics.Dc) as Number {
-        return p(GLUCOSE_X) + dc.getTextWidthInPixels("388", _fBg);
+        return _bgX + dc.getTextWidthInPixels("388", _fBg);
     }
 
-    // A line under the time and date, and one under the glucose.
+    // A line over the time and one under it, each a little shorter than the screen is wide there.
     private function drawLines(dc as Graphics.Dc) as Void {
         ink(dc);
-        var t = p(2) < 2 ? 2 : p(2);
-        dc.fillRectangle(p(16), p(LINE1_Y) - t / 2, p(134), t);
-        dc.fillRectangle(p(24), p(LINE2_Y) - t / 2, p(118), t);
+        var t = lineThickness();
+        var w1 = lineWidth(_line1Y);
+        var w2 = lineWidth(_line2Y);
+        dc.fillRectangle(_w / 2 - w1 / 2, _line1Y - t / 2, w1, t);
+        dc.fillRectangle(_w / 2 - w2 / 2, _line2Y - t / 2, w2, t);
+    }
+
+    private function lineWidth(y as Number) as Number {
+        var w = chord(y + lineThickness()) - p(28);
+        return w > p(134) ? p(134) : w;
     }
 
     // To the right of the glucose: the change ("+4") over the age tag ("2 MIN"). The tag is
     // outlined while fresh and solid once LATE_SEC has passed.
     private function drawDeltaAndAge(dc as Graphics.Dc, x as Number, delta as String, ageSec as Number) as Void {
         ink(dc);
-        text(dc, x, p(CHANGE_Y), _fDelta, TEXT_GLYPH, delta, Graphics.TEXT_JUSTIFY_LEFT);
+        text(dc, x, _chY, _fDelta, TEXT_GLYPH, delta, Graphics.TEXT_JUSTIFY_LEFT);
         var tag = ageText(ageSec);
         var padX = p(3);
-        var padY = p(2);
         var tw = dc.getTextWidthInPixels(tag, _fTag) + 2 * padX;
-        var th = glyph(_fTag, TEXT_GLYPH) + 2 * padY;
-        var cy = p(TAG_Y);
+        var th = tagHeight();
+        var cy = _tagY;
         var ty = cy - th / 2;
         if (ageSec > LATE_SEC) {
             dc.fillRectangle(x, ty, tw, th);
@@ -364,48 +463,52 @@ class EverBridgeView extends WatchUi.WatchFace {
                 + " '18,412' " + dc.getTextWidthInPixels("18,412", fonts[i]));
         }
         var fails = 0;
-        var tg = glyph(_fTime, NUM_GLYPH);
-        var tw = dc.getTextWidthInPixels("2358", _fTime) + 2 * p(2) + (tg / 7 < 2 ? 2 : tg / 7);
-        fails += box(dc, "time", p(32), p(TIME_Y) - tg / 2, tw, tg, false);
-        var dg = glyph(_fDate, TEXT_GLYPH);
-        fails += box(dc, "date", p(33), p(DATE_Y) - dg / 2, dc.getTextWidthInPixels("28 Sep", _fDate), dg, false);
-        var lt = p(2) < 2 ? 2 : p(2);
-        fails += box(dc, "top line", p(16), p(LINE1_Y) - lt / 2, p(134), lt, false);
-        fails += box(dc, "bottom line", p(24), p(LINE2_Y) - lt / 2, p(118), lt, false);
         var bg = glyph(_fBg, NUM_GLYPH);
         var bw = dc.getTextWidthInPixels("388", _fBg);
-        fails += box(dc, "glucose", p(GLUCOSE_X), p(GLUCOSE_Y) - bg / 2, bw, bg, false);
-        var sx = glucoseRight(dc) + p(7);
+        fails += box(dc, "glucose", _bgX, _bgY - bg / 2, bw, bg, false);
         var cg = glyph(_fDelta, TEXT_GLYPH);
-        fails += box(dc, "change", sx, p(CHANGE_Y) - cg / 2, dc.getTextWidthInPixels("-12", _fDelta), cg, false);
-        var th = glyph(_fTag, TEXT_GLYPH) + 2 * p(2);
+        fails += box(dc, "change", _colX, _chY - cg / 2, dc.getTextWidthInPixels("-12", _fDelta), cg, false);
+        var th = tagHeight();
         var tagW = dc.getTextWidthInPixels("99+ MIN", _fTag) + 2 * p(3);
-        fails += box(dc, "age tag", sx, p(TAG_Y) - th / 2, tagW, th, false);
+        fails += box(dc, "age tag", _colX, _tagY - th / 2, tagW, th, false);
+        var lt = lineThickness();
+        fails += box(dc, "top line", _w / 2 - lineWidth(_line1Y) / 2, _line1Y - lt / 2, lineWidth(_line1Y), lt, false);
+        var tg = glyph(_fTime, NUM_GLYPH);
+        var tw = timeWidth(dc, _fTime);
+        fails += box(dc, "time and date", _w / 2 - tw / 2, _timeY - tg / 2, tw, tg, false);
+        fails += box(dc, "bottom line", _w / 2 - lineWidth(_line2Y) / 2, _line2Y - lt / 2, lineWidth(_line2Y), lt, false);
         var bw2 = rowWidth(dc, _fRow, "12.5U", "18,412");
         var bh = glyph(_fRow, TEXT_GLYPH);
-        fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, p(ROW_Y_DESIGN) - bh / 2, bw2, bh, false);
+        fails += box(dc, "iob+steps", _w / 2 - bw2 / 2, _rowY - bh / 2, bw2, bh, false);
         var hg = glyph(_fHr, NUM_GLYPH);
         var hw = dc.getTextWidthInPixels("188", _fHr);
         fails += box(dc, "heart rate", _sx + _sw / 2 - hw / 2, _sy + _sh / 2 - _sh / 10 - hg / 2, hw, hg, true);
         var lg = glyph(_fLabel, TEXT_GLYPH);
         var lw = dc.getTextWidthInPixels("BPM", _fLabel);
         fails += box(dc, "BPM", _sx + _sw / 2 - lw / 2, _sy + _sh / 2 + _sh / 4 - lg / 2, lw, lg, true);
-        // top to bottom, nothing may touch: date, top line, glucose block, bottom line, IOB+steps
-        var blockTop = p(GLUCOSE_Y) - bg / 2 < p(CHANGE_Y) - cg / 2 ? p(GLUCOSE_Y) - bg / 2 : p(CHANGE_Y) - cg / 2;
-        var blockBottom = p(GLUCOSE_Y) + bg / 2 > p(TAG_Y) + th / 2 ? p(GLUCOSE_Y) + bg / 2 : p(TAG_Y) + th / 2;
-        var tops = [p(DATE_Y) - dg / 2, p(LINE1_Y) - lt / 2, blockTop, p(LINE2_Y) - lt / 2, p(ROW_Y_DESIGN) - bh / 2];
-        var bottoms = [p(DATE_Y) + dg / 2, p(LINE1_Y) + lt / 2, blockBottom, p(LINE2_Y) + lt / 2, p(ROW_Y_DESIGN) + bh / 2];
-        var rows = ["date", "top line", "glucose block", "bottom line", "iob+steps"];
+        System.println("rows: glucose " + _bgY + " change " + _chY + " tag " + _tagY + " line " + _line1Y + " time " + _timeY
+            + " line " + _line2Y + " iob+steps " + _rowY + "; time font ascent " + Graphics.getFontAscent(_fTime)
+            + ", row font ascent " + Graphics.getFontAscent(_fRow));
+        // top to bottom, nothing may touch: glucose block, top line, time, bottom line, IOB+steps
+        var blockTop = _bgY - bg / 2 < _chY - cg / 2 ? _bgY - bg / 2 : _chY - cg / 2;
+        var blockBottom = _bgY + bg / 2 > _tagY + th / 2 ? _bgY + bg / 2 : _tagY + th / 2;
+        var tops = [blockTop, _line1Y - lt / 2, _timeY - tg / 2, _line2Y - lt / 2, _rowY - bh / 2];
+        var bottoms = [blockBottom, _line1Y + lt / 2, _timeY + tg / 2, _line2Y + lt / 2, _rowY + bh / 2];
+        var rows = ["glucose block", "top line", "time and date", "bottom line", "iob+steps"];
         for (var i = 1; i < 5; i++) {
             if (tops[i] - bottoms[i - 1] < 2) {
                 fails++;
                 System.println("FIT FAIL " + rows[i - 1] + " and " + rows[i] + " overlap (gap " + (tops[i] - bottoms[i - 1]) + " px)");
             }
         }
-        // the change and the tag must not touch each other either
-        if (p(TAG_Y) - th / 2 - (p(CHANGE_Y) + cg / 2) < 2) {
+        // the change and the tag must not touch each other, nor the glucose
+        if (_tagY - th / 2 - (_chY + cg / 2) < 2) {
             fails++;
             System.println("FIT FAIL change and age tag overlap");
+        }
+        if (_colX - (_bgX + bw) < 3) {
+            fails++;
+            System.println("FIT FAIL glucose runs into the change / age column");
         }
         System.println(fails == 0 ? "FIT ok" : "FIT FAIL " + fails + " element(s)");
     }

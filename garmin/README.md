@@ -2,10 +2,9 @@
 
 A Connect IQ watch face for the Instinct E (designed for 40 mm, also built for 45 mm), glucose first:
 
-* **top left:** the time (`10:47`) and the date (`21 Nov`)
+* **top:** your glucose, large, with the change from the reading before (`+4`) and an age tag (`2 MIN`) stacked to its right. The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
 * **subscreen:** heart rate (`68 BPM`)
-* **centre:** your glucose, large
-* **under it:** the change from the reading before (`+4`) and an age tag (`2 MIN`). The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
+* **middle, between two lines:** the time (`10:47`) and the date (`21 Nov`)
 * **bottom:** insulin on board from Meanwhile (`IOB 2.4U`) and today's steps (`8,412`)
 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)
