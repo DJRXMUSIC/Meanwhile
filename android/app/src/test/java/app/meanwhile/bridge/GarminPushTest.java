@@ -178,9 +178,11 @@ public class GarminPushTest {
         reading(System.currentTimeMillis(), 120);
         push.start();
         assertEquals(0, fake.sent.size());
+        assertTrue(push.status(), push.status().contains("no watch connected since"));
         fake.connected = true;
         push.tick();
         assertEquals(1, fake.sent.size());
+        assertFalse(push.status(), push.status().contains("no watch connected"));
     }
 
     @Test

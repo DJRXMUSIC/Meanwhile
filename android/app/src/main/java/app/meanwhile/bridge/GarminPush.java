@@ -87,6 +87,9 @@ final class GarminPush {
     private String lastStatus = "-";
     private int sent;
     private int failed;
+    /** Garmin Connect reported no watch connected at the last push; logged once per drop. */
+    private boolean noWatch;
+    private long noWatchSince;
 
     GarminPush(Context app, Transport transport) {
         this.app = app;
@@ -169,6 +172,19 @@ final class GarminPush {
             state = "can't list watches: " + e;
             return;
         }
+        if (devices.isEmpty()) {
+            if (!noWatch) {
+                noWatch = true;
+                noWatchSince = now;
+                EventLog.log(app, "GARMIN", "no watch connected to Garmin Connect (" + why + "); "
+                        + summary(message) + " waits until it reconnects");
+            }
+            return;
+        }
+        if (noWatch) {
+            noWatch = false;
+            EventLog.log(app, "GARMIN", "watch connected again after " + (now - noWatchSince) / 1000 + " s");
+        }
         for (Object device : devices) {
             final String name = transport.name(device);
             if (key.equals(delivered.get(name))) continue;
@@ -220,7 +236,8 @@ final class GarminPush {
 
     /** For the status screen and diagnostics. */
     String status() {
-        return state + "; sent " + sent + ", failed " + failed + ", last status " + lastStatus
+        return state + (noWatch ? " (no watch connected since " + DiagnosticsReport.full(noWatchSince) + ")" : "")
+                + "; sent " + sent + ", failed " + failed + ", last status " + lastStatus
                 + (lastSendAt > 0 ? " at " + DiagnosticsReport.full(lastSendAt) : "");
     }
 }
