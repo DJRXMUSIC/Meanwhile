@@ -141,12 +141,16 @@ public class ReadingGateTest {
         assertEquals(ReadingGate.Verdict.ACCEPT, gate.check(start + MINUTE * 5, 405));
     }
 
+    // Eversense 365 re-posts the shown value in bursts 250-270 s after a reading; only a
+    // burst on the 5-minute beat (285 s or later) is a new reading with the same value
     @Test
-    public void dedupeWindowIs250Seconds() {
-        assertEquals(250_000L, ReadingGate.DEDUPE_SAME_VALUE_MS);
+    public void dedupeWindowIs285Seconds() {
+        assertEquals(285_000L, ReadingGate.DEDUPE_SAME_VALUE_MS);
         assertEquals(true, handleNewValue(start, 100));
-        assertEquals(false, burst(start + 250 * SECOND, 100));
-        assertEquals(true, burst(start + 251 * SECOND, 100));
+        assertEquals(false, burst(start + 254 * SECOND, 100));
+        assertEquals(false, burst(start + 271 * SECOND, 100));
+        assertEquals(false, burst(start + 285 * SECOND, 100));
+        assertEquals(true, burst(start + 286 * SECOND, 100));
     }
 
     // Eversense re-posts the value it shows about once a minute: a lone post of the same

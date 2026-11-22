@@ -33,8 +33,14 @@ public final class ReadingGate {
     public static final int MIN_MGDL = 40;
     public static final int MAX_MGDL = 405;
     public static final long SAMPLE_PERIOD_MS = 5 * 60_000L;
-    /** A repeat of the last value within this window is the same reading re-posted. */
-    public static final long DEDUPE_SAME_VALUE_MS = SAMPLE_PERIOD_MS - SAMPLE_PERIOD_MS / 6;
+    /**
+     * A repeat of the last value within this window is the same reading re-posted. xDrip+
+     * uses 250 s; the Eversense 365 app also re-posts the shown value in bursts 250-270 s
+     * after a reading (seen six times in a day, each followed within a minute by the real
+     * reading), while real readings with the same value come on the 5-minute beat, 290 s or
+     * more apart. So 285 s: a burst before then is not a new reading.
+     */
+    public static final long DEDUPE_SAME_VALUE_MS = 285_000L;
     /** A different value closer than this to a stored reading is treated as a UI glitch. */
     public static final long DEDUPE_DIFFERENT_VALUE_MS = 10_000L;
     /** More identical consecutive readings than this means the source is stuck. */
