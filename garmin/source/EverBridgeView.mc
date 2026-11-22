@@ -31,7 +31,6 @@ const COL_GAP = 5;        // glucose to the change / age column
 const GAP_OUT = 3;        // glucose block to the top line, bottom line to IOB and steps
 const GAP_MIN = 3;        // the least room above and below the time
 const ROW_GAP_DESIGN = 5; // IOB to the steps
-const DATE_GAP = 6;       // the clock to the date beside it
 // Text may go right to the screen's edge, but its box is measured 2 px in from each side:
 // the glyphs' corners are rounded and empty.
 const CORNER = 2;
@@ -41,8 +40,7 @@ const CORNER = 2;
 //       142 +4      ( 68 )   <- subscreen: heart rate
 //           [2m]    ( BPM)   <- change from the reading before, age tag
 //    ─────────────────────
-//       10:47  21                   <- time (scaled up) and date
-//              Nov
+//       10:47  21 Nov               <- time and date
 //    ─────────────────────
 //        2.4U  ⁚⁚ 8,412            <- insulin on board, steps
 //
@@ -81,12 +79,6 @@ class EverBridgeView extends WatchUi.WatchFace {
     private var _rowY as Number = 0;
     // Px kept in from the round screen's edge: 2 while the lines are placed, 0 for the data.
     private var _margin as Number = 2;
-    // The time is drawn larger than the biggest built-in font by scaling Garmin's own digits:
-    // drawn once at 1x into this bitmap, then scaled onto the screen. 1.0: drawn directly.
-    private var _timeScale as Float = 1.0f;
-    private var _timeBmp = null; // Graphics.BufferedBitmapReference
-    private var _tbW as Number = 0;
-    private var _tbH as Number = 0;
 
     // The reading version last drawn, for the instant redraw in onPartialUpdate.
     private var _drawn as Number = -1;
@@ -170,33 +162,6 @@ class EverBridgeView extends WatchUi.WatchFace {
         }
         _timeY = (_line1Y + _line2Y) / 2;
 
-        // As large as fits between the lines and, with the date beside it, across the screen.
-        _timeScale = 1.0f;
-        _timeBmp = null;
-        if ((Graphics has :createBufferedBitmap) && (Graphics has :AffineTransform) && (dc has :drawBitmap2)) {
-            var tg = glyph(_fTime, NUM_GLYPH);
-            var tw1 = clockWidth(dc, "23", "58");
-            var tRoom = (_line2Y - lt / 2) - (_line1Y + lt / 2) - 2 * p(GAP_MIN);
-            var dw = dateWidth(dc);
-            // the biggest scale whose clock, beside the date, fits the screen's width at the
-            // clock's top and bottom
-            var sc = tRoom.toFloat() / tg;
-            while (sc > 1.0f) {
-                var hh = (tg * sc / 2).toNumber();
-                var c1 = chord(_timeY - hh);
-                var c2 = chord(_timeY + hh);
-                if ((tw1 * sc).toNumber() + p(DATE_GAP) + dw <= (c1 < c2 ? c1 : c2) - 2 * p(4)) {
-                    break;
-                }
-                sc -= 0.02f;
-            }
-            if (sc > 1.05f) {
-                _timeScale = sc;
-                _tbW = tw1 + 2;
-                _tbH = tg + 2;
-            }
-        }
-
         // The lines stay there; the data moves out to the screen's edge. The glucose block
         // as high as the subscreen's circle and the edge allow (the bottom row is placed
         // when drawn, by the width of what it shows).
@@ -232,24 +197,6 @@ class EverBridgeView extends WatchUi.WatchFace {
     private function feetR() as Number {
         var r = p(3);
         return r < 3 ? 3 : r;
-    }
-
-    // Width of the clock "hh:mm" in the time font at 1x (hours, square colon, minutes).
-    private function clockWidth(dc as Graphics.Dc, h as String, m as String) as Number {
-        return dc.getTextWidthInPixels(h, _fTime) + colonWidth(_fTime) + dc.getTextWidthInPixels(m, _fTime);
-    }
-
-    // Width of the date block: the day ("28") over the month ("Sep"), at its widest.
-    private function dateWidth(dc as Graphics.Dc) as Number {
-        var w = dc.getTextWidthInPixels("28", _fDate);
-        var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        for (var i = 0; i < months.size(); i++) {
-            var m = dc.getTextWidthInPixels(months[i], _fDate);
-            if (m > w) {
-                w = m;
-            }
-        }
-        return w;
     }
 
     // Width of the middle row "23:58  28 Sep" with the time in the given font.
@@ -391,8 +338,8 @@ class EverBridgeView extends WatchUi.WatchFace {
         onUpdate(dc);
     }
 
-    // "10:47" across the middle, the date beside it (day over month): hours, square colon,
-    // minutes, then the date centred on the time's height.
+    // "10:47  21 Nov" across the middle: hours, square colon, minutes, then the date
+    // centred on the time's height.
     private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
         var hour = info.hour;
         var hStr;
@@ -403,34 +350,13 @@ class EverBridgeView extends WatchUi.WatchFace {
             hStr = (hour == 0 ? 12 : hour).format("%d");
         }
         var mStr = info.min.format("%02d");
-        var sc = _timeScale;
-        var w1 = clockWidth(dc, hStr, mStr);
-        var day = info.day.format("%d");
-        var mon = info.month.toString();
-        var dw = dc.getTextWidthInPixels(day, _fDate);
-        var mw = dc.getTextWidthInPixels(mon, _fDate);
-        if (mw > dw) {
-            dw = mw;
-        }
-        var tw = (w1 * sc).toNumber();
-        var x = _w / 2 - (tw + p(DATE_GAP) + dw) / 2;
-        ink(dc);
-        if (sc <= 1.0f || !drawScaledClock(dc, x, hStr, mStr, sc)) {
-            tw = w1;
-            x = _w / 2 - (tw + p(DATE_GAP) + dw) / 2;
-            drawClock(dc, x, _timeY, hStr, mStr);
-        }
-        // the date beside it, the day over the month, centred on the time's height
-        ink(dc);
-        var dy = (glyph(_fDate, TEXT_GLYPH) + p(4)) / 2;
-        text(dc, x + tw + p(DATE_GAP), _timeY - dy, _fDate, TEXT_GLYPH, day, Graphics.TEXT_JUSTIFY_LEFT);
-        text(dc, x + tw + p(DATE_GAP), _timeY + dy, _fDate, TEXT_GLYPH, mon, Graphics.TEXT_JUSTIFY_LEFT);
-    }
-
-    // "10:47" at 1x with its left edge at x and its glyphs centred on cy.
-    private function drawClock(dc as Graphics.Dc, x as Number, cy as Number, hStr as String, mStr as String) as Void {
+        var dStr = info.day.format("%d") + " " + info.month.toString();
+        var cy = _timeY;
         var gh = glyph(_fTime, NUM_GLYPH);
         var dot = colonDot(_fTime);
+        var w = dc.getTextWidthInPixels(hStr, _fTime) + colonWidth(_fTime) + dc.getTextWidthInPixels(mStr, _fTime)
+            + p(8) + dc.getTextWidthInPixels(dStr, _fDate);
+        var x = _w / 2 - w / 2;
         ink(dc);
         text(dc, x, cy, _fTime, NUM_GLYPH, hStr, Graphics.TEXT_JUSTIFY_LEFT);
         x += dc.getTextWidthInPixels(hStr, _fTime) + p(2);
@@ -438,34 +364,9 @@ class EverBridgeView extends WatchUi.WatchFace {
         dc.fillRectangle(x, cy + gh / 4 - dot / 2, dot, dot);
         x += dot + p(2);
         text(dc, x, cy, _fTime, NUM_GLYPH, mStr, Graphics.TEXT_JUSTIFY_LEFT);
-    }
-
-    // The clock drawn at 1x into a bitmap, then onto the screen sc times larger, its left
-    // edge at x and centred on the time's row. False if the bitmap can't be had.
-    private function drawScaledClock(dc as Graphics.Dc, x as Number, hStr as String, mStr as String, sc as Float) as Boolean {
-        if (_timeBmp == null) {
-            _timeBmp = Graphics.createBufferedBitmap({
-                :width => _tbW,
-                :height => _tbH,
-                :palette => [Graphics.COLOR_BLACK, Graphics.COLOR_WHITE]
-            });
-        }
-        var bmp = (_timeBmp == null) ? null : _timeBmp.get();
-        if (bmp == null) {
-            _timeBmp = null;
-            return false;
-        }
-        var bdc = bmp.getDc();
-        bdc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
-        bdc.clear();
-        drawClock(bdc, 1, _tbH / 2, hStr, mStr);
-        var t = new Graphics.AffineTransform();
-        t.scale(sc, sc);
-        dc.drawBitmap2(x - sc.toNumber(), _timeY - (_tbH * sc / 2).toNumber(), bmp, {
-            :transform => t,
-            :filterMode => Graphics.FILTER_MODE_POINT
-        });
-        return true;
+        x += dc.getTextWidthInPixels(mStr, _fTime) + p(8);
+        // the date, centred on the time's height
+        text(dc, x, cy, _fDate, TEXT_GLYPH, dStr, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // Heart rate in the subscreen: the number, "BPM" under it.
@@ -644,8 +545,8 @@ class EverBridgeView extends WatchUi.WatchFace {
         fails += box(dc, "age tag", _colX, _tagY - th / 2, tagW, th, false);
         var lt = lineThickness();
         fails += box(dc, "top line", _w / 2 - lineWidth(_line1Y) / 2, _line1Y - lt / 2, lineWidth(_line1Y), lt, false);
-        var tg = (glyph(_fTime, NUM_GLYPH) * _timeScale).toNumber();
-        var tw = (clockWidth(dc, "23", "58") * _timeScale).toNumber() + p(DATE_GAP) + dateWidth(dc);
+        var tg = glyph(_fTime, NUM_GLYPH);
+        var tw = timeWidth(dc, _fTime);
         fails += box(dc, "time and date", _w / 2 - tw / 2, _timeY - tg / 2, tw, tg, false);
         fails += box(dc, "bottom line", _w / 2 - lineWidth(_line2Y) / 2, _line2Y - lt / 2, lineWidth(_line2Y), lt, false);
         var bw2 = rowWidth(dc, _fRow, "12.5U", "18,412");
@@ -658,7 +559,7 @@ class EverBridgeView extends WatchUi.WatchFace {
         var lw = dc.getTextWidthInPixels("BPM", _fLabel);
         fails += box(dc, "BPM", _sx + _sw / 2 - lw / 2, _sy + _sh / 2 + _sh / 4 - lg / 2, lw, lg, true);
         System.println("rows: glucose " + _bgY + " change " + _chY + " tag " + _tagY + " line " + _line1Y + " time " + _timeY
-            + " line " + _line2Y + " iob+steps " + _rowY + "; time font ascent " + Graphics.getFontAscent(_fTime) + " x" + _timeScale
+            + " line " + _line2Y + " iob+steps " + _rowY + "; time font ascent " + Graphics.getFontAscent(_fTime)
             + ", row font ascent " + Graphics.getFontAscent(_fRow));
         // top to bottom, nothing may touch: glucose block, top line, time, bottom line, IOB+steps
         var blockTop = _bgY - bg / 2 < _chY - cg / 2 ? _bgY - bg / 2 : _chY - cg / 2;

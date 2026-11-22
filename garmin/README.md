@@ -4,7 +4,7 @@ A Connect IQ watch face for the Instinct E 40 mm, glucose first:
 
 * **top:** your glucose, with the change from the reading before (`+4`) and an age tag (`2m`, minutes) stacked to its right, beside the heart rate. The tag is outlined while the reading is fresh and turns solid after 6 minutes. The glucose number itself is never changed or crossed out, however old it is.
 * **subscreen:** heart rate (`68 BPM`)
-* **middle, between two lines, largest:** the time (`10:47`), scaled up from Garmin's biggest number font to fill the space, with the date beside it, the day over the month (`21` / `Nov`)
+* **middle, between two lines, largest:** the time (`10:47`) and the date (`21 Nov`)
 * **bottom, as low as the round screen allows:** insulin on board from Meanwhile (`2.4U`) and today's steps (`8,412`)
 
 ![40 mm, in the simulator](https://github.com/DJRXMUSIC/Meanwhile/releases/download/watchface-latest/screen-instincte40mm.png)

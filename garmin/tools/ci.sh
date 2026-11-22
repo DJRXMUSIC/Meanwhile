@@ -113,20 +113,6 @@ for d in $DEVICES; do
   tail -1 "/tmp/result-$d.txt" | grep -q '^PASSED' || fail "unit tests on $d"
 done
 
-# The digits of the biggest number font, pixel for pixel, for drawing the time larger
-# than the font (tools/glyphs). Printed into the log.
-echo "=== glyphs"
-monkeyc -f tools/glyphs/monkey.jungle -d instincte40mm -y "$KEY" -o /tmp/glyphs.prg && {
-  start_sim
-  monkeydo /tmp/glyphs.prg instincte40mm > /tmp/glyphs.txt 2>&1 &
-  G=$!
-  sleep 20
-  xwd -root -silent | convert xwd:- -crop 400x520+0+26 +repage "$OUT/glyphs-instincte40mm.png"
-  kill $G 2>/dev/null
-  cat /tmp/glyphs.txt
-  python3 tools/print_pixels.py "$OUT/glyphs-instincte40mm.png" 90 145 180 180
-} || echo "::warning::glyph sheet not built"
-
 # Screenshot: the real path, end to end. The fake phone endpoint serves a reading
 # taken 3 minutes ago; the face's background fetches it like it would on the phone.
 python3 "$GARMIN/tools/fake_pebble.py" 287 DoubleUp 3 > /tmp/fake.log 2>&1 &
