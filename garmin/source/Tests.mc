@@ -125,3 +125,30 @@ function lagAdaptsOnlyToTimingEvidence(logger as Test.Logger) as Boolean {
     Test.assertEqual(Sched.nextLag(15, false, T0, T0, T0 + 1500), 15);
     return true;
 }
+
+(:test)
+function aStalePushLosesToTheNewerFetch(logger as Test.Logger) as Boolean {
+    // The Instinct E can deliver the message before the newest: the face keeps whichever
+    // of the pushed and fetched readings is newer.
+    var pushed = Bg.parse(200, {
+        "status" => [{"now" => "1790000301000"}],
+        "bgs" => [{"sgv" => "119", "datetime" => "1790000000000", "bgdelta" => -1}]
+    }, T0 + 301);
+    var fetched = Bg.parse(200, {
+        "status" => [{"now" => 1790000302000l}],
+        "bgs" => [{"sgv" => "124", "datetime" => 1790000300000l, "bgdelta" => 5}]
+    }, T0 + 302);
+    Test.assertEqual(Bg.newer(fetched, pushed)[Bg.K_SGV], "124");
+    Test.assertEqual(Bg.newer(pushed, fetched)[Bg.K_SGV], "124");
+    // the fetch failed: the push stands; nothing at all: nothing
+    Test.assertEqual(Bg.newer(null, pushed)[Bg.K_SGV], "119");
+    Test.assertEqual(Bg.newer(fetched, null)[Bg.K_SGV], "124");
+    Test.assert(Bg.newer(null, null) == null);
+    // the same reading both ways: the fetch (first) is kept
+    var again = Bg.parse(200, {
+        "status" => [{"now" => 1790000303000l}],
+        "bgs" => [{"sgv" => "124", "datetime" => 1790000300000l, "iob" => 0.3}]
+    }, T0 + 303);
+    Test.assertEqual(Bg.newer(again, fetched)[Bg.K_IOB], 0.3f);
+    return true;
+}

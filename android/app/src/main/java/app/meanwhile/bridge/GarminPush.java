@@ -30,6 +30,14 @@ final class GarminPush {
     static final String GARMIN_CONNECT = "com.garmin.android.apps.connectmobile";
     static final long RETRY_MS = 20_000L;
     static final int MAX_RETRIES = 6;
+    /**
+     * A fresh copy of each reading follows this long after it is delivered. The watch face
+     * can show the message before the newest (seen on an Instinct E: each push showed the
+     * reading before it); the copy makes the face run again, and it then also asks the
+     * phone for the newest reading.
+     */
+    static final long AGAIN_MS = 5_000L;
+    static final String AGAIN = "again";
 
     /** The Connect IQ SDK, or a fake in tests. All calls and callbacks on the main thread. */
     interface Transport {
@@ -156,6 +164,11 @@ final class GarminPush {
      * call often: a watch that already accepted this reading and IOB isn't sent it again.
      */
     void push(String why) {
+        push(why, false);
+    }
+
+    /** force: send even to a watch that already has this reading (the follow-up copy). */
+    private void push(String why, boolean force) {
         if (!ready) return;
         final Bridge bridge = Bridge.get(app);
         final List<Reading> latest = bridge.store.latest(2);
@@ -187,7 +200,7 @@ final class GarminPush {
         }
         for (Object device : devices) {
             final String name = transport.name(device);
-            if (key.equals(delivered.get(name))) continue;
+            if (!force && key.equals(delivered.get(name))) continue;
             send(device, name, message, key, why);
         }
     }
@@ -202,6 +215,10 @@ final class GarminPush {
                     retries = 0;
                     delivered.put(name, key);
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
+                    if (!AGAIN.equals(why)) {
+                        handler.removeCallbacks(again);
+                        handler.postDelayed(again, AGAIN_MS);
+                    }
                 } else {
                     failed++;
                     EventLog.log(app, "GARMIN", "send to " + name + " failed: " + status);
@@ -215,6 +232,8 @@ final class GarminPush {
             retryLater();
         }
     }
+
+    private final Runnable again = () -> push(AGAIN, true);
 
     private void retryLater() {
         if (retries >= MAX_RETRIES) return; // the next reading, reconnect or watchdog tries again

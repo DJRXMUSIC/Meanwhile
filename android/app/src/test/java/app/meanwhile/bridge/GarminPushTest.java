@@ -136,6 +136,29 @@ public class GarminPushTest {
     }
 
     @Test
+    public void aFreshCopyFollowsEachDeliveredReadingOnce() {
+        final long now = System.currentTimeMillis();
+        reading(now - 1_000, 124);
+        push.start();
+        assertEquals(1, fake.sent.size());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
+        assertEquals(2, fake.sent.size());
+        assertEquals("124", bg(fake.sent.get(1)).get("sgv"));
+        // the copy is not followed by another
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS * 3));
+        assertEquals(2, fake.sent.size());
+        // nor sent twice when two readings land close together: one copy, of the newest
+        reading(now + 2_000, 126);
+        push.push("new reading");
+        reading(now + 3_000, 128);
+        push.push("new reading");
+        assertEquals(4, fake.sent.size());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
+        assertEquals(5, fake.sent.size());
+        assertEquals("128", bg(fake.sent.get(4)).get("sgv"));
+    }
+
+    @Test
     public void storingAReadingPushesIt() {
         push.start();
         final long now = System.currentTimeMillis();

@@ -72,6 +72,18 @@ module Bg {
         };
     }
 
+    // Of two parsed readings (either may be null), the newer by its phone time; a, if
+    // they are the same reading.
+    function newer(a as Dictionary?, b as Dictionary?) as Dictionary? {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return (b[K_DT] as Long) > (a[K_DT] as Long) ? b : a;
+    }
+
     // The change from the reading before, signed: "+4", "-12", "0"; "+0.3" in mmol/L;
     // "--" when there is no reading close enough before it.
     function delta(v) as String {
