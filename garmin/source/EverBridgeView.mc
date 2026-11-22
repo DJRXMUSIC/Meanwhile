@@ -392,8 +392,7 @@ class EverBridgeView extends WatchUi.WatchFace {
     }
 
     // "10:47" across the middle, the date beside it (day over month): hours, square colon,
-    // minutes, then the date
-    // sitting on the same baseline.
+    // minutes, then the date centred on the time's height.
     private function drawTime(dc as Graphics.Dc, info as Gregorian.Info) as Void {
         var hour = info.hour;
         var hStr;
