@@ -126,23 +126,11 @@ module Sched {
                 };
                 Application.Storage.setValue(K_READING, _reading);
                 _version++;
-            } else if (dt == prev[Bg.K_DT]) {
-                var changed = false;
-                // the same reading, IOB moved on (a dose was logged, or it decayed)
-                if (data[Bg.K_IOB] != prev[Bg.K_IOB]) {
-                    prev[Bg.K_IOB] = data[Bg.K_IOB];
-                    changed = true;
-                }
-                // the same reading, known now to be older than first thought (it first came
-                // in a message delivered late): never show it fresher than it is
-                if ((data[Bg.K_AT] as Number) < (prev[Bg.K_AT] as Number)) {
-                    prev[Bg.K_AT] = data[Bg.K_AT];
-                    changed = true;
-                }
-                if (changed) {
-                    Application.Storage.setValue(K_READING, prev);
-                    _version++;
-                }
+            } else if (dt == prev[Bg.K_DT] && data[Bg.K_IOB] != prev[Bg.K_IOB]) {
+                // same reading, IOB moved on (a dose was logged, or it decayed)
+                prev[Bg.K_IOB] = data[Bg.K_IOB];
+                Application.Storage.setValue(K_READING, prev);
+                _version++;
             }
             if (lag != _lag) {
                 _lag = lag;

@@ -24,14 +24,9 @@ module Bg {
     // Turns a /pebble reply into the dictionary the face stores, or null if the
     // reply holds no reading. nowSec is the watch's clock when the reply arrived.
     //
-    // When the reading was taken, on the watch's clock, is the older of two estimates:
-    //  - the reading's own time (datetime, the phone's clock, which Garmin Connect keeps
-    //    the watch's in step with), and
-    //  - its age when the phone built this message (status[0].now - datetime) counted
-    //    back from now, which a skew between the clocks doesn't change.
-    // The second alone would make a message delivered late (the watch can hold one for
-    // minutes) look as fresh as when it was sent; the first alone would follow any clock
-    // skew. The older one never shows a reading as fresher than it is.
+    // The reply's status[0].now is the phone's clock when it was built, so the
+    // reading's age is measured entirely on the phone and then placed on the
+    // watch's clock: a skew between the two clocks doesn't change the minutes shown.
     function parse(code as Number, data, nowSec as Number) as Dictionary? {
         if (code != 200 || !(data instanceof Dictionary)) {
             return null;
@@ -57,12 +52,11 @@ module Bg {
                 ageMs = phoneNow - dt;
             }
         }
-        var at = (dt / 1000l).toNumber();
+        var at;
         if (ageMs != null) {
-            var sent = nowSec - (ageMs / 1000l).toNumber();
-            if (sent < at) {
-                at = sent;
-            }
+            at = nowSec - (ageMs / 1000l).toNumber();
+        } else {
+            at = (dt / 1000l).toNumber();
         }
         var dir = bg["direction"];
         var iob = bg["iob"];
