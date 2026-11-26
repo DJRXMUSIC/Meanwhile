@@ -7,18 +7,18 @@ import Toybox.Time;
 
 // Background process. Two ways a reading arrives, both handed to the face the same way:
 //  - pushed: Meanwhile v6 sends each reading the moment it gets it, as a phone-app
-//    message through Garmin Connect (onPhoneAppMessage). This is the fast path. On the
-//    Instinct E a message is held back until the next one arrives, so Meanwhile follows
-//    each reading with a tiny "nudge" message, which is ignored here. A reading that still
-//    arrives late (its nudge lost, so it came minutes later with the next message) also
-//    asks the phone's /pebble for the newest reading, and the newer of the two is kept.
-//    One on time is used as it is (each request wakes Garmin Connect on the phone).
+//    message through Garmin Connect (onPhoneAppMessage). On the Instinct E a message is
+//    held back until the next one arrives, so Meanwhile follows each reading with a tiny
+//    "nudge" message (ignored here) that releases it. Each reading that arrives is
+//    confirmed to the phone (/pebble?have=<its time>), which answers with its newest
+//    reading: the newer of the two is kept, so a late or backfilled reading is caught at
+//    once, and the phone nudges again if a reading isn't confirmed within 20 s.
 //  - fetched: the timed backup (onTemporalEvent), at most every 5 minutes, asks the
 //    phone's /pebble. Garmin Connect performs the request, so 127.0.0.1 is the phone.
 (:background)
 class BgService extends System.ServiceDelegate {
 
-    // The reading from a phone-app message, while its /pebble check is under way.
+    // The reading from a phone-app message, while its confirmation is under way.
     private var _pushed as Dictionary? = null;
 
     function initialize() {
@@ -41,26 +41,19 @@ class BgService extends System.ServiceDelegate {
             Background.exit(null);
             return;
         }
-        var now = Time.now().value();
-        _pushed = Bg.parse(200, msg.data, now);
+        _pushed = Bg.parse(200, msg.data, Time.now().value());
         log(0, _pushed);
-        if (_pushed != null && !Bg.isLate(msg.data, now)) {
-            // on time: it is the newest reading, no need to ask the phone
-            Background.exit(_pushed);
-            return;
-        }
-        // held back (it can arrive with the next message, minutes late): ask for the newest
-        fetch();
+        fetch(_pushed == null ? null : {"have" => (_pushed[Bg.K_DT] as Long).toString()});
     }
 
     function onTemporalEvent() as Void {
-        fetch();
+        fetch(null);
     }
 
-    private function fetch() as Void {
+    private function fetch(params as Dictionary?) as Void {
         Communications.makeWebRequest(
             Bg.URL,
-            null,
+            params,
             {
                 :method => Communications.HTTP_REQUEST_METHOD_GET,
                 :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON

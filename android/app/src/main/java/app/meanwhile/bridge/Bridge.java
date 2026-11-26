@@ -90,9 +90,21 @@ public final class Bridge {
             }
 
             @Override
-            public void pebbleServed(Reading newest, long nowMs) {
-                EventLog.log(app, "GARMIN", "watch asked for the newest reading: "
-                        + (newest == null ? "none yet" : newest.mgdl + ", taken " + (nowMs - newest.timestamp) / 1000 + " s ago"));
+            public void pebbleServed(Reading newest, long nowMs, Long watchHas) {
+                final String got = newest == null ? "none yet" : newest.mgdl + ", taken " + (nowMs - newest.timestamp) / 1000 + " s ago";
+                if (watchHas == null) {
+                    EventLog.log(app, "GARMIN", "watch asked for the newest reading: " + got);
+                    return;
+                }
+                EventLog.log(app, "GARMIN", "watch confirmed the reading taken " + (nowMs - watchHas) / 1000
+                        + " s ago" + (newest != null && newest.timestamp > watchHas ? "; sent it the newer " + got : ""));
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    try {
+                        GarminPush.get(app).watchHas(watchHas);
+                    } catch (RuntimeException e) {
+                        EventLog.log(app, "GARMIN", "confirmation not handled: " + e);
+                    }
+                });
             }
         });
         this.server = new HttpServer(routes);

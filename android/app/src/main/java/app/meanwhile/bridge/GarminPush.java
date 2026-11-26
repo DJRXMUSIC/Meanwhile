@@ -43,6 +43,13 @@ final class GarminPush {
      * this tiny message releases the reading at once. The face ignores the nudge itself.
      */
     static final Map<String, Object> NUDGE = java.util.Collections.singletonMap("nudge", (Object) 1);
+    /**
+     * The watch face confirms each reading it gets (it asks /pebble?have=<reading time>).
+     * A reading not confirmed this long after its nudge is nudged again, up to
+     * MAX_RENUDGES times: a lost nudge would otherwise leave it waiting for the next reading.
+     */
+    static final long CONFIRM_MS = 20_000L;
+    static final int MAX_RENUDGES = 2;
 
     /** The Connect IQ SDK, or a fake in tests. All calls and callbacks on the main thread. */
     interface Transport {
@@ -229,6 +236,7 @@ final class GarminPush {
                     lastSentAt.put(name, clock.getAsLong());
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
                     nudge(device, name);
+                    awaitConfirmation(readingTs);
                 } else {
                     failed++;
                     EventLog.log(app, "GARMIN", "send to " + name + " failed: " + status);
@@ -241,6 +249,46 @@ final class GarminPush {
             EventLog.log(app, "GARMIN", "send to " + name + " failed: " + e);
             retryLater();
         }
+    }
+
+    /** The newest reading time the watch has confirmed (see CONFIRM_MS). */
+    private long confirmedTs;
+    private long awaitingTs;
+    private int renudges;
+    private final Runnable checkConfirmed = this::checkConfirmed;
+
+    /** The watch face says it has the reading taken at readingTs. */
+    void watchHas(long readingTs) {
+        if (readingTs > confirmedTs) confirmedTs = readingTs;
+        if (confirmedTs >= awaitingTs) handler.removeCallbacks(checkConfirmed);
+    }
+
+    private void awaitConfirmation(long readingTs) {
+        if (readingTs <= confirmedTs) return;
+        awaitingTs = readingTs;
+        renudges = 0;
+        handler.removeCallbacks(checkConfirmed);
+        handler.postDelayed(checkConfirmed, CONFIRM_MS);
+    }
+
+    private void checkConfirmed() {
+        if (confirmedTs >= awaitingTs) return;
+        if (renudges >= MAX_RENUDGES) {
+            EventLog.log(app, "GARMIN", "the watch hasn't confirmed the newest reading after "
+                    + (MAX_RENUDGES + 1) + " nudges; its own check will fetch it");
+            return;
+        }
+        renudges++;
+        EventLog.log(app, "GARMIN", "the watch hasn't confirmed the newest reading after "
+                + renudges * CONFIRM_MS / 1000 + " s; nudging again");
+        final List<Object> devices;
+        try {
+            devices = transport.connectedDevices();
+        } catch (RuntimeException e) {
+            return;
+        }
+        for (Object device : devices) nudge(device, transport.name(device));
+        handler.postDelayed(checkConfirmed, CONFIRM_MS);
     }
 
     /** The nudge after a reading (see NUDGE). Only a failure is logged. */

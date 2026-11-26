@@ -26,8 +26,12 @@ public final class BridgeRoutes implements HttpServer.Handler {
             return null;
         }
 
-        /** /pebble was asked for (the watch face's own check); newest is null if there is none. */
-        default void pebbleServed(Reading newest, long nowMs) {
+        /**
+         * /pebble was asked for by the watch face; newest is null if there is none. watchHas:
+         * the time (ms) of the reading the watch has, from ?have=, when it is confirming one
+         * it was sent; null for its own timed check.
+         */
+        default void pebbleServed(Reading newest, long nowMs, Long watchHas) {
         }
     }
 
@@ -48,7 +52,7 @@ public final class BridgeRoutes implements HttpServer.Handler {
             case "/api/v1/entries":
                 return HttpServer.Response.json(sgv(parseCount(req.query.get("count"))));
             case "/pebble":
-                return HttpServer.Response.json(pebble());
+                return HttpServer.Response.json(pebble(parseLong(req.query.get("have"))));
             case "/status.json":
                 return HttpServer.Response.json(status.statusJson());
             case "/":
@@ -65,10 +69,23 @@ public final class BridgeRoutes implements HttpServer.Handler {
 
     /** Latest reading as a JSON object, for clients (Garmin watch faces) that can't take an array. */
     public String pebble() {
+        return pebble(null);
+    }
+
+    public String pebble(Long watchHas) {
         final long now = status.nowMs();
         final List<Reading> latest = store.latest(2);
-        status.pebbleServed(latest.isEmpty() ? null : latest.get(0), now);
+        status.pebbleServed(latest.isEmpty() ? null : latest.get(0), now, watchHas);
         return PebbleJson.reply(latest, status.unitsHint(), now, status.iob(now));
+    }
+
+    static Long parseLong(String raw) {
+        if (raw == null) return null;
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     static int parseCount(String raw) {
