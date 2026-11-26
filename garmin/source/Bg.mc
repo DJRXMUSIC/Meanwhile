@@ -72,6 +72,11 @@ module Bg {
         };
     }
 
+    // The message Meanwhile sends right after each reading, to release it on the watch.
+    function isNudge(data) as Boolean {
+        return data instanceof Dictionary && data.hasKey("nudge");
+    }
+
     // The phone's clock when it built this message or reply (status[0].now), in s, or null.
     function phoneNow(data) as Number? {
         if (!(data instanceof Dictionary)) {

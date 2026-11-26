@@ -8,10 +8,11 @@ import Toybox.Time;
 // Background process. Two ways a reading arrives, both handed to the face the same way:
 //  - pushed: Meanwhile v6 sends each reading the moment it gets it, as a phone-app
 //    message through Garmin Connect (onPhoneAppMessage). This is the fast path. On the
-//    Instinct E a message can be held back and delivered with the next one, minutes late;
-//    a message that arrives late also asks the phone's /pebble for its newest reading, and
-//    the newer of the two is kept. One on time is used as it is (each request wakes
-//    Garmin Connect on the phone).
+//    Instinct E a message is held back until the next one arrives, so Meanwhile follows
+//    each reading with a tiny "nudge" message, which is ignored here. A reading that still
+//    arrives late (its nudge lost, so it came minutes later with the next message) also
+//    asks the phone's /pebble for the newest reading, and the newer of the two is kept.
+//    One on time is used as it is (each request wakes Garmin Connect on the phone).
 //  - fetched: the timed backup (onTemporalEvent), at most every 5 minutes, asks the
 //    phone's /pebble. Garmin Connect performs the request, so 127.0.0.1 is the phone.
 (:background)
@@ -35,6 +36,11 @@ class BgService extends System.ServiceDelegate {
 
     // A reading pushed by Meanwhile v6: the same shape as the /pebble reply.
     function onPhoneAppMessage(msg as Communications.PhoneAppMessage) as Void {
+        if (Bg.isNudge(msg.data)) {
+            // only there to release the reading sent before it; nothing to do
+            Background.exit(null);
+            return;
+        }
         var now = Time.now().value();
         _pushed = Bg.parse(200, msg.data, now);
         log(0, _pushed);

@@ -167,3 +167,12 @@ function aPushIsLateWhenItArrivesMoreThan30sAfterItWasSent(logger as Test.Logger
     Test.assert(Bg.isLate({"bgs" => []}, 1790000303)); // no clock: ask
     return true;
 }
+
+(:test)
+function theNudgeIsNotAReading(logger as Test.Logger) as Boolean {
+    Test.assert(Bg.isNudge({"nudge" => 1}));
+    Test.assert(!Bg.isNudge({"bgs" => []}));
+    Test.assert(!Bg.isNudge(null));
+    Test.assert(Bg.parse(200, {"nudge" => 1}, T0) == null);
+    return true;
+}

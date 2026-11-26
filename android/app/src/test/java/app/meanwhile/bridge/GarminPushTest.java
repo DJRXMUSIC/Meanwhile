@@ -37,6 +37,8 @@ public class GarminPushTest {
     /** Stands in for the Connect IQ SDK: one watch, sends recorded, answers on demand. */
     static final class FakeTransport implements GarminPush.Transport {
         final List<Map<String, Object>> sent = new ArrayList<>();
+        /** The nudges that follow each delivered reading, kept apart from the readings. */
+        final List<Map<String, Object>> nudges = new ArrayList<>();
         final List<Result> pending = new ArrayList<>();
         Events events;
         boolean connected = true;
@@ -62,6 +64,11 @@ public class GarminPushTest {
 
         @Override
         public void send(Object device, Map<String, Object> message, Result result) {
+            if (message.containsKey("nudge")) {
+                nudges.add(message);
+                result.done(true, "SUCCESS");
+                return;
+            }
             sent.add(message);
             if (autoOk) result.done(true, "SUCCESS");
             else pending.add(result);
@@ -145,10 +152,12 @@ public class GarminPushTest {
                 + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"}]}"));
         push.start();
         assertEquals(1, fake.sent.size());
-        // no follow-up copy
+        // no follow-up copy, only the nudge that releases it on the watch
+        assertEquals(1, fake.nudges.size());
         clock[0] = now + 20_000;
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20_000));
         assertEquals(1, fake.sent.size());
+        assertEquals(1, fake.nudges.size());
         // 6 U near its peak: IOB moves on by more than 0.1 U a minute, but the
         // once-a-minute check waits its turn
         clock[0] = now + 2 * M;
@@ -167,6 +176,8 @@ public class GarminPushTest {
         reading(clock[0], 131);
         push.push("new reading");
         assertEquals(4, fake.sent.size());
+        // one nudge after each delivered reading
+        assertEquals(4, fake.nudges.size());
     }
 
     @Test

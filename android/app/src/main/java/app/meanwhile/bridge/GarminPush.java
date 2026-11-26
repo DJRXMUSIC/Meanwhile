@@ -37,6 +37,12 @@ final class GarminPush {
      */
     static final long IOB_REFRESH_MS = 150_000L;
     static final String WATCHDOG = "watchdog";
+    /**
+     * Sent right after each delivered reading. The Instinct E's watch face gets a phone
+     * message only when the next one arrives (each push showed the reading before it), so
+     * this tiny message releases the reading at once. The face ignores the nudge itself.
+     */
+    static final Map<String, Object> NUDGE = java.util.Collections.singletonMap("nudge", (Object) 1);
 
     /** The Connect IQ SDK, or a fake in tests. All calls and callbacks on the main thread. */
     interface Transport {
@@ -222,6 +228,7 @@ final class GarminPush {
                     deliveredTs.put(name, readingTs);
                     lastSentAt.put(name, clock.getAsLong());
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
+                    nudge(device, name);
                 } else {
                     failed++;
                     EventLog.log(app, "GARMIN", "send to " + name + " failed: " + status);
@@ -233,6 +240,17 @@ final class GarminPush {
             lastStatus = e.getClass().getSimpleName();
             EventLog.log(app, "GARMIN", "send to " + name + " failed: " + e);
             retryLater();
+        }
+    }
+
+    /** The nudge after a reading (see NUDGE). Only a failure is logged. */
+    private void nudge(Object device, String name) {
+        try {
+            transport.send(device, NUDGE, (ok, status) -> {
+                if (!ok) EventLog.log(app, "GARMIN", "nudge to " + name + " failed: " + status);
+            });
+        } catch (RuntimeException e) {
+            EventLog.log(app, "GARMIN", "nudge to " + name + " failed: " + e);
         }
     }
 
