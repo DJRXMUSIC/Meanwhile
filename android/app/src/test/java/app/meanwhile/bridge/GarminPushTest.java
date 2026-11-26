@@ -136,26 +136,34 @@ public class GarminPushTest {
     }
 
     @Test
-    public void aFreshCopyFollowsEachDeliveredReadingOnce() {
+    public void oneSendPerReadingAndIobOnlyEveryFewMinutes() {
         final long now = System.currentTimeMillis();
         reading(now - 1_000, 124);
+        assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
+                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"}]}"));
         push.start();
         assertEquals(1, fake.sent.size());
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
+        // no follow-up copy
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20_000));
+        assertEquals(1, fake.sent.size());
+        // 6 U near its peak: IOB moves on by more than 0.1 U a minute, but the
+        // once-a-minute check waits its turn
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2 * M - 20_000));
+        push.tick();
+        assertEquals(1, fake.sent.size());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(M));
+        push.tick();
         assertEquals(2, fake.sent.size());
         assertEquals("124", bg(fake.sent.get(1)).get("sgv"));
-        // the copy is not followed by another
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS * 3));
-        assertEquals(2, fake.sent.size());
-        // nor sent twice when two readings land close together: one copy, of the newest
-        reading(now + 2_000, 126);
-        push.push("new reading");
-        reading(now + 3_000, 128);
+        // a logged dose goes out straight away
+        assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
+                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"},{\"ts\":" + System.currentTimeMillis() + ",\"units\":2,\"kind\":\"bolus\"}]}"));
+        push.push("insulin changed");
+        assertEquals(3, fake.sent.size());
+        // and a new reading at once
+        reading(System.currentTimeMillis(), 131);
         push.push("new reading");
         assertEquals(4, fake.sent.size());
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
-        assertEquals(5, fake.sent.size());
-        assertEquals("128", bg(fake.sent.get(4)).get("sgv"));
     }
 
     @Test

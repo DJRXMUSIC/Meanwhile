@@ -152,3 +152,18 @@ function aStalePushLosesToTheNewerFetch(logger as Test.Logger) as Boolean {
     Test.assertEqual(Bg.newer(again, fetched)[Bg.K_IOB], 0.3f);
     return true;
 }
+
+(:test)
+function aPushIsLateWhenItArrivesMoreThan30sAfterItWasSent(logger as Test.Logger) as Boolean {
+    var msg = {
+        "status" => [{"now" => "1790000302000"}],
+        "bgs" => [{"sgv" => "124", "datetime" => "1790000300000"}]
+    };
+    Test.assertEqual(Bg.phoneNow(msg), 1790000302);
+    Test.assert(!Bg.isLate(msg, 1790000303));  // on time
+    Test.assert(!Bg.isLate(msg, 1790000332));  // 30 s: still on time
+    Test.assert(Bg.isLate(msg, 1790000333));   // held back
+    Test.assert(Bg.isLate(msg, 1790000602));   // delivered with the next reading
+    Test.assert(Bg.isLate({"bgs" => []}, 1790000303)); // no clock: ask
+    return true;
+}

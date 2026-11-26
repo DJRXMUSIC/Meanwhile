@@ -72,6 +72,29 @@ module Bg {
         };
     }
 
+    // The phone's clock when it built this message or reply (status[0].now), in s, or null.
+    function phoneNow(data) as Number? {
+        if (!(data instanceof Dictionary)) {
+            return null;
+        }
+        var status = data["status"];
+        if (status instanceof Array && status.size() > 0 && status[0] instanceof Dictionary) {
+            var now = toLong(status[0]["now"]);
+            if (now != null) {
+                return (now / 1000l).toNumber();
+            }
+        }
+        return null;
+    }
+
+    // True if a pushed message reached the watch more than LATE_SEC after the phone sent it
+    // (the watch's and phone's clocks are kept in step by Garmin Connect).
+    const LATE_SEC = 30;
+    function isLate(data, nowSec as Number) as Boolean {
+        var sent = phoneNow(data);
+        return sent == null || nowSec - sent > LATE_SEC;
+    }
+
     // Of two parsed readings (either may be null), the newer by its phone time; a, if
     // they are the same reading.
     function newer(a as Dictionary?, b as Dictionary?) as Dictionary? {
