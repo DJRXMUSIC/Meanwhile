@@ -138,30 +138,33 @@ public class GarminPushTest {
     @Test
     public void oneSendPerReadingAndIobOnlyEveryFewMinutes() {
         final long now = System.currentTimeMillis();
+        final long[] clock = {now};
+        push.clock = () -> clock[0];
         reading(now - 1_000, 124);
         assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
                 + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"}]}"));
         push.start();
         assertEquals(1, fake.sent.size());
         // no follow-up copy
+        clock[0] = now + 20_000;
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20_000));
         assertEquals(1, fake.sent.size());
         // 6 U near its peak: IOB moves on by more than 0.1 U a minute, but the
         // once-a-minute check waits its turn
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2 * M - 20_000));
+        clock[0] = now + 2 * M;
         push.tick();
         assertEquals(1, fake.sent.size());
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(M));
+        clock[0] = now + 3 * M;
         push.tick();
         assertEquals(2, fake.sent.size());
         assertEquals("124", bg(fake.sent.get(1)).get("sgv"));
         // a logged dose goes out straight away
         assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
-                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"},{\"ts\":" + System.currentTimeMillis() + ",\"units\":2,\"kind\":\"bolus\"}]}"));
+                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"},{\"ts\":" + clock[0] + ",\"units\":2,\"kind\":\"bolus\"}]}"));
         push.push("insulin changed");
         assertEquals(3, fake.sent.size());
         // and a new reading at once
-        reading(System.currentTimeMillis(), 131);
+        reading(clock[0], 131);
         push.push("new reading");
         assertEquals(4, fake.sent.size());
     }

@@ -90,6 +90,8 @@ final class GarminPush {
     /** Per watch: the reading time it last accepted, and when it was sent. */
     private final Map<String, Long> deliveredTs = new HashMap<>();
     private final Map<String, Long> lastSentAt = new HashMap<>();
+    /** The phone's clock; tests set their own. */
+    java.util.function.LongSupplier clock = System::currentTimeMillis;
     private boolean ready;
     private String state = "not started";
     private int retries;
@@ -170,7 +172,7 @@ final class GarminPush {
         if (!ready) return;
         final Bridge bridge = Bridge.get(app);
         final List<Reading> latest = bridge.store.latest(2);
-        final long now = System.currentTimeMillis();
+        final long now = clock.getAsLong();
         final Double iob = bridge.iob(now);
         final Map<String, Object> message = PebbleJson.message(latest, bridge.unitsHint(), now, iob);
         if (message == null) return;
@@ -209,7 +211,7 @@ final class GarminPush {
     }
 
     private void send(Object device, String name, Map<String, Object> message, String key, long readingTs, String why) {
-        lastSendAt = System.currentTimeMillis();
+        lastSendAt = clock.getAsLong();
         try {
             transport.send(device, message, (ok, status) -> {
                 lastStatus = status;
@@ -218,7 +220,7 @@ final class GarminPush {
                     retries = 0;
                     delivered.put(name, key);
                     deliveredTs.put(name, readingTs);
-                    lastSentAt.put(name, System.currentTimeMillis());
+                    lastSentAt.put(name, clock.getAsLong());
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
                 } else {
                     failed++;
