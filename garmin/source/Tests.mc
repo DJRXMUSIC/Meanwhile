@@ -16,8 +16,9 @@ function parseReadsBridgePebbleReply(logger as Test.Logger) as Boolean {
     Test.assertEqual(r[Bg.K_SGV], "123");
     Test.assertEqual(r[Bg.K_DIR], "Flat");
     Test.assertEqual(r[Bg.K_DT], 1790000000000l);
-    // 90 s old by the phone's clock; the watch's clock is 5 s ahead.
-    Test.assertEqual(r[Bg.K_AT], T0 + 5);
+    // 90 s old when the phone built the reply, which arrived 95 s after the reading by the
+    // reading's own time: the older of the two, so it shows as 95 s old.
+    Test.assertEqual(r[Bg.K_AT], T0);
     Test.assertEqual(r[Bg.K_F], T0 + 95);
     Test.assertEqual(r[Bg.K_DELTA], "-2");
     Test.assert(r[Bg.K_IOB] == null);
@@ -159,5 +160,24 @@ function theNudgeIsNotAReading(logger as Test.Logger) as Boolean {
     Test.assert(!Bg.isNudge({"bgs" => []}));
     Test.assert(!Bg.isNudge(null));
     Test.assert(Bg.parse(200, {"nudge" => 1}, T0) == null);
+    return true;
+}
+
+(:test)
+function aHeldBackMessageDoesNotMakeAReadingLookFresh(logger as Test.Logger) as Boolean {
+    // Sent 2 s after the reading, held on the watch and delivered 5 minutes later: it is
+    // 5 minutes old, not 2 s.
+    var held = Bg.parse(200, {
+        "status" => [{"now" => "1790000002000"}],
+        "bgs" => [{"sgv" => "124", "datetime" => "1790000000000"}]
+    }, T0 + 302);
+    Test.assertEqual(held[Bg.K_AT], T0);
+    Test.assertEqual(ageText(T0 + 302 - held[Bg.K_AT]), "5m");
+    // the watch's clock 60 s behind the phone's: the age measured on the phone counts
+    var behind = Bg.parse(200, {
+        "status" => [{"now" => "1790000002000"}],
+        "bgs" => [{"sgv" => "124", "datetime" => "1790000000000"}]
+    }, T0 - 58);
+    Test.assertEqual(behind[Bg.K_AT], T0 - 60);
     return true;
 }
