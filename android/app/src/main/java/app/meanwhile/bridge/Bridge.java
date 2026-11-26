@@ -96,15 +96,8 @@ public final class Bridge {
                     EventLog.log(app, "GARMIN", "watch asked for the newest reading: " + got);
                     return;
                 }
-                EventLog.log(app, "GARMIN", "watch confirmed the reading taken " + (nowMs - watchHas) / 1000
-                        + " s ago" + (newest != null && newest.timestamp > watchHas ? "; sent it the newer " + got : ""));
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    try {
-                        GarminPush.get(app).watchHas(watchHas);
-                    } catch (RuntimeException e) {
-                        EventLog.log(app, "GARMIN", "confirmation not handled: " + e);
-                    }
-                });
+                EventLog.log(app, "GARMIN", "watch has the reading taken " + (nowMs - watchHas) / 1000
+                        + " s ago; asked for the newest: " + got);
             }
         });
         this.server = new HttpServer(routes);

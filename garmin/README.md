@@ -41,7 +41,7 @@ Meanwhile v6 sends the newest reading only, and resends it when a send fails, wh
 
 ## The watch's own log
 
-The face writes one line for each reading pushed to it, each nudge, and each request to
+The face writes one line for each reading pushed to it and each request to
 the phone, with the time and the HTTP result (200 is good; negative numbers are Connect IQ
 errors). To get it: connect the watch over USB, create an empty text file
 `GARMIN/APPS/LOGS/everbridge-instincte40mm.TXT` (named like the `.prg`, `.TXT` in capitals),

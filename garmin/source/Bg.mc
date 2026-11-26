@@ -78,11 +78,6 @@ module Bg {
         };
     }
 
-    // The message Meanwhile sends right after each reading, to release it on the watch.
-    function isNudge(data) as Boolean {
-        return data instanceof Dictionary && data.hasKey("nudge");
-    }
-
     // Of two parsed readings (either may be null), the newer by its phone time; a, if
     // they are the same reading.
     function newer(a as Dictionary?, b as Dictionary?) as Dictionary? {

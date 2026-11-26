@@ -38,18 +38,13 @@ final class GarminPush {
     static final long IOB_REFRESH_MS = 150_000L;
     static final String WATCHDOG = "watchdog";
     /**
-     * Sent right after each delivered reading. The Instinct E's watch face gets a phone
-     * message only when the next one arrives (each push showed the reading before it), so
-     * this tiny message releases the reading at once. The face ignores the nudge itself.
+     * A fresh copy of each reading follows this long after it is delivered. The Instinct E's
+     * watch face gets a phone message only when the next one arrives (each push showed the
+     * reading before it); the copy releases the reading, and the face then also asks the
+     * phone for its newest reading. With this the watch was current within seconds.
      */
-    static final Map<String, Object> NUDGE = java.util.Collections.singletonMap("nudge", (Object) 1);
-    /**
-     * The watch face confirms each reading it gets (it asks /pebble?have=<reading time>).
-     * A reading not confirmed this long after its nudge is nudged again, up to
-     * MAX_RENUDGES times: a lost nudge would otherwise leave it waiting for the next reading.
-     */
-    static final long CONFIRM_MS = 20_000L;
-    static final int MAX_RENUDGES = 2;
+    static final long AGAIN_MS = 5_000L;
+    static final String AGAIN = "again";
 
     /** The Connect IQ SDK, or a fake in tests. All calls and callbacks on the main thread. */
     interface Transport {
@@ -182,6 +177,11 @@ final class GarminPush {
      * call often: a watch that already accepted this reading and IOB isn't sent it again.
      */
     void push(String why) {
+        push(why, false);
+    }
+
+    /** force: send even to a watch that already has this reading (the follow-up copy). */
+    private void push(String why, boolean force) {
         if (!ready) return;
         final Bridge bridge = Bridge.get(app);
         final List<Reading> latest = bridge.store.latest(2);
@@ -213,7 +213,7 @@ final class GarminPush {
         }
         for (Object device : devices) {
             final String name = transport.name(device);
-            if (key.equals(delivered.get(name))) continue;
+            if (!force && key.equals(delivered.get(name))) continue;
             // the same reading, only IOB moved on: not more often than IOB_REFRESH_MS
             final Long hasTs = deliveredTs.get(name);
             final Long sentAt = lastSentAt.get(name);
@@ -235,8 +235,10 @@ final class GarminPush {
                     deliveredTs.put(name, readingTs);
                     lastSentAt.put(name, clock.getAsLong());
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
-                    nudge(device, name);
-                    awaitConfirmation(readingTs);
+                    if (!AGAIN.equals(why)) {
+                        handler.removeCallbacks(again);
+                        handler.postDelayed(again, AGAIN_MS);
+                    }
                 } else {
                     failed++;
                     EventLog.log(app, "GARMIN", "send to " + name + " failed: " + status);
@@ -251,56 +253,7 @@ final class GarminPush {
         }
     }
 
-    /** The newest reading time the watch has confirmed (see CONFIRM_MS). */
-    private long confirmedTs;
-    private long awaitingTs;
-    private int renudges;
-    private final Runnable checkConfirmed = this::checkConfirmed;
-
-    /** The watch face says it has the reading taken at readingTs. */
-    void watchHas(long readingTs) {
-        if (readingTs > confirmedTs) confirmedTs = readingTs;
-        if (confirmedTs >= awaitingTs) handler.removeCallbacks(checkConfirmed);
-    }
-
-    private void awaitConfirmation(long readingTs) {
-        if (readingTs <= confirmedTs) return;
-        awaitingTs = readingTs;
-        renudges = 0;
-        handler.removeCallbacks(checkConfirmed);
-        handler.postDelayed(checkConfirmed, CONFIRM_MS);
-    }
-
-    private void checkConfirmed() {
-        if (confirmedTs >= awaitingTs) return;
-        if (renudges >= MAX_RENUDGES) {
-            EventLog.log(app, "GARMIN", "the watch hasn't confirmed the newest reading after "
-                    + (MAX_RENUDGES + 1) + " nudges; its own check will fetch it");
-            return;
-        }
-        renudges++;
-        EventLog.log(app, "GARMIN", "the watch hasn't confirmed the newest reading after "
-                + renudges * CONFIRM_MS / 1000 + " s; nudging again");
-        final List<Object> devices;
-        try {
-            devices = transport.connectedDevices();
-        } catch (RuntimeException e) {
-            return;
-        }
-        for (Object device : devices) nudge(device, transport.name(device));
-        handler.postDelayed(checkConfirmed, CONFIRM_MS);
-    }
-
-    /** The nudge after a reading (see NUDGE). Only a failure is logged. */
-    private void nudge(Object device, String name) {
-        try {
-            transport.send(device, NUDGE, (ok, status) -> {
-                if (!ok) EventLog.log(app, "GARMIN", "nudge to " + name + " failed: " + status);
-            });
-        } catch (RuntimeException e) {
-            EventLog.log(app, "GARMIN", "nudge to " + name + " failed: " + e);
-        }
-    }
+    private final Runnable again = () -> push(AGAIN, true);
 
     private void retryLater() {
         if (retries >= MAX_RETRIES) return; // the next reading, reconnect or watchdog tries again

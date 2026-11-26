@@ -37,8 +37,6 @@ public class GarminPushTest {
     /** Stands in for the Connect IQ SDK: one watch, sends recorded, answers on demand. */
     static final class FakeTransport implements GarminPush.Transport {
         final List<Map<String, Object>> sent = new ArrayList<>();
-        /** The nudges that follow each delivered reading, kept apart from the readings. */
-        final List<Map<String, Object>> nudges = new ArrayList<>();
         final List<Result> pending = new ArrayList<>();
         Events events;
         boolean connected = true;
@@ -64,11 +62,6 @@ public class GarminPushTest {
 
         @Override
         public void send(Object device, Map<String, Object> message, Result result) {
-            if (message.containsKey("nudge")) {
-                nudges.add(message);
-                result.done(true, "SUCCESS");
-                return;
-            }
             sent.add(message);
             if (autoOk) result.done(true, "SUCCESS");
             else pending.add(result);
@@ -152,70 +145,51 @@ public class GarminPushTest {
                 + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"}]}"));
         push.start();
         assertEquals(1, fake.sent.size());
-        // no follow-up copy, only the nudge that releases it on the watch, which confirms it
-        assertEquals(1, fake.nudges.size());
-        push.watchHas(now - 1_000);
+        // the follow-up copy that releases it on the watch, and nothing more
         clock[0] = now + 20_000;
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20_000));
-        assertEquals(1, fake.sent.size());
-        assertEquals(1, fake.nudges.size());
+        assertEquals(2, fake.sent.size());
         // 6 U near its peak: IOB moves on by more than 0.1 U a minute, but the
-        // once-a-minute check waits its turn
+        // once-a-minute check waits its turn (2.5 min after the copy)
         clock[0] = now + 2 * M;
         push.tick();
-        assertEquals(1, fake.sent.size());
+        assertEquals(2, fake.sent.size());
         clock[0] = now + 3 * M;
         push.tick();
-        assertEquals(2, fake.sent.size());
-        assertEquals("124", bg(fake.sent.get(1)).get("sgv"));
+        assertEquals(3, fake.sent.size());
+        assertEquals("124", bg(fake.sent.get(2)).get("sgv"));
         // a logged dose goes out straight away
         assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
                 + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"},{\"ts\":" + clock[0] + ",\"units\":2,\"kind\":\"bolus\"}]}"));
         push.push("insulin changed");
-        assertEquals(3, fake.sent.size());
+        assertEquals(4, fake.sent.size());
         // and a new reading at once
         reading(clock[0], 131);
         push.push("new reading");
-        assertEquals(4, fake.sent.size());
-        // one nudge after each delivered reading
-        assertEquals(4, fake.nudges.size());
+        assertEquals(5, fake.sent.size());
     }
 
     @Test
-    public void aReadingTheWatchDoesNotConfirmIsNudgedAgainTwice() {
+    public void aFreshCopyFollowsEachDeliveredReadingOnce() {
         final long now = System.currentTimeMillis();
         reading(now - 1_000, 124);
         push.start();
         assertEquals(1, fake.sent.size());
-        assertEquals(1, fake.nudges.size());
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.CONFIRM_MS + 100));
-        assertEquals(2, fake.nudges.size());
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.CONFIRM_MS + 100));
-        assertEquals(3, fake.nudges.size());
-        // then it is left to the watch's own check
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.CONFIRM_MS * 5));
-        assertEquals(3, fake.nudges.size());
-        assertEquals(1, fake.sent.size());
-
-        // a reading the watch confirms in time is not nudged again
-        reading(now + 5 * M, 130);
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
+        assertEquals(2, fake.sent.size());
+        assertEquals("124", bg(fake.sent.get(1)).get("sgv"));
+        // the copy is not followed by another
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS * 3));
+        assertEquals(2, fake.sent.size());
+        // nor sent twice when two readings land close together: one copy, of the newest
+        reading(now + 2_000, 126);
         push.push("new reading");
-        assertEquals(4, fake.nudges.size());
-        push.watchHas(now + 5 * M);
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.CONFIRM_MS * 3));
-        assertEquals(4, fake.nudges.size());
-    }
-
-    @Test
-    public void theWatchConfirmingThroughPebbleIsHeard() throws Exception {
-        final long now = System.currentTimeMillis();
-        reading(now - 1_000, 124);
-        push.start();
-        // the watch face's request: /pebble?have=<the reading's time>
-        final String reply = bridge.routes.pebble(now - 1_000);
-        assertEquals("124", new JSONObject(reply).getJSONArray("bgs").getJSONObject(0).getString("sgv"));
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.CONFIRM_MS * 3));
-        assertEquals(1, fake.nudges.size()); // confirmed: no second nudge
+        reading(now + 3_000, 128);
+        push.push("new reading");
+        assertEquals(4, fake.sent.size());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(GarminPush.AGAIN_MS + 100));
+        assertEquals(5, fake.sent.size());
+        assertEquals("128", bg(fake.sent.get(4)).get("sgv"));
     }
 
     @Test
