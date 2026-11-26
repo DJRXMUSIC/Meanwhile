@@ -31,17 +31,10 @@ final class GarminPush {
     static final long RETRY_MS = 20_000L;
     static final int MAX_RETRIES = 6;
     /**
-     * Insulin on board decays between readings; a watch that already has the newest reading
-     * is sent the new IOB by the once-a-minute check at most this often, when what it shows
-     * has changed (a logged dose and a new reading are sent at once).
-     */
-    static final long IOB_REFRESH_MS = 60_000L;
-    static final String WATCHDOG = "watchdog";
-    /**
-     * A fresh copy of each reading follows this long after it is delivered. The Instinct E's
-     * watch face gets a phone message only when the next one arrives (each push showed the
-     * reading before it); the copy releases the reading, and the face then also asks the
-     * phone for its newest reading. With this the watch was current within seconds.
+     * A fresh copy of each reading follows this long after it is delivered. The watch face
+     * can show the message before the newest (seen on an Instinct E: each push showed the
+     * reading before it); the copy makes the face run again, and it then also asks the
+     * phone for the newest reading.
      */
     static final long AGAIN_MS = 5_000L;
     static final String AGAIN = "again";
@@ -95,11 +88,6 @@ final class GarminPush {
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** Per watch: the key of the last reading it accepted. */
     private final Map<String, String> delivered = new HashMap<>();
-    /** Per watch: the reading time it last accepted, and when it was sent. */
-    private final Map<String, Long> deliveredTs = new HashMap<>();
-    private final Map<String, Long> lastSentAt = new HashMap<>();
-    /** The phone's clock; tests set their own. */
-    java.util.function.LongSupplier clock = System::currentTimeMillis;
     private boolean ready;
     private String state = "not started";
     private int retries;
@@ -143,7 +131,6 @@ final class GarminPush {
                 @Override
                 public void onDeviceConnected(String name) {
                     delivered.remove(name);
-                    deliveredTs.remove(name);
                     push(name + " connected");
                 }
             });
@@ -185,7 +172,7 @@ final class GarminPush {
         if (!ready) return;
         final Bridge bridge = Bridge.get(app);
         final List<Reading> latest = bridge.store.latest(2);
-        final long now = clock.getAsLong();
+        final long now = System.currentTimeMillis();
         final Double iob = bridge.iob(now);
         final Map<String, Object> message = PebbleJson.message(latest, bridge.unitsHint(), now, iob);
         if (message == null) return;
@@ -214,17 +201,12 @@ final class GarminPush {
         for (Object device : devices) {
             final String name = transport.name(device);
             if (!force && key.equals(delivered.get(name))) continue;
-            // the same reading, only IOB moved on: not more often than IOB_REFRESH_MS
-            final Long hasTs = deliveredTs.get(name);
-            final Long sentAt = lastSentAt.get(name);
-            if (WATCHDOG.equals(why) && hasTs != null && hasTs == latest.get(0).timestamp
-                    && sentAt != null && now - sentAt < IOB_REFRESH_MS) continue;
-            send(device, name, message, key, latest.get(0).timestamp, why);
+            send(device, name, message, key, why);
         }
     }
 
-    private void send(Object device, String name, Map<String, Object> message, String key, long readingTs, String why) {
-        lastSendAt = clock.getAsLong();
+    private void send(Object device, String name, Map<String, Object> message, String key, String why) {
+        lastSendAt = System.currentTimeMillis();
         try {
             transport.send(device, message, (ok, status) -> {
                 lastStatus = status;
@@ -232,8 +214,6 @@ final class GarminPush {
                     sent++;
                     retries = 0;
                     delivered.put(name, key);
-                    deliveredTs.put(name, readingTs);
-                    lastSentAt.put(name, clock.getAsLong());
                     EventLog.log(app, "GARMIN", "sent to " + name + " (" + why + "): " + summary(message));
                     if (!AGAIN.equals(why)) {
                         handler.removeCallbacks(again);
@@ -264,7 +244,7 @@ final class GarminPush {
     /** Called once a minute by the keep-alive service: re-send anything not delivered. */
     void tick() {
         retries = 0;
-        push(WATCHDOG);
+        push("watchdog");
     }
 
     @SuppressWarnings("unchecked")

@@ -90,31 +90,16 @@ public final class Bridge {
             }
 
             @Override
-            public void pebbleServed(Reading newest, long nowMs, Long watchHas) {
-                final String got = newest == null ? "none yet" : newest.mgdl + ", taken " + (nowMs - newest.timestamp) / 1000 + " s ago";
-                if (watchHas == null) {
-                    EventLog.log(app, "GARMIN", "watch asked for the newest reading: " + got);
-                    return;
-                }
-                EventLog.log(app, "GARMIN", "watch has the reading taken " + (nowMs - watchHas) / 1000
-                        + " s ago; asked for the newest: " + got);
+            public void pebbleServed(Reading newest, long nowMs) {
+                EventLog.log(app, "GARMIN", "watch asked for the newest reading: "
+                        + (newest == null ? "none yet" : newest.mgdl + ", taken " + (nowMs - newest.timestamp) / 1000 + " s ago"));
             }
         });
         this.server = new HttpServer(routes);
         engine.setListener(reading -> {
-            // A repeat of the last value waits a moment before it is announced: at a new
-            // reading the Eversense app's first posts can still show the old value (up to 4
-            // posts, the new value under a second after them), and the new value then
-            // replaces the repeat. Announced at once, the watch showed the old value at "0m"
-            // for a moment. A changed value goes out straight away.
-            if (isRepeat(reading)) {
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    final List<Reading> newest = store.latest(1);
-                    if (!newest.isEmpty() && newest.get(0).timestamp == reading.timestamp) onNewReading(reading);
-                }, REPEAT_HOLD_MS);
-            } else {
-                onNewReading(reading);
-            }
+            BridgeService.refresh(app);
+            Alerts.check(app, "reading " + reading.mgdl);
+            pushToWatch("new reading");
         });
         insulin = loadInsulin();
         applySettings();
@@ -176,20 +161,6 @@ public final class Bridge {
     }
 
     /** Sends the newest reading to the Garmin watch face, if Garmin Connect is there. */
-    /** How long a repeat of the last value waits before it is announced (see the listener). */
-    static final long REPEAT_HOLD_MS = 2_000L;
-
-    private boolean isRepeat(Reading reading) {
-        final List<Reading> last = store.latest(2);
-        return last.size() == 2 && last.get(0).timestamp == reading.timestamp && last.get(1).mgdl == reading.mgdl;
-    }
-
-    private void onNewReading(Reading reading) {
-        BridgeService.refresh(app);
-        Alerts.check(app, "reading " + reading.mgdl);
-        pushToWatch("new reading");
-    }
-
     void pushToWatch(String why) {
         android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
         main.post(() -> {
