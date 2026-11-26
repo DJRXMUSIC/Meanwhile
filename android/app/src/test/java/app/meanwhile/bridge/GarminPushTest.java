@@ -136,31 +136,31 @@ public class GarminPushTest {
     }
 
     @Test
-    public void oneSendPerReadingAndIobOnlyEveryFewMinutes() {
+    public void iobUpdatesAtMostOnceAMinute() {
         final long now = System.currentTimeMillis();
         final long[] clock = {now};
         push.clock = () -> clock[0];
         reading(now - 1_000, 124);
         assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
-                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"}]}"));
+                + (now - 75 * M) + ",\"units\":10,\"kind\":\"bolus\"}]}"));
         push.start();
         assertEquals(1, fake.sent.size());
         // the follow-up copy that releases it on the watch, and nothing more
         clock[0] = now + 20_000;
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20_000));
         assertEquals(2, fake.sent.size());
-        // 6 U near its peak: IOB moves on by more than 0.1 U a minute, but the
-        // once-a-minute check waits its turn (2.5 min after the copy)
-        clock[0] = now + 2 * M;
+        // 10 U near its peak: the IOB shown goes 7.3 -> 7.2 within a minute and a half;
+        // the once-a-minute check sends it a minute after the last send (the copy)
+        clock[0] = now + 60_000;
         push.tick();
         assertEquals(2, fake.sent.size());
-        clock[0] = now + 3 * M;
+        clock[0] = now + 90_000;
         push.tick();
         assertEquals(3, fake.sent.size());
         assertEquals("124", bg(fake.sent.get(2)).get("sgv"));
         // a logged dose goes out straight away
         assertEquals(null, bridge.setInsulin("{\"dia\":5.5,\"peak\":64,\"delay\":15,\"doses\":[{\"ts\":"
-                + (now - 75 * M) + ",\"units\":6,\"kind\":\"bolus\"},{\"ts\":" + clock[0] + ",\"units\":2,\"kind\":\"bolus\"}]}"));
+                + (now - 75 * M) + ",\"units\":10,\"kind\":\"bolus\"},{\"ts\":" + clock[0] + ",\"units\":2,\"kind\":\"bolus\"}]}"));
         push.push("insulin changed");
         assertEquals(4, fake.sent.size());
         // and a new reading at once

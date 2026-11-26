@@ -32,10 +32,10 @@ final class GarminPush {
     static final int MAX_RETRIES = 6;
     /**
      * Insulin on board decays between readings; a watch that already has the newest reading
-     * is sent the new IOB by the once-a-minute check at most this often (a logged dose is
-     * sent at once). Each send wakes Garmin Connect, so not for every 0.1 U.
+     * is sent the new IOB by the once-a-minute check at most this often, when what it shows
+     * has changed (a logged dose and a new reading are sent at once).
      */
-    static final long IOB_REFRESH_MS = 150_000L;
+    static final long IOB_REFRESH_MS = 60_000L;
     static final String WATCHDOG = "watchdog";
     /**
      * A fresh copy of each reading follows this long after it is delivered. The Instinct E's
