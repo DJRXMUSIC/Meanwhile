@@ -25,35 +25,37 @@ class BgService extends System.ServiceDelegate {
         ServiceDelegate.initialize();
     }
 
-    (:debug)
-    function log(code as Number, r) as Void {
-        System.println("fetch " + code + " -> " + r);
-    }
-
-    (:release)
-    function log(code as Number, r) as Void {
+    // One short line per message or request. On the watch it goes to GARMIN/APPS/LOGS/
+    // <the .prg's name>.TXT, if that file has been created over USB (see README).
+    function log(what as String, code as Number, r) as Void {
+        var t = System.getClockTime();
+        System.println(t.hour.format("%02d") + ":" + t.min.format("%02d") + ":" + t.sec.format("%02d")
+            + " " + what + " " + code + " " + (r == null ? "-" : r[Bg.K_SGV] + " @" + r[Bg.K_DT]));
     }
 
     // A reading pushed by Meanwhile v6: the same shape as the /pebble reply.
     function onPhoneAppMessage(msg as Communications.PhoneAppMessage) as Void {
         if (Bg.isNudge(msg.data)) {
             // only there to release the reading sent before it; nothing to do
+            log("nudge", 0, null);
             Background.exit(null);
             return;
         }
         _pushed = Bg.parse(200, msg.data, Time.now().value());
-        log(0, _pushed);
-        fetch(_pushed == null ? null : {"have" => (_pushed[Bg.K_DT] as Long).toString()});
+        log("pushed", 0, _pushed);
+        // The reading's time goes in the address itself: a request with makeWebRequest's
+        // params never reached the phone through Garmin Connect (seen in a log).
+        fetch(_pushed == null ? Bg.URL : Bg.URL + "?have=" + (_pushed[Bg.K_DT] as Long).toString());
     }
 
     function onTemporalEvent() as Void {
-        fetch(null);
+        fetch(Bg.URL);
     }
 
-    private function fetch(params as Dictionary?) as Void {
+    private function fetch(url as String) as Void {
         Communications.makeWebRequest(
-            Bg.URL,
-            params,
+            url,
+            null,
             {
                 :method => Communications.HTTP_REQUEST_METHOD_GET,
                 :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
@@ -64,7 +66,7 @@ class BgService extends System.ServiceDelegate {
 
     function onReceive(code as Number, data as Dictionary or String or PersistedContent.Iterator or Null) as Void {
         var r = Bg.newer(Bg.parse(code, data, Time.now().value()), _pushed);
-        log(code, r);
+        log("fetched", code, r);
         Background.exit(r);
     }
 }

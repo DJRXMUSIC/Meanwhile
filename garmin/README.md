@@ -39,6 +39,14 @@ Meanwhile v6 sends the newest reading only, and resends it when a send fails, wh
 
 **Backup (if a push is lost):** the face also fetches `/pebble` itself, at most every 5 minutes (Connect IQ's limit for a watch face). Each fetch is timed for just after the next reading is due, based on the last one (`source/Sched.mc`). If the timer drifts more than a minute late, it skips one reading to get back in step. If readings keep arriving late, its 15-second wait grows, up to 2 minutes.
 
+## The watch's own log
+
+The face writes one line for each reading pushed to it, each nudge, and each request to
+the phone, with the time and the HTTP result (200 is good; negative numbers are Connect IQ
+errors). To get it: connect the watch over USB, create an empty text file
+`GARMIN/APPS/LOGS/everbridge-instincte40mm.TXT` (named like the `.prg`, `.TXT` in capitals),
+unplug, wait for a few readings, then copy that file off the watch.
+
 ## Build and test
 
 CI (`.github/workflows/garmin-watchface.yml`) runs in `ghcr.io/matco/connectiq-tester`, a public image with the Connect IQ SDK, device files and simulator. It:
